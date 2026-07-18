@@ -15,5 +15,6 @@ coverage/
 .idea/
 .vscode/
 wine-prefix/
+.runtime/
 .env
 .env.*

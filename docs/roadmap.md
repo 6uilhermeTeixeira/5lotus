@@ -2,18 +2,18 @@
 
 ## Fase 0 - Preparacao do ambiente
 
-- [ ] instalar Wine
+- [x] instalar Wine
 - [ ] instalar MT5 no Linux
-- [ ] validar execucao headless
+- [x] validar execucao headless
 - [ ] conectar conta demo
-- [ ] documentar paths, logs e recuperacao
+- [x] documentar paths, logs e recuperacao
 
 ## Fase 1 - Base do projeto
 
-- [ ] definir estrategia inicial
+- [x] definir estrategia inicial
 - [ ] definir simbolos e timeframes
 - [ ] definir regras de entrada e saida
-- [ ] definir limites de risco
+- [x] definir limites de risco
 - [ ] definir horario operacional
 
 ## Fase 2 - Arquitetura executavel

@@ -33,6 +33,32 @@ Expert Advisor MQL5
   -> registra resultado
 ```
 
+## Estado atual da implementacao
+
+Ja existe um esqueleto inicial para esse fluxo:
+
+- `python-service/app/main.py` expõe `health`, `config` e `decision`
+- `mt5/experts/SyncLeadBridgeEA.mq5` monta o payload minimo e chama o servico Python
+
+Decisao intencional desta fase:
+
+- o servico ainda responde `hold` por padrao
+- a camada MT5 ainda nao executa ordens
+
+Isso preserva seguranca enquanto o runtime do MT5 ainda esta em estabilizacao.
+
+## Perfil inicial ja definido
+
+- estrategia: `price action`
+- risco por operacao: `5%` da banca
+
+No servico Python, isso ja aparece como:
+
+- `strategy_profile=price_action`
+- `risk_per_trade_pct=5.0`
+
+O que ainda falta fechar e o gatilho exato de entrada e invalidacao do setup.
+
 ## Componentes
 
 ### 1. MT5 / MQL5

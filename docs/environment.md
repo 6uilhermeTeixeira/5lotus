@@ -76,3 +76,11 @@ Antes de desenvolver o bot propriamente dito, precisamos preparar o runtime do M
 
 - MT5/MQL5 para execucao
 - Python Linux para estrategia e operacao
+
+## Decisao do passo 1
+
+Como o host nao oferece `sudo` sem senha, o caminho adotado neste projeto e:
+
+- preparar `Wine + Xvfb` em container Docker
+- manter o host limpo
+- deixar o runtime reproduzivel dentro do repositorio
