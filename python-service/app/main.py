@@ -1,11 +1,9 @@
 import logging
 from hmac import compare_digest
 from datetime import datetime, timezone
-from pathlib import Path
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
 
 from .auth import SESSION_COOKIE_NAME, create_session_value, has_valid_session, password_matches, read_login_password
 from .config import get_settings
@@ -20,7 +18,6 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger("2lotus.strategy")
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
-app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent.parent / "public"), name="static")
 
 
 def _login_redirect() -> RedirectResponse:
