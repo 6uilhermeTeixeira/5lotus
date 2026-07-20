@@ -83,6 +83,7 @@ string BuildDecisionPayload(const MqlTick &tick)
 
    string json =
       "{"
+      "\"bot_id\":\"" + ResultsBotId + "\","
       "\"request_id\":\"" + request_id + "\","
       "\"timestamp_utc\":\"" + timestamp_utc + "\","
       "\"symbol\":\"" + _Symbol + "\","
@@ -108,7 +109,10 @@ string BuildDecisionPayload(const MqlTick &tick)
 
 int PostJson(const string url, const string payload, string &responseText)
 {
-   return PostJsonWithHeaders(url, payload, "Content-Type: application/json\r\n", responseText);
+   string headers = "Content-Type: application/json\r\n";
+   if(LotusIngestApiKey != "")
+      headers += "X-2Lotus-Ingest-Key: " + LotusIngestApiKey + "\r\n";
+   return PostJsonWithHeaders(url, payload, headers, responseText);
 }
 
 int PostJsonWithHeaders(const string url, const string payload, const string headers, string &responseText)

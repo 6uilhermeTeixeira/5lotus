@@ -5,7 +5,7 @@ from urllib.request import Request, urlopen
 
 from .config import Settings
 from .results_store import build_results_snapshot
-from .schemas import BotCatalogItem, ResultsResponse, TradeResult
+from .schemas import BotCatalogItem, CandleSnapshot, MarketChartResponse, ResultsResponse, TradeResult
 
 
 class SupabaseStore:
@@ -52,3 +52,53 @@ class SupabaseStore:
             payload=payload,
             prefer="resolution=merge-duplicates,return=minimal",
         )
+
+    def upsert_candles(self, bot_id: str, symbol: str, timeframe: str, candles: list[CandleSnapshot]) -> None:
+        if not candles:
+            return
+        payload = [
+            {
+                "bot_id": bot_id,
+                "symbol": symbol,
+                "timeframe": timeframe,
+                "timestamp_utc": candle.timestamp_utc.isoformat(),
+                "open": candle.open,
+                "high": candle.high,
+                "low": candle.low,
+                "close": candle.close,
+                "volume": candle.volume,
+            }
+            for candle in candles
+        ]
+        self._request(
+            "market_candles?on_conflict=bot_id,symbol,timeframe,timestamp_utc",
+            method="POST",
+            payload=payload,
+            prefer="resolution=merge-duplicates,return=minimal",
+        )
+
+    def load_chart(self, bot: BotCatalogItem, limit: int = 180) -> MarketChartResponse:
+        candles_query = urlencode(
+            {
+                "bot_id": f"eq.{bot.id}",
+                "symbol": f"eq.{bot.symbol}",
+                "timeframe": f"eq.{bot.timeframe}",
+                "select": "timestamp_utc,open,high,low,close,volume",
+                "order": "timestamp_utc.desc",
+                "limit": str(limit),
+            }
+        )
+        candle_rows = self._request(f"market_candles?{candles_query}")
+        candles = [CandleSnapshot.model_validate(row) for row in reversed(candle_rows if isinstance(candle_rows, list) else [])]
+        trades_query = urlencode(
+            {
+                "bot_id": f"eq.{bot.id}",
+                "symbol": f"eq.{bot.symbol}",
+                "select": "*",
+                "order": "opened_at_utc.desc",
+                "limit": "100",
+            }
+        )
+        trade_rows = self._request(f"trade_results?{trades_query}")
+        trades = [TradeResult.model_validate(row) for row in trade_rows if isinstance(row, dict)] if isinstance(trade_rows, list) else []
+        return MarketChartResponse(bot_id=bot.id, symbol=bot.symbol, timeframe=bot.timeframe, candles=candles, trades=trades)

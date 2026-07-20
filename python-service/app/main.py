@@ -9,7 +9,7 @@ from .auth import SESSION_COOKIE_NAME, create_session_value, has_valid_session, 
 from .config import get_settings
 from .pages import render_catalog_page, render_login_page, render_results_page
 from .results_store import get_bot, load_bots_catalog, load_results_snapshot, resolve_bot_results_file
-from .schemas import BotCatalogItem, DecisionRequest, DecisionResponse, HealthResponse, ResultsResponse, TradeIngestRequest
+from .schemas import BotCatalogItem, DecisionRequest, DecisionResponse, HealthResponse, MarketChartResponse, ResultsResponse, TradeIngestRequest
 from .strategy import evaluate_decision
 from .supabase_store import SupabaseStore
 
@@ -139,6 +139,15 @@ def read_bot_results(bot_id: str, request: Request) -> ResultsResponse:
     return _load_bot_results(_find_bot(bot_id))
 
 
+@app.get("/api/bots/{bot_id}/chart", response_model=MarketChartResponse)
+def read_bot_chart(bot_id: str, request: Request) -> MarketChartResponse:
+    _require_api_session(request)
+    bot = _find_bot(bot_id)
+    if not _uses_supabase_results():
+        raise HTTPException(status_code=503, detail="chart data requires DAYTRADE_RESULTS_STORE=SUPABASE")
+    return SupabaseStore(settings).load_chart(bot)
+
+
 @app.get("/api/results", response_model=ResultsResponse, deprecated=True)
 def read_legacy_results(request: Request) -> ResultsResponse:
     _require_api_session(request)
@@ -182,7 +191,13 @@ def read_config() -> dict[str, str | int | float | bool]:
 
 
 @app.post("/decision", response_model=DecisionResponse)
-def decision(payload: DecisionRequest) -> DecisionResponse:
+def decision(payload: DecisionRequest, x_2lotus_ingest_key: str | None = Header(default=None)) -> DecisionResponse:
+    _require_ingest_key(x_2lotus_ingest_key)
+    if payload.bot_id and _uses_supabase_results():
+        bot = _find_bot(payload.bot_id)
+        if bot.symbol != payload.symbol or bot.timeframe != payload.timeframe:
+            raise HTTPException(status_code=422, detail="decision symbol or timeframe does not match bot configuration")
+        SupabaseStore(settings).upsert_candles(payload.bot_id, payload.symbol, payload.timeframe, payload.candles)
     response = evaluate_decision(payload, settings)
     logger.info("decision request_id=%s symbol=%s timeframe=%s action=%s reason=%s", payload.request_id, payload.symbol, payload.timeframe, response.action.value, response.reason)
     return response

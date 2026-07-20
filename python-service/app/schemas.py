@@ -36,6 +36,7 @@ class CandleSnapshot(BaseModel):
 
 
 class DecisionRequest(BaseModel):
+    bot_id: str | None = Field(default=None, pattern=r"^[a-z0-9-]+$")
     request_id: str = Field(..., min_length=3)
     timestamp_utc: datetime
     symbol: str
@@ -101,6 +102,14 @@ class TradeResult(BaseModel):
     net_pnl: float = 0.0
     rr_realized: float | None = None
     note: str = ""
+
+
+class MarketChartResponse(BaseModel):
+    bot_id: str
+    symbol: str
+    timeframe: str
+    candles: list[CandleSnapshot] = Field(default_factory=list)
+    trades: list[TradeResult] = Field(default_factory=list)
 
 
 class ResultsSummary(BaseModel):
