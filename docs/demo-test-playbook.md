@@ -71,7 +71,7 @@ docker exec 2lotus-mt5-desktop sh -lc "ip route | awk '/default/ {print \$3}'"
 Exemplo de retorno esperado:
 
 ```text
-172.17.0.1
+127.0.0.1
 ```
 
 ## Validar conectividade do container para o servico
@@ -79,7 +79,7 @@ Exemplo de retorno esperado:
 Antes de abrir o MT5, validar com:
 
 ```bash
-docker exec 2lotus-mt5-desktop curl http://172.17.0.1:8000/health
+docker exec 2lotus-mt5-desktop curl http://127.0.0.1:8000/health
 ```
 
 Resposta esperada:
@@ -105,7 +105,7 @@ Dentro do desktop remoto:
 3. compilar o EA
 4. no MT5, abrir `Tools > Options > Expert Advisors`
 5. marcar `Allow algorithmic trading`
-6. adicionar `http://172.17.0.1:8000` na allowlist de `WebRequest`
+6. adicionar `http://127.0.0.1:8000` na allowlist de `WebRequest`
 7. abrir um grafico `XAUUSD`
 8. ajustar o grafico para `M5`
 9. anexar o EA ao grafico
@@ -114,8 +114,8 @@ Dentro do desktop remoto:
 
 ### Fase 1: conectividade e decisao sem ordem
 
-- `StrategyServiceUrl = http://172.17.0.1:8000/decision`
-- `TradeResultsUrl = http://172.17.0.1:8000/api/trades`
+- `StrategyServiceUrl = http://127.0.0.1:8000/decision`
+- `TradeResultsUrl = http://127.0.0.1:8000/api/trades`
 - `ResultsBotId = bot-1`
 - `LotusIngestApiKey =` valor de `DAYTRADE_INGEST_API_KEY` do `.env` do 2Lotus
 - `StrategyTimeframe = M5`
@@ -124,8 +124,8 @@ Dentro do desktop remoto:
 
 ### Fase 2: ordem automatica em demo
 
-- `StrategyServiceUrl = http://172.17.0.1:8000/decision`
-- `TradeResultsUrl = http://172.17.0.1:8000/api/trades`
+- `StrategyServiceUrl = http://127.0.0.1:8000/decision`
+- `TradeResultsUrl = http://127.0.0.1:8000/api/trades`
 - `ResultsBotId = bot-1`
 - `StrategyTimeframe = M5`
 - `HistoryBars = 30`

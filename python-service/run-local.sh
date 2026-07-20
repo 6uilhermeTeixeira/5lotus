@@ -12,6 +12,9 @@ if [[ -f "$PROJECT_ROOT/.env" ]]; then
   set +a
 fi
 
+SERVICE_HOST="${DAYTRADE_HOST:-127.0.0.1}"
+SERVICE_PORT="${DAYTRADE_PORT:-8000}"
+
 cd "$ROOT_DIR"
 
 if [[ ! -x "$PYTHON_BIN" ]]; then
@@ -20,4 +23,4 @@ if [[ ! -x "$PYTHON_BIN" ]]; then
   exit 1
 fi
 
-"$PYTHON_BIN" -m uvicorn app.main:app --host 127.0.0.1 --port 8000 --app-dir "$ROOT_DIR"
+"$PYTHON_BIN" -m uvicorn app.main:app --host "$SERVICE_HOST" --port "$SERVICE_PORT" --app-dir "$ROOT_DIR"

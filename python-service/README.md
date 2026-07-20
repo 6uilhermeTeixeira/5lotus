@@ -97,7 +97,7 @@ de sessao e HTTP-only, assinado e expira em 12 horas por padrao.
 
 ## Resultados persistidos no Supabase
 
-O projeto Supabase do Daytrade usa as tabelas `bots` e `trade_results`, criadas pela migration
+O projeto Supabase do 2Lotus usa as tabelas `bots` e `trade_results`, criadas pela migration
 `supabase/migrations/20260720014500_create_daytrade_results.sql`. O painel consulta o banco quando
 `DAYTRADE_RESULTS_STORE=SUPABASE` e as chaves `DAYTRADE_SUPABASE_URL` e
 `DAYTRADE_SUPABASE_SERVICE_ROLE_KEY` estao configuradas.

@@ -18,7 +18,7 @@ Resposta:
 ```json
 {
   "status": "ok",
-  "service": "mt5-daytrade-strategy-service",
+  "service": "2lotus-strategy-service",
   "timestamp_utc": "2026-07-18T01:00:00Z"
 }
 ```
