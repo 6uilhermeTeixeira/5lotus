@@ -177,3 +177,10 @@ class BotCatalogItem(BaseModel):
 class TradeIngestRequest(BaseModel):
     bot_id: str = Field(..., pattern=r"^[a-z0-9-]+$")
     trade: TradeResult
+
+
+class CandleIngestRequest(BaseModel):
+    bot_id: str = Field(..., pattern=r"^[a-z0-9-]+$")
+    symbol: str
+    timeframe: str
+    candles: list[CandleSnapshot] = Field(default_factory=list, max_length=1000)

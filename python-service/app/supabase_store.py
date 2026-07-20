@@ -70,12 +70,8 @@ class SupabaseStore:
             }
             for candle in candles
         ]
-        self._request(
-            "market_candles?on_conflict=bot_id,symbol,timeframe,timestamp_utc",
-            method="POST",
-            payload=payload,
-            prefer="resolution=merge-duplicates,return=minimal",
-        )
+        for start in range(0, len(payload), 1000):
+            self._request("market_candles?on_conflict=bot_id,symbol,timeframe,timestamp_utc", method="POST", payload=payload[start:start + 1000], prefer="resolution=merge-duplicates,return=minimal")
 
     def advance_paper_trades(self, bot_id: str, candles: list[CandleSnapshot]) -> None:
         if not candles:
@@ -117,19 +113,17 @@ class SupabaseStore:
         rows = self._request(f"paper_trades?bot_id=eq.{bot_id}&status=eq.closed&select=signal_key")
         return len(rows) if isinstance(rows, list) else 0
 
-    def load_chart(self, bot: BotCatalogItem, limit: int = 180) -> MarketChartResponse:
-        candles_query = urlencode(
-            {
-                "bot_id": f"eq.{bot.id}",
-                "symbol": f"eq.{bot.symbol}",
-                "timeframe": f"eq.{bot.timeframe}",
-                "select": "timestamp_utc,open,high,low,close,volume",
-                "order": "timestamp_utc.desc",
-                "limit": str(limit),
-            }
-        )
-        candle_rows = self._request(f"market_candles?{candles_query}")
-        candles = [CandleSnapshot.model_validate(row) for row in reversed(candle_rows if isinstance(candle_rows, list) else [])]
+    def load_chart(self, bot: BotCatalogItem, limit: int = 50000) -> MarketChartResponse:
+        candle_rows: list[object] = []
+        for offset in range(0, limit, 1000):
+            query = urlencode({"bot_id": f"eq.{bot.id}", "symbol": f"eq.{bot.symbol}", "timeframe": f"eq.{bot.timeframe}", "select": "timestamp_utc,open,high,low,close,volume", "order": "timestamp_utc.desc", "limit": "1000", "offset": str(offset)})
+            page = self._request(f"market_candles?{query}")
+            if not isinstance(page, list) or not page:
+                break
+            candle_rows.extend(page)
+            if len(page) < 1000:
+                break
+        candles = [CandleSnapshot.model_validate(row) for row in reversed(candle_rows)]
         trades_query = urlencode(
             {
                 "bot_id": f"eq.{bot.id}",

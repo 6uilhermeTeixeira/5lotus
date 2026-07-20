@@ -9,7 +9,7 @@ from .auth import SESSION_COOKIE_NAME, create_session_value, has_valid_session, 
 from .config import get_settings
 from .pages import render_catalog_page, render_login_page, render_results_page
 from .results_store import get_bot, load_bots_catalog, load_results_snapshot, resolve_bot_results_file
-from .schemas import BotCatalogItem, DecisionRequest, DecisionResponse, HealthResponse, MarketChartResponse, ResultsResponse, TradeIngestRequest
+from .schemas import BotCatalogItem, CandleIngestRequest, DecisionRequest, DecisionResponse, HealthResponse, MarketChartResponse, ResultsResponse, TradeIngestRequest
 from .strategy import evaluate_decision
 from .supabase_store import SupabaseStore
 
@@ -145,7 +145,7 @@ def read_bot_chart(bot_id: str, request: Request) -> MarketChartResponse:
     bot = _find_bot(bot_id)
     if not _uses_supabase_results():
         raise HTTPException(status_code=503, detail="chart data requires DAYTRADE_RESULTS_STORE=SUPABASE")
-    return SupabaseStore(settings).load_chart(bot)
+    return SupabaseStore(settings).load_chart(bot, settings.chart_cache_limit)
 
 
 @app.get("/api/results", response_model=ResultsResponse, deprecated=True)
@@ -164,6 +164,17 @@ def ingest_trade(payload: TradeIngestRequest, x_2lotus_ingest_key: str | None = 
         raise HTTPException(status_code=503, detail="trade ingestion requires DAYTRADE_RESULTS_STORE=SUPABASE")
     _find_bot(payload.bot_id)
     SupabaseStore(settings).upsert_trade(payload.bot_id, payload.trade)
+
+
+@app.post("/api/candles", status_code=204)
+def ingest_candles(payload: CandleIngestRequest, x_2lotus_ingest_key: str | None = Header(default=None)) -> None:
+    _require_ingest_key(x_2lotus_ingest_key)
+    if not _uses_supabase_results():
+        raise HTTPException(status_code=503, detail="candle ingestion requires DAYTRADE_RESULTS_STORE=SUPABASE")
+    bot = _find_bot(payload.bot_id)
+    if bot.symbol != payload.symbol or bot.timeframe != payload.timeframe:
+        raise HTTPException(status_code=422, detail="candle symbol or timeframe does not match bot configuration")
+    SupabaseStore(settings).upsert_candles(payload.bot_id, payload.symbol, payload.timeframe, payload.candles)
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -186,6 +197,7 @@ def read_config() -> dict[str, str | int | float | bool]:
         "fimath_mode": settings.fimath_mode,
         "fimath_flow_window_seconds": settings.fimath_flow_window_seconds,
         "fimath_partial_pct": settings.fimath_partial_pct,
+        "chart_cache_limit": settings.chart_cache_limit,
         "enable_live_decisions": settings.enable_live_decisions,
         "dashboard_auth_configured": settings.dashboard_auth_configured,
         "results_store": settings.results_store,

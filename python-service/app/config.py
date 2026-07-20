@@ -19,6 +19,7 @@ class Settings:
         self.fimath_mode = getenv("DAYTRADE_FIMATH_MODE", "shadow").lower()
         self.fimath_flow_window_seconds = int(getenv("DAYTRADE_FIMATH_FLOW_WINDOW_SECONDS", "300"))
         self.fimath_partial_pct = float(getenv("DAYTRADE_FIMATH_PARTIAL_PCT", "50"))
+        self.chart_cache_limit = int(getenv("DAYTRADE_CHART_CACHE_LIMIT", "50000"))
         self.results_store_path = Path(
             getenv("DAYTRADE_RESULTS_STORE_PATH", str(service_root / "data" / "trade-results.json"))
         )

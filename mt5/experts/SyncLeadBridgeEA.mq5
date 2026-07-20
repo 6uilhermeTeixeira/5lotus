@@ -4,10 +4,12 @@
 input string StrategyServiceUrl = "http://127.0.0.1:8000/decision";
 input string HealthcheckUrl = "http://127.0.0.1:8000/health";
 input string TradeResultsUrl = "http://127.0.0.1:8000/api/trades";
+input string CandleCacheUrl = "http://127.0.0.1:8000/api/candles";
 input string LotusIngestApiKey = "";
 input string ResultsBotId = "bot-1";
 input string StrategyTimeframe = "M5";
 input int HistoryBars = 30;
+input int HistoryCacheBars = 50000;
 input int PollIntervalSeconds = 5;
 input int RequestTimeoutMs = 3000;
 input bool EnableOrderExecution = false;
@@ -24,6 +26,7 @@ int OnInit()
    EventSetTimer(PollIntervalSeconds);
    MarketBookAdd(_Symbol);
    trade.SetExpertMagicNumber(StrategyMagicNumber);
+   CacheHistory();
    Print("SyncLeadBridgeEA initialized. Add the service URLs to MT5 WebRequest allowlist.");
    return(INIT_SUCCEEDED);
 }
@@ -129,6 +132,21 @@ string BuildDecisionPayload(const MqlTick &tick)
    upVolume = downVolume = 0.0;
 
    return json;
+}
+
+void CacheHistory()
+{
+   MqlRates rates[];
+   int copied = CopyRates(_Symbol, ResolveTimeframe(StrategyTimeframe), 1, HistoryCacheBars, rates);
+   if(copied <= 0) { Print("No history available for cache."); return; }
+   for(int start = 0; start < copied; start += 1000)
+   {
+      int count = MathMin(1000, copied - start);
+      string payload = "{\"bot_id\":\"" + ResultsBotId + "\",\"symbol\":\"" + _Symbol + "\",\"timeframe\":\"" + StrategyTimeframe + "\",\"candles\":" + SerializeRatesRange(rates, start, count) + "}";
+      string response = "";
+      int status = PostJson(CandleCacheUrl, payload, response);
+      PrintFormat("History cache batch start=%d count=%d status=%d", start, count, status);
+   }
 }
 
 string SerializeBook()
@@ -336,11 +354,16 @@ ENUM_TIMEFRAMES ResolveTimeframe(const string tf)
 
 string SerializeRates(MqlRates &rates[], const int count)
 {
+   return SerializeRatesRange(rates, 0, count);
+}
+
+string SerializeRatesRange(MqlRates &rates[], const int start, const int count)
+{
    string json = "[";
 
-   for(int i = 0; i < count; i++)
+   for(int i = start; i < start + count; i++)
    {
-      if(i > 0)
+      if(i > start)
          json += ",";
 
       json += "{"
