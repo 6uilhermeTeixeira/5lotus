@@ -12,7 +12,7 @@ class Settings:
         self.strategy_profile = getenv("DAYTRADE_STRATEGY_PROFILE", "fimath_ema20_flow")
         self.default_symbol = getenv("DAYTRADE_DEFAULT_SYMBOL", "XAUUSD")
         self.default_timeframe = getenv("DAYTRADE_DEFAULT_TIMEFRAME", "M5")
-        self.max_spread_points = float(getenv("DAYTRADE_MAX_SPREAD_POINTS", "3.0"))
+        self.max_spread_points = float(getenv("DAYTRADE_MAX_SPREAD_POINTS", "50.0"))
         self.risk_per_trade_pct = float(getenv("DAYTRADE_RISK_PER_TRADE_PCT", "1.0"))
         self.min_risk_reward = float(getenv("DAYTRADE_MIN_RISK_REWARD", "2.0"))
         self.enable_live_decisions = getenv("DAYTRADE_ENABLE_LIVE_DECISIONS", "false").lower() == "true"
