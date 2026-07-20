@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WINE_CMD="/usr/lib/wine/wine"
+WINE_CMD="${WINE_CMD:-wine}"
 
-if [[ ! -x "$WINE_CMD" ]]; then
+if ! command -v "$WINE_CMD" >/dev/null 2>&1; then
   echo "wine runtime not found at $WINE_CMD" >&2
   exit 1
 fi

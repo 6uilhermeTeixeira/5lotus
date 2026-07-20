@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-WINE_CMD="/usr/lib/wine/wine"
+WINE_CMD="${WINE_CMD:-wine}"
 MT5_URL="${MT5_URL:-https://download.mql5.com/cdn/web/metaquotes.software.corp/mt5/mt5setup.exe}"
 WEBVIEW_URL="${WEBVIEW_URL:-https://msedge.sf.dl.delivery.mp.microsoft.com/filestreamingservice/files/f2910a1e-e5a6-4f17-b52d-7faf525d17f8/MicrosoftEdgeWebview2Setup.exe}"
 DOWNLOAD_DIR="${DOWNLOAD_DIR:-/data/downloads}"
@@ -18,7 +18,7 @@ export WINEARCH="${WINEARCH:-win64}"
 export DISPLAY="$DISPLAY_ID"
 export HOME="$HOME_DIR"
 
-if [[ ! -x "$WINE_CMD" ]]; then
+if ! command -v "$WINE_CMD" >/dev/null 2>&1; then
   echo "wine runtime not found at $WINE_CMD" >&2
   exit 1
 fi

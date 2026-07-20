@@ -40,6 +40,9 @@ x11vnc \
   -rfbport "$RFB_PORT" \
   -forever \
   -shared \
+  -noxrecord \
+  -xkb \
+  -repeat \
   -nopw \
   -quiet \
   >"$LOG_DIR/x11vnc.log" 2>&1 &
