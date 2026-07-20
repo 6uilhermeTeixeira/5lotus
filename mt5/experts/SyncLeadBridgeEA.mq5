@@ -7,6 +7,7 @@ input string TradeResultsUrl = "http://127.0.0.1:8000/api/trades";
 input string CandleCacheUrl = "http://127.0.0.1:8000/api/candles";
 input string LotusIngestApiKey = "";
 input string ResultsBotId = "bot-1";
+input string StrategySymbol = "XAUUSD";
 input string StrategyTimeframe = "M5";
 input int HistoryBars = 30;
 input int HistoryCacheBars = 50000;
@@ -23,6 +24,17 @@ double upVolume = 0.0, downVolume = 0.0;
 
 int OnInit()
 {
+   ENUM_TIMEFRAMES strategyPeriod = ResolveTimeframe(StrategyTimeframe);
+   if(_Symbol != StrategySymbol || Period() != strategyPeriod)
+   {
+      PrintFormat("Switching operational chart from %s/%s to %s/%s", _Symbol, EnumToString((ENUM_TIMEFRAMES)Period()), StrategySymbol, StrategyTimeframe);
+      if(!ChartSetSymbolPeriod(0, StrategySymbol, strategyPeriod))
+      {
+         PrintFormat("Unable to switch operational chart. Error=%d", GetLastError());
+         return(INIT_FAILED);
+      }
+      return(INIT_SUCCEEDED);
+   }
    EventSetTimer(PollIntervalSeconds);
    MarketBookAdd(_Symbol);
    trade.SetExpertMagicNumber(StrategyMagicNumber);
