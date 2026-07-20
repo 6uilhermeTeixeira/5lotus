@@ -20,7 +20,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name
 logger = logging.getLogger("2lotus.strategy")
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
-app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent.parent / "public"), name="static")
+app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static")
 
 
 def _login_redirect() -> RedirectResponse:
