@@ -12,12 +12,18 @@ input int PollIntervalSeconds = 5;
 input int RequestTimeoutMs = 3000;
 input bool EnableOrderExecution = false;
 input bool EnableResultReporting = true;
+input long StrategyMagicNumber = 20260720;
 
 CTrade trade;
+double lastBid = 0.0;
+int upTicks = 0, downTicks = 0, neutralTicks = 0;
+double upVolume = 0.0, downVolume = 0.0;
 
 int OnInit()
 {
    EventSetTimer(PollIntervalSeconds);
+   MarketBookAdd(_Symbol);
+   trade.SetExpertMagicNumber(StrategyMagicNumber);
    Print("SyncLeadBridgeEA initialized. Add the service URLs to MT5 WebRequest allowlist.");
    return(INIT_SUCCEEDED);
 }
@@ -25,11 +31,18 @@ int OnInit()
 void OnDeinit(const int reason)
 {
    EventKillTimer();
+   MarketBookRelease(_Symbol);
 }
 
 void OnTick()
 {
-   // Trading execution remains timer-driven.
+   MqlTick tick;
+   if(!SymbolInfoTick(_Symbol, tick)) return;
+   double volume = tick.volume_real > 0.0 ? tick.volume_real : 1.0;
+   if(lastBid == 0.0 || tick.bid == lastBid) neutralTicks++;
+   else if(tick.bid > lastBid) { upTicks++; upVolume += volume; }
+   else { downTicks++; downVolume += volume; }
+   lastBid = tick.bid;
 }
 
 void OnTradeTransaction(const MqlTradeTransaction &transaction, const MqlTradeRequest &request, const MqlTradeResult &result)
@@ -101,10 +114,39 @@ string BuildDecisionPayload(const MqlTick &tick)
          "\"margin_free\":" + DoubleToString(margin_free, 2) + ","
          "\"leverage\":" + IntegerToString((int)leverage) +
       "},"
-      "\"indicators\":{}"
+      "\"indicators\":{}" +
+      ",\"flow\":{"
+         "\"book\":" + SerializeBook() + ","
+         "\"up_ticks\":" + IntegerToString(upTicks) + ","
+         "\"down_ticks\":" + IntegerToString(downTicks) + ","
+         "\"neutral_ticks\":" + IntegerToString(neutralTicks) + ","
+         "\"up_volume\":" + DoubleToString(upVolume, 2) + ","
+         "\"down_volume\":" + DoubleToString(downVolume, 2) +
+      "}"
       "}";
 
+   upTicks = downTicks = neutralTicks = 0;
+   upVolume = downVolume = 0.0;
+
    return json;
+}
+
+string SerializeBook()
+{
+   MqlBookInfo levels[];
+   if(!MarketBookGet(_Symbol, levels)) return "[]";
+   string json = "[";
+   int bidCount = 0, askCount = 0;
+   for(int i = 0; i < ArraySize(levels); i++)
+   {
+      string side = "";
+      if(levels[i].type == BOOK_TYPE_BUY && bidCount++ < 5) side = "bid";
+      if(levels[i].type == BOOK_TYPE_SELL && askCount++ < 5) side = "ask";
+      if(side == "") continue;
+      if(json != "[") json += ",";
+      json += "{\"side\":\"" + side + "\",\"price\":" + DoubleToString(levels[i].price, _Digits) + ",\"volume\":" + DoubleToString(levels[i].volume, 2) + "}";
+   }
+   return json + "]";
 }
 
 int PostJson(const string url, const string payload, string &responseText)

@@ -35,6 +35,21 @@ class CandleSnapshot(BaseModel):
     volume: float
 
 
+class OrderBookLevel(BaseModel):
+    side: str = Field(..., pattern="^(bid|ask)$")
+    price: float
+    volume: float
+
+
+class FlowSnapshot(BaseModel):
+    book: list[OrderBookLevel] = Field(default_factory=list)
+    up_ticks: int = 0
+    down_ticks: int = 0
+    neutral_ticks: int = 0
+    up_volume: float = 0.0
+    down_volume: float = 0.0
+
+
 class DecisionRequest(BaseModel):
     bot_id: str | None = Field(default=None, pattern=r"^[a-z0-9-]+$")
     request_id: str = Field(..., min_length=3)
@@ -50,6 +65,7 @@ class DecisionRequest(BaseModel):
     positions: list[PositionSnapshot] = Field(default_factory=list)
     account: AccountSnapshot
     indicators: dict[str, float] = Field(default_factory=dict)
+    flow: FlowSnapshot | None = None
 
 
 class RiskCheck(BaseModel):
@@ -68,6 +84,10 @@ class DecisionResponse(BaseModel):
     take_profit_price: float | None = None
     stop_loss_points: float | None = None
     take_profit_points: float | None = None
+    partial_take_profit_price: float | None = None
+    final_take_profit_price: float | None = None
+    partial_close_pct: float = 0.0
+    move_stop_to_breakeven: bool = False
     risk_checks: list[RiskCheck] = Field(default_factory=list)
     metadata: dict[str, str | int | float | bool] = Field(default_factory=dict)
 

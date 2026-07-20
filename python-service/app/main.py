@@ -183,6 +183,9 @@ def read_config() -> dict[str, str | int | float | bool]:
         "max_spread_points": settings.max_spread_points,
         "risk_per_trade_pct": settings.risk_per_trade_pct,
         "min_risk_reward": settings.min_risk_reward,
+        "fimath_mode": settings.fimath_mode,
+        "fimath_flow_window_seconds": settings.fimath_flow_window_seconds,
+        "fimath_partial_pct": settings.fimath_partial_pct,
         "enable_live_decisions": settings.enable_live_decisions,
         "dashboard_auth_configured": settings.dashboard_auth_configured,
         "results_store": settings.results_store,
@@ -193,11 +196,20 @@ def read_config() -> dict[str, str | int | float | bool]:
 @app.post("/decision", response_model=DecisionResponse)
 def decision(payload: DecisionRequest, x_2lotus_ingest_key: str | None = Header(default=None)) -> DecisionResponse:
     _require_ingest_key(x_2lotus_ingest_key)
+    store: SupabaseStore | None = None
     if payload.bot_id and _uses_supabase_results():
         bot = _find_bot(payload.bot_id)
         if bot.symbol != payload.symbol or bot.timeframe != payload.timeframe:
             raise HTTPException(status_code=422, detail="decision symbol or timeframe does not match bot configuration")
-        SupabaseStore(settings).upsert_candles(payload.bot_id, payload.symbol, payload.timeframe, payload.candles)
+        store = SupabaseStore(settings)
+        store.upsert_candles(payload.bot_id, payload.symbol, payload.timeframe, payload.candles)
+        store.advance_paper_trades(payload.bot_id, payload.candles)
     response = evaluate_decision(payload, settings)
+    if payload.bot_id and store and response.action.value in {"buy", "sell"} and store.closed_paper_trade_count(payload.bot_id) < 30:
+        response.action = response.action.HOLD
+        response.reason = "fimath_shadow_minimum_not_reached"
+        response.size = 0.0
+    if payload.bot_id and _uses_supabase_results() and response.reason == "fimath_shadow_signal":
+        SupabaseStore(settings).record_shadow_signal(payload, response)
     logger.info("decision request_id=%s symbol=%s timeframe=%s action=%s reason=%s", payload.request_id, payload.symbol, payload.timeframe, response.action.value, response.reason)
     return response

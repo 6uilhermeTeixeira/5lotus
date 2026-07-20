@@ -5,7 +5,7 @@ from urllib.request import Request, urlopen
 
 from .config import Settings
 from .results_store import build_results_snapshot
-from .schemas import BotCatalogItem, CandleSnapshot, MarketChartResponse, ResultsResponse, TradeResult
+from .schemas import BotCatalogItem, CandleSnapshot, DecisionRequest, DecisionResponse, MarketChartResponse, ResultsResponse, TradeResult
 
 
 class SupabaseStore:
@@ -76,6 +76,46 @@ class SupabaseStore:
             payload=payload,
             prefer="resolution=merge-duplicates,return=minimal",
         )
+
+    def advance_paper_trades(self, bot_id: str, candles: list[CandleSnapshot]) -> None:
+        if not candles:
+            return
+        candle = candles[-1]
+        rows = self._request(f"paper_trades?bot_id=eq.{bot_id}&status=eq.open&select=*")
+        for trade in rows if isinstance(rows, list) else []:
+            buy = trade["side"] == "buy"
+            stop = float(trade["stop_price"])
+            entry = float(trade["entry_price"])
+            partial = float(trade["partial_price"])
+            target = float(trade["target_price"])
+            patch: dict[str, object] = {}
+            # Conservative intrabar rule: a stop has precedence over all targets.
+            stopped = candle.low <= stop if buy else candle.high >= stop
+            if stopped:
+                patch = {"status": "closed", "closed_at_utc": candle.timestamp_utc.isoformat(), "outcome_r": 0.5 if trade["partial_hit"] else -1}
+            elif not trade["partial_hit"] and (candle.high >= partial if buy else candle.low <= partial):
+                patch = {"partial_hit": True, "stop_price": entry}
+            elif trade["partial_hit"] and (candle.high >= target if buy else candle.low <= target):
+                patch = {"status": "closed", "closed_at_utc": candle.timestamp_utc.isoformat(), "outcome_r": 1.5}
+            if patch:
+                self._request(f"paper_trades?signal_key=eq.{trade['signal_key']}", method="PATCH", payload=patch, prefer="return=minimal")
+
+    def record_shadow_signal(self, payload: DecisionRequest, response: DecisionResponse) -> None:
+        if not payload.bot_id or not payload.candles or response.entry_price is None or response.stop_loss_price is None:
+            return
+        setup = str(response.metadata.get("setup_type", "fimath"))
+        signal_key = f"{payload.bot_id}:{payload.timeframe}:{payload.candles[-1].timestamp_utc.isoformat()}:{response.action.value}:{setup}"
+        self._request("strategy_signals?on_conflict=signal_key", method="POST", payload={"signal_key": signal_key, "bot_id": payload.bot_id, "payload": payload.model_dump(mode="json"), "response": response.model_dump(mode="json")}, prefer="resolution=merge-duplicates,return=minimal")
+        self._request("paper_trades?on_conflict=signal_key", method="POST", payload={
+            "signal_key": signal_key, "bot_id": payload.bot_id, "side": str(response.metadata.get("suggested_action", "buy")),
+            "entry_price": response.entry_price, "initial_stop_price": response.stop_loss_price, "stop_price": response.stop_loss_price,
+            "partial_price": response.partial_take_profit_price, "target_price": response.final_take_profit_price,
+            "opened_at_utc": payload.timestamp_utc.isoformat(),
+        }, prefer="resolution=ignore-duplicates,return=minimal")
+
+    def closed_paper_trade_count(self, bot_id: str) -> int:
+        rows = self._request(f"paper_trades?bot_id=eq.{bot_id}&status=eq.closed&select=signal_key")
+        return len(rows) if isinstance(rows, list) else 0
 
     def load_chart(self, bot: BotCatalogItem, limit: int = 180) -> MarketChartResponse:
         candles_query = urlencode(

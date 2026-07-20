@@ -1,334 +1,146 @@
+from collections import defaultdict, deque
 from dataclasses import dataclass
+from statistics import fmean, pstdev
 
 from .config import Settings
-from .schemas import CandleSnapshot, DecisionAction, DecisionRequest, DecisionResponse, RiskCheck
+from .schemas import CandleSnapshot, DecisionAction, DecisionRequest, DecisionResponse, FlowSnapshot, RiskCheck
 
 
 @dataclass
-class SetupEvaluation:
+class Setup:
     action: DecisionAction
-    breakout_level: float
-    entry_price: float
-    stop_loss_price: float
-    take_profit_price: float
-    stop_loss_points: float
-    take_profit_points: float
-    rr_ratio: float
-    breakout_confirmed: bool
-    pullback_confirmed: bool
-    ignition_confirmed: bool
-    stop_reference: str
+    setup_type: str
+    entry: float
+    stop: float
+    partial: float
+    target: float
+    stop_points: float
+    flow_mode: str
+    ema20: float
+    atr14: float
 
 
-def compute_position_size(balance: float, risk_pct: float, stop_loss_points: float, value_per_point_per_lot: float) -> float:
-    risk_amount = balance * (risk_pct / 100.0)
-    return risk_amount / (stop_loss_points * value_per_point_per_lot)
+_flow_windows: dict[str, deque[tuple[float, float]]] = defaultdict(lambda: deque(maxlen=60))
 
 
-def average_body(candles: list[CandleSnapshot], end_idx: int, period: int) -> float:
-    window = candles[end_idx - period : end_idx]
-    return sum(abs(c.close - c.open) for c in window) / period
+def _ema(values: list[float], period: int = 20) -> float:
+    result = values[0]
+    alpha = 2 / (period + 1)
+    for value in values[1:]:
+        result += alpha * (value - result)
+    return result
 
 
-def average_volume(candles: list[CandleSnapshot], end_idx: int, period: int) -> float:
-    window = candles[end_idx - period : end_idx]
-    return sum(c.volume for c in window) / period
+def _atr(candles: list[CandleSnapshot], period: int = 14) -> float:
+    ranges = [max(c.high - c.low, abs(c.high - candles[i - 1].close), abs(c.low - candles[i - 1].close)) for i, c in enumerate(candles[-period:], len(candles) - period)]
+    return fmean(ranges)
 
 
-def compute_atr(candles: list[CandleSnapshot], end_idx: int, period: int) -> float:
-    window = candles[end_idx - period + 1 : end_idx + 1]
-    true_ranges: list[float] = []
-
-    for idx, candle in enumerate(window):
-        previous_close = window[idx - 1].close if idx > 0 else candles[end_idx - period].close
-        true_ranges.append(max(candle.high - candle.low, abs(candle.high - previous_close), abs(candle.low - previous_close)))
-
-    return sum(true_ranges) / period
+def _z(value: float, values: list[float]) -> float:
+    deviation = pstdev(values)
+    return 0.0 if deviation == 0 else (value - fmean(values)) / deviation
 
 
-def is_fractal_low(candles: list[CandleSnapshot], idx: int) -> bool:
-    center = candles[idx]
-    return (
-        center.low < candles[idx - 1].low
-        and center.low < candles[idx - 2].low
-        and center.low < candles[idx + 1].low
-        and center.low < candles[idx + 2].low
-    )
+def _flow_metrics(flow: FlowSnapshot) -> tuple[float, float] | None:
+    bids = sum(level.volume for level in flow.book if level.side == "bid")
+    asks = sum(level.volume for level in flow.book if level.side == "ask")
+    total_book = bids + asks
+    total_ticks = flow.up_volume + flow.down_volume
+    if total_book <= 0 or total_ticks <= 0:
+        return None
+    return ((bids - asks) / total_book, (flow.up_volume - flow.down_volume) / total_ticks)
 
 
-def is_fractal_high(candles: list[CandleSnapshot], idx: int) -> bool:
-    center = candles[idx]
-    return (
-        center.high > candles[idx - 1].high
-        and center.high > candles[idx - 2].high
-        and center.high > candles[idx + 1].high
-        and center.high > candles[idx + 2].high
-    )
+def _record_flow(request: DecisionRequest) -> tuple[tuple[float, float] | None, deque[tuple[float, float]] | None]:
+    if request.flow is None:
+        return None, None
+    metrics = _flow_metrics(request.flow)
+    if metrics is None:
+        return None, None
+    key = request.bot_id or request.symbol
+    window = _flow_windows[key]
+    window.append(metrics)
+    return metrics, window
 
 
-def find_last_fractal(candles: list[CandleSnapshot], action: DecisionAction) -> CandleSnapshot | None:
-    for idx in range(len(candles) - 3, 1, -1):
-        if action == DecisionAction.BUY and is_fractal_low(candles, idx):
-            return candles[idx]
-        if action == DecisionAction.SELL and is_fractal_high(candles, idx):
-            return candles[idx]
-    return None
+def _flow_confirmation(metrics: tuple[float, float] | None, window: deque[tuple[float, float]] | None, action: DecisionAction) -> tuple[bool, str]:
+    if metrics is None or window is None:
+        return False, "flow_unavailable"
+    if len(window) < window.maxlen:
+        return False, "flow_warmup"
+    book_z = _z(metrics[0], [item[0] for item in window])
+    tick_z = _z(metrics[1], [item[1] for item in window])
+    direction = 1 if action == DecisionAction.BUY else -1
+    if direction * book_z >= 1 and direction * tick_z >= 1:
+        return True, "aggression"
+    if direction * book_z >= 1 and direction * tick_z <= -1:
+        return True, "absorption"
+    return False, "flow_not_confirmed"
 
 
-def evaluate_setup(request: DecisionRequest, settings: Settings) -> SetupEvaluation | None:
+def _position_size(balance: float, risk_pct: float, stop_points: float, value_per_point: float) -> float:
+    return (balance * risk_pct / 100) / (stop_points * value_per_point)
+
+
+def _setup(request: DecisionRequest) -> Setup | None:
     candles = request.candles
-    breakout_idx = len(candles) - 3
-    pullback_idx = len(candles) - 2
-    ignition_idx = len(candles) - 1
-
-    breakout = candles[breakout_idx]
-    pullback = candles[pullback_idx]
-    ignition = candles[ignition_idx]
-
-    highest_20 = max(c.high for c in candles[breakout_idx - 20 : breakout_idx])
-    lowest_20 = min(c.low for c in candles[breakout_idx - 20 : breakout_idx])
-    avg_body_10 = average_body(candles, breakout_idx, 10)
-    avg_volume_10 = average_volume(candles, pullback_idx, 10)
-    avg_volume_20 = average_volume(candles, ignition_idx, 20)
-
-    bullish_breakout = breakout.close > highest_20 and abs(breakout.close - breakout.open) > avg_body_10
-    bearish_breakout = breakout.close < lowest_20 and abs(breakout.close - breakout.open) > avg_body_10
-
-    if not bullish_breakout and not bearish_breakout:
+    if len(candles) < 23:
         return None
-
-    action = DecisionAction.BUY if bullish_breakout else DecisionAction.SELL
-    breakout_level = highest_20 if bullish_breakout else lowest_20
-    tolerance = breakout_level * 0.0005
-
-    pullback_confirmed = (
-        pullback.low <= breakout_level + tolerance
-        and pullback.high >= breakout_level - tolerance
-        and pullback.volume <= avg_volume_10
-    )
-
-    ignition_confirmed = False
-    if action == DecisionAction.BUY:
-        ignition_confirmed = ignition.close > ignition.open and ignition.close > pullback.high and ignition.volume > avg_volume_20
-    else:
-        ignition_confirmed = ignition.close < ignition.open and ignition.close < pullback.low and ignition.volume > avg_volume_20
-
-    if not pullback_confirmed or not ignition_confirmed:
-        return SetupEvaluation(
-            action=action,
-            breakout_level=breakout_level,
-            entry_price=request.ask if action == DecisionAction.BUY else request.bid,
-            stop_loss_price=0.0,
-            take_profit_price=0.0,
-            stop_loss_points=0.0,
-            take_profit_points=0.0,
-            rr_ratio=0.0,
-            breakout_confirmed=True,
-            pullback_confirmed=pullback_confirmed,
-            ignition_confirmed=ignition_confirmed,
-            stop_reference="pending",
-        )
-
-    fractal = find_last_fractal(candles[:-1], action)
-    if fractal is None:
+    closes = [c.close for c in candles]
+    ema20 = _ema(closes[-21:-1])
+    previous_ema = _ema(closes[-22:-2])
+    atr14 = _atr(candles[:-1])
+    current, previous = candles[-1], candles[-2]
+    tolerance, extension = atr14 * .15, atr14 * .5
+    bullish = current.close > ema20 and ema20 > previous_ema
+    bearish = current.close < ema20 and ema20 < previous_ema
+    if not bullish and not bearish:
         return None
-
-    atr = compute_atr(candles, ignition_idx, 14)
-    entry_price = request.ask if action == DecisionAction.BUY else request.bid
-    stop_loss_price = fractal.low - atr if action == DecisionAction.BUY else fractal.high + atr
-    stop_loss_points = abs(entry_price - stop_loss_price) / request.point_size
-    take_profit_points = stop_loss_points * settings.min_risk_reward
-    take_profit_price = (
-        entry_price + (take_profit_points * request.point_size)
-        if action == DecisionAction.BUY
-        else entry_price - (take_profit_points * request.point_size)
-    )
-
-    return SetupEvaluation(
-        action=action,
-        breakout_level=breakout_level,
-        entry_price=entry_price,
-        stop_loss_price=stop_loss_price,
-        take_profit_price=take_profit_price,
-        stop_loss_points=stop_loss_points,
-        take_profit_points=take_profit_points,
-        rr_ratio=settings.min_risk_reward,
-        breakout_confirmed=True,
-        pullback_confirmed=True,
-        ignition_confirmed=True,
-        stop_reference="fractal_5_plus_atr14",
-    )
+    action = DecisionAction.BUY if bullish else DecisionAction.SELL
+    pullback = (current.low <= ema20 + tolerance and current.close > ema20) if bullish else (current.high >= ema20 - tolerance and current.close < ema20)
+    outside_inside = (previous.close < ema20 - extension and current.close > ema20) if bullish else (previous.close > ema20 + extension and current.close < ema20)
+    if not pullback and not outside_inside:
+        return None
+    stop = (min(current.low, previous.low) - atr14 * .25) if bullish else (max(current.high, previous.high) + atr14 * .25)
+    entry = request.ask if bullish else request.bid
+    points = abs(entry - stop) / request.point_size
+    if points <= 0:
+        return None
+    partial_points, target_points = points, points * 2
+    partial = entry + partial_points * request.point_size if bullish else entry - partial_points * request.point_size
+    target = entry + target_points * request.point_size if bullish else entry - target_points * request.point_size
+    return Setup(action, "pullback" if pullback else "outside_inside", entry, stop, partial, target, points, "", ema20, atr14)
 
 
 def evaluate_decision(request: DecisionRequest, settings: Settings) -> DecisionResponse:
-    risk_amount = round(request.account.balance * (settings.risk_per_trade_pct / 100.0), 2)
-    has_minimum_history = len(request.candles) >= 23
-
-    setup = evaluate_setup(request, settings) if has_minimum_history else None
-    has_entry_signal = setup is not None and setup.action in (DecisionAction.BUY, DecisionAction.SELL)
-
+    flow_metrics, flow_window = _record_flow(request)
+    setup = _setup(request)
     checks = [
-        RiskCheck(
-            name="symbol_match",
-            passed=request.symbol.upper() == settings.default_symbol.upper(),
-            detail=f"symbol={request.symbol} expected={settings.default_symbol}",
-        ),
-        RiskCheck(
-            name="timeframe_match",
-            passed=request.timeframe.upper() == settings.default_timeframe.upper(),
-            detail=f"timeframe={request.timeframe} expected={settings.default_timeframe}",
-        ),
-        RiskCheck(
-            name="spread_limit",
-            passed=request.spread_points <= settings.max_spread_points,
-            detail=f"spread={request.spread_points} max={settings.max_spread_points}",
-        ),
-        RiskCheck(
-            name="history_depth",
-            passed=has_minimum_history,
-            detail=f"candles={len(request.candles)} min=23",
-        ),
-        RiskCheck(
-            name="breakout_confirmed",
-            passed=bool(setup and setup.breakout_confirmed),
-            detail=f"breakout_confirmed={bool(setup and setup.breakout_confirmed)}",
-        ),
-        RiskCheck(
-            name="pullback_confirmed",
-            passed=bool(setup and setup.pullback_confirmed),
-            detail=f"pullback_confirmed={bool(setup and setup.pullback_confirmed)}",
-        ),
-        RiskCheck(
-            name="ignition_candle_confirmed",
-            passed=bool(setup and setup.ignition_confirmed),
-            detail=f"ignition_candle_confirmed={bool(setup and setup.ignition_confirmed)}",
-        ),
-        RiskCheck(
-            name="risk_per_trade_limit",
-            passed=settings.risk_per_trade_pct > 0.0,
-            detail=f"risk_pct={settings.risk_per_trade_pct}",
-        ),
-        RiskCheck(
-            name="risk_reward_minimum",
-            passed=bool(setup and setup.rr_ratio >= settings.min_risk_reward),
-            detail=f"rr_ratio={(setup.rr_ratio if setup else 0.0):.2f} min={settings.min_risk_reward}",
-        ),
-        RiskCheck(
-            name="live_decisions_enabled",
-            passed=(not has_entry_signal) or settings.enable_live_decisions,
-            detail="live decisions stay disabled by default even for demo until the setup is validated",
-        ),
+        RiskCheck(name="symbol_match", passed=request.symbol.upper() == settings.default_symbol.upper(), detail=f"expected={settings.default_symbol}"),
+        RiskCheck(name="timeframe_match", passed=request.timeframe.upper() == settings.default_timeframe.upper(), detail=f"expected={settings.default_timeframe}"),
+        RiskCheck(name="spread_limit", passed=request.spread_points <= settings.max_spread_points, detail=f"max={settings.max_spread_points}"),
+        RiskCheck(name="fimath_setup", passed=setup is not None, detail="ema20 pullback/outside-inside"),
     ]
-
-    if not checks[0].passed or not checks[1].passed:
-        return DecisionResponse(
-            action=DecisionAction.HOLD,
-            reason="market_filter_mismatch",
-            risk_amount=risk_amount,
-            risk_checks=checks,
-            metadata={
-                "symbol": request.symbol,
-                "timeframe": request.timeframe,
-                "strategy_profile": settings.strategy_profile,
-                "expected_symbol": settings.default_symbol,
-                "expected_timeframe": settings.default_timeframe,
-            },
-        )
-
-    if not checks[2].passed:
-        return DecisionResponse(
-            action=DecisionAction.HOLD,
-            reason="spread_above_limit",
-            risk_amount=risk_amount,
-            risk_checks=checks,
-            metadata={
-                "symbol": request.symbol,
-                "timeframe": request.timeframe,
-                "strategy_profile": settings.strategy_profile,
-            },
-        )
-
-    if not checks[3].passed:
-        return DecisionResponse(
-            action=DecisionAction.HOLD,
-            reason="insufficient_history",
-            risk_amount=risk_amount,
-            risk_checks=checks,
-            metadata={
-                "symbol": request.symbol,
-                "timeframe": request.timeframe,
-                "strategy_profile": settings.strategy_profile,
-            },
-        )
-
-    if not has_entry_signal:
-        return DecisionResponse(
-            action=DecisionAction.HOLD,
-            reason="setup_not_confirmed",
-            risk_amount=risk_amount,
-            risk_checks=checks,
-            metadata={
-                "symbol": request.symbol,
-                "timeframe": request.timeframe,
-                "strategy_profile": settings.strategy_profile,
-                "risk_per_trade_pct": settings.risk_per_trade_pct,
-                "min_risk_reward": settings.min_risk_reward,
-            },
-        )
-
-    suggested_size = round(
-        compute_position_size(
-            balance=request.account.balance,
-            risk_pct=settings.risk_per_trade_pct,
-            stop_loss_points=setup.stop_loss_points,
-            value_per_point_per_lot=request.value_per_point_per_lot,
-        ),
-        2,
-    )
-
-    if not checks[9].passed:
-        return DecisionResponse(
-            action=DecisionAction.HOLD,
-            reason="live_decisions_disabled",
-            size=0.0,
-            risk_amount=risk_amount,
-            entry_price=setup.entry_price,
-            stop_loss_price=setup.stop_loss_price,
-            take_profit_price=setup.take_profit_price,
-            stop_loss_points=round(setup.stop_loss_points, 2),
-            take_profit_points=round(setup.take_profit_points, 2),
-            risk_checks=checks,
-            metadata={
-                "symbol": request.symbol,
-                "timeframe": request.timeframe,
-                "strategy_profile": settings.strategy_profile,
-                "suggested_action": setup.action.value,
-                "suggested_size": suggested_size,
-                "risk_per_trade_pct": settings.risk_per_trade_pct,
-                "rr_ratio": round(setup.rr_ratio, 2),
-                "min_risk_reward": settings.min_risk_reward,
-                "stop_reference": setup.stop_reference,
-            },
-        )
-
+    if not all(check.passed for check in checks[:3]):
+        return DecisionResponse(action=DecisionAction.HOLD, reason="market_filter_mismatch", risk_checks=checks)
+    if setup is None:
+        return DecisionResponse(action=DecisionAction.HOLD, reason="fimath_setup_not_confirmed", risk_checks=checks)
+    flow_ok, flow_mode = _flow_confirmation(flow_metrics, flow_window, setup.action)
+    checks.append(RiskCheck(name="flow_confirmation", passed=flow_ok, detail=flow_mode))
+    if not flow_ok:
+        return DecisionResponse(action=DecisionAction.HOLD, reason=flow_mode, risk_checks=checks)
+    size = round(_position_size(request.account.balance, settings.risk_per_trade_pct, setup.stop_points, request.value_per_point_per_lot), 2)
+    executable = settings.fimath_mode == "live" and settings.enable_live_decisions
+    checks.append(RiskCheck(name="fimath_live_enabled", passed=executable, detail=f"mode={settings.fimath_mode}"))
     return DecisionResponse(
-        action=setup.action,
-        reason=f"{settings.strategy_profile}_validated",
-        size=suggested_size,
-        risk_amount=risk_amount,
-        entry_price=setup.entry_price,
-        stop_loss_price=setup.stop_loss_price,
-        take_profit_price=setup.take_profit_price,
-        stop_loss_points=round(setup.stop_loss_points, 2),
-        take_profit_points=round(setup.take_profit_points, 2),
+        action=setup.action if executable else DecisionAction.HOLD,
+        reason="fimath_validated" if executable else "fimath_shadow_signal",
+        size=size if executable else 0.0,
+        risk_amount=round(request.account.balance * settings.risk_per_trade_pct / 100, 2),
+        entry_price=setup.entry, stop_loss_price=setup.stop, take_profit_price=setup.target,
+        stop_loss_points=round(setup.stop_points, 2), take_profit_points=round(setup.stop_points * 2, 2),
+        partial_take_profit_price=setup.partial, final_take_profit_price=setup.target,
+        partial_close_pct=settings.fimath_partial_pct, move_stop_to_breakeven=True,
         risk_checks=checks,
-        metadata={
-            "symbol": request.symbol,
-            "timeframe": request.timeframe,
-            "strategy_profile": settings.strategy_profile,
-            "risk_per_trade_pct": settings.risk_per_trade_pct,
-            "rr_ratio": round(setup.rr_ratio, 2),
-            "min_risk_reward": settings.min_risk_reward,
-            "stop_reference": setup.stop_reference,
-        },
+        metadata={"strategy_profile": settings.strategy_profile, "setup_type": setup.setup_type, "flow_mode": flow_mode, "ema20": round(setup.ema20, 5), "atr14": round(setup.atr14, 5), "suggested_size": size, "suggested_action": setup.action.value},
     )

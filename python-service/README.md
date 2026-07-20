@@ -23,9 +23,14 @@ Perfil atual:
 
 - ativo base: `XAUUSD`
 - timeframe base: `M5`
-- estrategia base: `price_action_breakout_pullback`
-- risco por operacao: `5%` da banca
-- risco/retorno minimo: `1.5`
+- estrategia base: `fimath_ema20_flow`
+- risco por operacao: `1%` da banca
+- risco/retorno final: `2R`, com parcial de `50%` em `1R`
+
+A Fimath usa MME20, pullback ou fora-dentro e confirmação obrigatória de fluxo inferida da
+profundidade de mercado e dos ticks do MT5. Por padrão ela opera em `shadow`: grava sinais e
+paper trades, mas retorna `hold` até `DAYTRADE_FIMATH_MODE=live` e
+`DAYTRADE_ENABLE_LIVE_DECISIONS=true` serem habilitados manualmente.
 
 Por seguranca, `POST /decision` ainda pode retornar `hold` mesmo quando o setup estiver confirmado, enquanto `DAYTRADE_ENABLE_LIVE_DECISIONS` estiver desligado.
 
