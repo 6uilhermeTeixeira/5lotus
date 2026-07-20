@@ -3,11 +3,15 @@
 
 input string StrategyServiceUrl = "http://127.0.0.1:8000/decision";
 input string HealthcheckUrl = "http://127.0.0.1:8000/health";
+input string TradeResultsUrl = "http://127.0.0.1:8000/api/trades";
+input string LotusIngestApiKey = "";
+input string ResultsBotId = "bot-1";
 input string StrategyTimeframe = "M5";
 input int HistoryBars = 30;
 input int PollIntervalSeconds = 5;
 input int RequestTimeoutMs = 3000;
 input bool EnableOrderExecution = false;
+input bool EnableResultReporting = true;
 
 CTrade trade;
 
@@ -26,6 +30,14 @@ void OnDeinit(const int reason)
 void OnTick()
 {
    // Trading execution remains timer-driven.
+}
+
+void OnTradeTransaction(const MqlTradeTransaction &transaction, const MqlTradeRequest &request, const MqlTradeResult &result)
+{
+   if(!EnableResultReporting || transaction.type != TRADE_TRANSACTION_DEAL_ADD || transaction.deal == 0)
+      return;
+
+   ReportClosedDeal(transaction.deal);
 }
 
 void OnTimer()
@@ -51,7 +63,7 @@ string BuildDecisionPayload(const MqlTick &tick)
 {
    MqlRates rates[];
    string request_id = StringFormat("%s-%u", _Symbol, GetTickCount());
-   string timestamp_utc = TimeToString(TimeGMT(), TIME_DATE|TIME_SECONDS);
+   string timestamp_utc = ToIsoUtc(TimeGMT());
    double spread_points = (tick.ask - tick.bid) / _Point;
    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
@@ -72,7 +84,7 @@ string BuildDecisionPayload(const MqlTick &tick)
    string json =
       "{"
       "\"request_id\":\"" + request_id + "\","
-      "\"timestamp_utc\":\"" + timestamp_utc + "Z\","
+      "\"timestamp_utc\":\"" + timestamp_utc + "\","
       "\"symbol\":\"" + _Symbol + "\","
       "\"timeframe\":\"" + StrategyTimeframe + "\","
       "\"bid\":" + DoubleToString(tick.bid, _Digits) + ","
@@ -96,10 +108,14 @@ string BuildDecisionPayload(const MqlTick &tick)
 
 int PostJson(const string url, const string payload, string &responseText)
 {
+   return PostJsonWithHeaders(url, payload, "Content-Type: application/json\r\n", responseText);
+}
+
+int PostJsonWithHeaders(const string url, const string payload, const string headers, string &responseText)
+{
    char requestBody[];
    char responseBody[];
    string responseHeaders = "";
-   string headers = "Content-Type: application/json\r\n";
 
    StringToCharArray(payload, requestBody, 0, StringLen(payload), CP_UTF8);
    int status = WebRequest("POST", url, headers, RequestTimeoutMs, requestBody, responseBody, responseHeaders);
@@ -114,6 +130,91 @@ int PostJson(const string url, const string payload, string &responseText)
 
    responseText = CharArrayToString(responseBody, 0, -1, CP_UTF8);
    return status;
+}
+
+void ReportClosedDeal(const ulong closingDeal)
+{
+   if(LotusIngestApiKey == "")
+   {
+      Print("Trade result was not reported: LotusIngestApiKey is empty.");
+      return;
+   }
+
+   ENUM_DEAL_ENTRY entry = (ENUM_DEAL_ENTRY)HistoryDealGetInteger(closingDeal, DEAL_ENTRY);
+   if(entry != DEAL_ENTRY_OUT && entry != DEAL_ENTRY_OUT_BY)
+      return;
+
+   ulong positionId = (ulong)HistoryDealGetInteger(closingDeal, DEAL_POSITION_ID);
+   if(positionId == 0 || !HistorySelectByPosition(positionId))
+   {
+      PrintFormat("Could not load history for position %I64u", positionId);
+      return;
+   }
+
+   ulong openingDeal = 0;
+   int dealCount = HistoryDealsTotal();
+   for(int index = 0; index < dealCount; index++)
+   {
+      ulong candidate = HistoryDealGetTicket(index);
+      if(candidate == 0)
+         continue;
+      if((ENUM_DEAL_ENTRY)HistoryDealGetInteger(candidate, DEAL_ENTRY) == DEAL_ENTRY_IN)
+      {
+         openingDeal = candidate;
+         break;
+      }
+   }
+
+   if(openingDeal == 0)
+   {
+      PrintFormat("Could not find opening deal for position %I64u", positionId);
+      return;
+   }
+
+   ENUM_DEAL_TYPE openingType = (ENUM_DEAL_TYPE)HistoryDealGetInteger(openingDeal, DEAL_TYPE);
+   string side = openingType == DEAL_TYPE_BUY ? "buy" : "sell";
+   string symbol = HistoryDealGetString(closingDeal, DEAL_SYMBOL);
+   double grossProfit = HistoryDealGetDouble(closingDeal, DEAL_PROFIT) + HistoryDealGetDouble(closingDeal, DEAL_SWAP);
+   double commission = HistoryDealGetDouble(closingDeal, DEAL_COMMISSION);
+   double fees = commission < 0.0 ? -commission : 0.0;
+   double netProfit = grossProfit + commission;
+   datetime openedAt = (datetime)HistoryDealGetInteger(openingDeal, DEAL_TIME);
+   datetime closedAt = (datetime)HistoryDealGetInteger(closingDeal, DEAL_TIME);
+
+   string tradePayload =
+      "{"
+      "\"bot_id\":\"" + ResultsBotId + "\","
+      "\"trade\":{"
+         "\"trade_id\":\"mt5-" + IntegerToString((long)closingDeal) + "\","
+         "\"symbol\":\"" + symbol + "\","
+         "\"timeframe\":\"" + StrategyTimeframe + "\","
+         "\"setup\":\"mt5_closed_trade\","
+         "\"side\":\"" + side + "\","
+         "\"opened_at_utc\":\"" + ToIsoUtc(openedAt) + "\","
+         "\"closed_at_utc\":\"" + ToIsoUtc(closedAt) + "\","
+         "\"volume_lots\":" + DoubleToString(HistoryDealGetDouble(closingDeal, DEAL_VOLUME), 2) + ","
+         "\"entry_price\":" + DoubleToString(HistoryDealGetDouble(openingDeal, DEAL_PRICE), _Digits) + ","
+         "\"exit_price\":" + DoubleToString(HistoryDealGetDouble(closingDeal, DEAL_PRICE), _Digits) + ","
+         "\"risk_amount\":0,"
+         "\"gross_pnl\":" + DoubleToString(grossProfit, 2) + ","
+         "\"fees\":" + DoubleToString(fees, 2) + ","
+         "\"net_pnl\":" + DoubleToString(netProfit, 2) + ","
+         "\"note\":\"MT5 closing deal " + IntegerToString((long)closingDeal) + "\""
+      "}"
+      "}";
+
+   string response = "";
+   string headers = "Content-Type: application/json\r\nX-2Lotus-Ingest-Key: " + LotusIngestApiKey + "\r\n";
+   int status = PostJsonWithHeaders(TradeResultsUrl, tradePayload, headers, response);
+   PrintFormat("Trade result report deal=%I64u status=%d response=%s", closingDeal, status, response);
+}
+
+string ToIsoUtc(const datetime value)
+{
+   string formatted = TimeToString(value, TIME_DATE|TIME_SECONDS);
+   StringReplace(formatted, ".", "-");
+   StringReplace(formatted, " ", "T");
+   return formatted + "Z";
 }
 
 void TryExecuteDecision(const string response)
@@ -197,7 +298,7 @@ string SerializeRates(MqlRates &rates[], const int count)
          json += ",";
 
       json += "{"
-         "\"timestamp_utc\":\"" + TimeToString(rates[i].time, TIME_DATE|TIME_SECONDS) + "Z\","
+         "\"timestamp_utc\":\"" + ToIsoUtc(rates[i].time) + "\","
          "\"open\":" + DoubleToString(rates[i].open, _Digits) + ","
          "\"high\":" + DoubleToString(rates[i].high, _Digits) + ","
          "\"low\":" + DoubleToString(rates[i].low, _Digits) + ","

@@ -54,7 +54,7 @@ O passo 1 e considerado concluido quando:
 
 ## Estado validado em 2026-07-17
 
-- imagem `daytrade-mt5-runtime` buildando localmente
+- imagem `2lotus-mt5-runtime` buildando localmente
 - `verify-runtime` retornando `wine-9.0` e `xvfb_ok=yes`
 - prefixo Wine persistido em `.runtime/mt5-prefix`
 - `system32/kernel32.dll` e `syswow64/kernel32.dll` presentes no prefixo limpo
@@ -98,7 +98,7 @@ Observacoes:
 
 ## Limitacao atual de rede
 
-O MT5 roda dentro do container `daytrade-mt5-desktop`.
+O MT5 roda dentro do container `2lotus-mt5-desktop`.
 
 Por isso, o terminal nao consegue falar com o servico Python do host usando `127.0.0.1`.
 

@@ -23,7 +23,7 @@ RUN dpkg --add-architecture i386 \
       wine32 \
     && rm -rf /var/lib/apt/lists/*
 
-WORKDIR /opt/daytrade
+WORKDIR /opt/2lotus
 
 COPY infra/mt5-runtime/verify-runtime.sh /usr/local/bin/verify-runtime
 COPY infra/mt5-runtime/bootstrap-mt5.sh /usr/local/bin/bootstrap-mt5

@@ -1,6 +1,6 @@
-# MT5 Daytrade Bot
+# 2Lotus
 
-Projeto novo para desenvolver um bot de daytrade com execucao na plataforma MetaTrader 5.
+Projeto 2Lotus para desenvolver um bot de daytrade com execucao na plataforma MetaTrader 5.
 
 Status atual: runtime MT5 em Docker validado, desktop remoto local pronto para concluir a primeira instalacao do terminal, e esqueleto inicial `MT5 -> Python service` implementado.
 
@@ -42,6 +42,7 @@ Ja existe implementacao para:
 - calcular alvo com RR minimo `1.5`
 - calcular tamanho de posicao pelo risco de `5%`
 - permitir envio automatico da ordem pelo EA quando as travas forem habilitadas
+- expor uma pagina separada de acompanhamento de resultados em `python-service` via `GET /results`
 
 ## Estrutura inicial
 

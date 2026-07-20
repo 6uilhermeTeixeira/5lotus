@@ -1,0 +1,11 @@
+[
+  {
+    "id": "bot-1",
+    "name": "Bot 1",
+    "description": "Teste demonstrativo da estrategia de breakout com pullback.",
+    "strategy_profile": "price_action_breakout_pullback",
+    "symbol": "XAUUSD",
+    "timeframe": "M5",
+    "results_file": "bots/bot-1.json"
+  }
+]

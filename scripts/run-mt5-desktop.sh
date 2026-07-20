@@ -2,11 +2,11 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE_NAME="${IMAGE_NAME:-daytrade-mt5-runtime}"
+IMAGE_NAME="${IMAGE_NAME:-2lotus-mt5-runtime}"
 RUNTIME_DIR="${RUNTIME_DIR:-$ROOT_DIR/.runtime}"
 NOVNC_PORT="${NOVNC_PORT:-6080}"
 VNC_PORT="${VNC_PORT:-5900}"
-CONTAINER_NAME="${CONTAINER_NAME:-daytrade-mt5-desktop}"
+CONTAINER_NAME="${CONTAINER_NAME:-2lotus-mt5-desktop}"
 
 mkdir -p \
   "$RUNTIME_DIR/downloads" \

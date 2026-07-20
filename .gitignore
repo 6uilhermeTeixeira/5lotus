@@ -18,3 +18,5 @@ wine-prefix/
 .runtime/
 .env
 .env.*
+!.env.example
+supabase/.temp/

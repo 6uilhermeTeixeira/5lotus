@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-IMAGE_NAME="${IMAGE_NAME:-daytrade-mt5-runtime}"
+IMAGE_NAME="${IMAGE_NAME:-2lotus-mt5-runtime}"
 RUNTIME_DIR="${RUNTIME_DIR:-$ROOT_DIR/.runtime}"
 
 mkdir -p \

@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import date, datetime
 from enum import Enum
 
 from pydantic import BaseModel, Field
@@ -75,3 +75,75 @@ class HealthResponse(BaseModel):
     status: str
     service: str
     timestamp_utc: datetime
+
+
+class TradeSide(str, Enum):
+    BUY = "buy"
+    SELL = "sell"
+
+
+class TradeResult(BaseModel):
+    trade_id: str = Field(..., min_length=3)
+    symbol: str
+    timeframe: str
+    setup: str
+    side: TradeSide
+    opened_at_utc: datetime
+    closed_at_utc: datetime | None = None
+    volume_lots: float
+    entry_price: float
+    exit_price: float | None = None
+    stop_loss_price: float | None = None
+    take_profit_price: float | None = None
+    risk_amount: float = 0.0
+    gross_pnl: float = 0.0
+    fees: float = 0.0
+    net_pnl: float = 0.0
+    rr_realized: float | None = None
+    note: str = ""
+
+
+class ResultsSummary(BaseModel):
+    trades_count: int = 0
+    wins: int = 0
+    losses: int = 0
+    breakevens: int = 0
+    open_positions: int = 0
+    win_rate_pct: float = 0.0
+    gross_profit: float = 0.0
+    gross_loss: float = 0.0
+    net_pnl: float = 0.0
+    avg_win: float = 0.0
+    avg_loss: float = 0.0
+    profit_factor: float = 0.0
+    avg_rr: float = 0.0
+    best_trade: float = 0.0
+    worst_trade: float = 0.0
+
+
+class DailyPnlPoint(BaseModel):
+    day: date
+    net_pnl: float
+
+
+class ResultsResponse(BaseModel):
+    source_file: str
+    latest_trade_at_utc: datetime | None = None
+    summary: ResultsSummary
+    daily_pnl: list[DailyPnlPoint] = Field(default_factory=list)
+    recent_trades: list[TradeResult] = Field(default_factory=list)
+
+
+class BotCatalogItem(BaseModel):
+    id: str = Field(..., pattern=r"^[a-z0-9-]+$")
+    name: str
+    description: str
+    strategy_profile: str
+    symbol: str
+    timeframe: str
+    results_file: str = ""
+
+
+class TradeIngestRequest(BaseModel):
+    bot_id: str = Field(..., pattern=r"^[a-z0-9-]+$")
+    trade: TradeResult

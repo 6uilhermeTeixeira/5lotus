@@ -32,21 +32,21 @@ Hoje existem dois detalhes importantes:
 Para teste seguro, sem liberar execucao automatica:
 
 ```bash
-cd /home/codexops/workspace/daytrade/python-service
+cd /home/codexops/2Lotus/python-service
 DAYTRADE_ENABLE_LIVE_DECISIONS=false .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir .
 ```
 
 Para permitir que o servico retorne `buy` ou `sell` quando o setup estiver valido:
 
 ```bash
-cd /home/codexops/workspace/daytrade/python-service
+cd /home/codexops/2Lotus/python-service
 DAYTRADE_ENABLE_LIVE_DECISIONS=true .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir .
 ```
 
 ### 2. Subir o desktop remoto do MT5
 
 ```bash
-cd /home/codexops/workspace/daytrade
+cd /home/codexops/2Lotus
 ./scripts/run-mt5-desktop.sh
 ```
 
@@ -65,7 +65,7 @@ O EA dentro do MT5 precisa chamar o servico Python usando o IP do host visto pel
 Descobrir com:
 
 ```bash
-docker exec daytrade-mt5-desktop sh -lc "ip route | awk '/default/ {print \$3}'"
+docker exec 2lotus-mt5-desktop sh -lc "ip route | awk '/default/ {print \$3}'"
 ```
 
 Exemplo de retorno esperado:
@@ -79,13 +79,13 @@ Exemplo de retorno esperado:
 Antes de abrir o MT5, validar com:
 
 ```bash
-docker exec daytrade-mt5-desktop curl http://172.17.0.1:8000/health
+docker exec 2lotus-mt5-desktop curl http://172.17.0.1:8000/health
 ```
 
 Resposta esperada:
 
 ```json
-{"status":"ok","service":"mt5-daytrade-strategy-service", ...}
+{"status":"ok","service":"2lotus-strategy-service", ...}
 ```
 
 Se isso falhar, o problema ainda e de rede, nao de estrategia.
@@ -93,7 +93,7 @@ Se isso falhar, o problema ainda e de rede, nao de estrategia.
 ## Copiar o EA para o ambiente do MT5
 
 ```bash
-docker cp /home/codexops/workspace/daytrade/mt5/experts/SyncLeadBridgeEA.mq5 daytrade-mt5-desktop:/data/home/SyncLeadBridgeEA.mq5
+docker cp /home/codexops/2Lotus/mt5/experts/SyncLeadBridgeEA.mq5 2lotus-mt5-desktop:/data/home/SyncLeadBridgeEA.mq5
 ```
 
 ## Configurar o MT5
@@ -115,6 +115,9 @@ Dentro do desktop remoto:
 ### Fase 1: conectividade e decisao sem ordem
 
 - `StrategyServiceUrl = http://172.17.0.1:8000/decision`
+- `TradeResultsUrl = http://172.17.0.1:8000/api/trades`
+- `ResultsBotId = bot-1`
+- `LotusIngestApiKey =` valor de `DAYTRADE_INGEST_API_KEY` do `.env` do 2Lotus
 - `StrategyTimeframe = M5`
 - `HistoryBars = 30`
 - `EnableOrderExecution = false`
@@ -122,6 +125,8 @@ Dentro do desktop remoto:
 ### Fase 2: ordem automatica em demo
 
 - `StrategyServiceUrl = http://172.17.0.1:8000/decision`
+- `TradeResultsUrl = http://172.17.0.1:8000/api/trades`
+- `ResultsBotId = bot-1`
 - `StrategyTimeframe = M5`
 - `HistoryBars = 30`
 - `EnableOrderExecution = true`
