@@ -86,9 +86,10 @@ testes disponiveis e cada bot possui uma pagina individual em `/bots/<id>`. A ro
 O catálogo fica em `data/bots.json`. Para adicionar outro bot, inclua um novo item com `id`
 único e um `results_file` dentro de `data/`; em seguida, crie esse JSON com a lista de trades.
 O campo `description` é a sinopse usada na lista; `strategy_description` é o texto livre
-exibido no card **Estratégia utilizada** da página de resultado. Assim, a tela é reutilizada
-para novas estratégias sem código de interface. Se o campo não for informado, o card usa
-`description`, preservando os bots já cadastrados. O primeiro bot demonstrativo usa
+exibido no card **Estratégia utilizada** da página de resultado. Use uma linha iniciada por
+`- ` para cada tópico quando quiser que o card seja renderizado como uma lista. Assim, a tela
+é reutilizada para novas estratégias sem código de interface. Se o campo não for informado,
+o card usa `description`, preservando os bots já cadastrados. O primeiro bot demonstrativo usa
 `data/bots/bot-1.json`.
 
 ```bash
