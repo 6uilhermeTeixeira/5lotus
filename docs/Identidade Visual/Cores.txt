@@ -1,0 +1,3 @@
+Primaria: #FFFFFF
+Secundaria: #666666
+Fundo: #000000
