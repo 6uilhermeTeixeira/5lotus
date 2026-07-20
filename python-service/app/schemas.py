@@ -148,6 +148,7 @@ class BotCatalogItem(BaseModel):
     name: str
     description: str
     strategy_profile: str
+    strategy_description: str = ""
     symbol: str
     timeframe: str
     results_file: str = ""

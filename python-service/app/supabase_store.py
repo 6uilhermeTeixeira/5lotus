@@ -34,7 +34,7 @@ class SupabaseStore:
         return json.loads(response_body) if response_body else None
 
     def list_bots(self) -> list[BotCatalogItem]:
-        rows = self._request("bots?select=id,name,description,strategy_profile,symbol,timeframe&order=id")
+        rows = self._request("bots?select=id,name,description,strategy_profile,strategy_description,symbol,timeframe&order=id")
         return [BotCatalogItem.model_validate(row) for row in rows if isinstance(row, dict)]
 
     def load_results(self, bot_id: str) -> ResultsResponse:

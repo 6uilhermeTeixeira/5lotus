@@ -83,9 +83,13 @@ O servico expoe um portal protegido por senha em `/login`. Depois do acesso, `/b
 testes disponiveis e cada bot possui uma pagina individual em `/bots/<id>`. A rota antiga
 `/results` redireciona para o primeiro bot do catalogo.
 
-O catalogo fica em `data/bots.json`. Para adicionar outro bot, inclua um novo item com `id`
-unico e um `results_file` dentro de `data/`; em seguida, crie esse JSON com a lista de trades.
-O primeiro bot demonstrativo usa `data/bots/bot-1.json`.
+O catálogo fica em `data/bots.json`. Para adicionar outro bot, inclua um novo item com `id`
+único e um `results_file` dentro de `data/`; em seguida, crie esse JSON com a lista de trades.
+O campo `description` é a sinopse usada na lista; `strategy_description` é o texto livre
+exibido no card **Estratégia utilizada** da página de resultado. Assim, a tela é reutilizada
+para novas estratégias sem código de interface. Se o campo não for informado, o card usa
+`description`, preservando os bots já cadastrados. O primeiro bot demonstrativo usa
+`data/bots/bot-1.json`.
 
 ```bash
 DAYTRADE_DASHBOARD_PASSWORD=uma-senha-forte

@@ -4,6 +4,7 @@
     "name": "Bot 1",
     "description": "Teste demonstrativo da estrategia de breakout com pullback.",
     "strategy_profile": "price_action_breakout_pullback",
+    "strategy_description": "Opera rompimentos de uma faixa de preço após confirmação por fechamento. Em vez de entrar no rompimento, aguarda o pullback ao nível rompido e confirma a retomada do movimento. As operações usam stop além da estrutura invalidada e alvo mínimo de 1,5 vezes o risco.",
     "symbol": "XAUUSD",
     "timeframe": "M5",
     "results_file": "bots/bot-1.json"
