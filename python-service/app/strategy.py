@@ -27,6 +27,8 @@ class Setup:
     macd_line: float | None = None
     macd_signal: float | None = None
     macd_histogram: float | None = None
+    stochastic_k: float | None = None
+    stochastic_d: float | None = None
 
 
 @dataclass
@@ -87,6 +89,18 @@ def _rsi(values: list[float], period: int = 14) -> float:
         return 100.0
     relative_strength = average_gain / average_loss
     return 100 - (100 / (1 + relative_strength))
+
+
+def _stochastic_series(candles: list[CandleSnapshot], period: int = 14, smooth: int = 3) -> tuple[list[float], list[float]]:
+    raw_k: list[float] = []
+    for index in range(period - 1, len(candles)):
+        window = candles[index - period + 1:index + 1]
+        lowest = min(candle.low for candle in window)
+        highest = max(candle.high for candle in window)
+        raw_k.append(50.0 if highest == lowest else (candles[index].close - lowest) / (highest - lowest) * 100)
+    smooth_k = [fmean(raw_k[max(0, index - smooth + 1):index + 1]) for index in range(len(raw_k))]
+    signal_d = [fmean(smooth_k[max(0, index - smooth + 1):index + 1]) for index in range(len(smooth_k))]
+    return smooth_k, signal_d
 
 
 def _flow_metrics(flow: FlowSnapshot) -> tuple[float, float] | None:
@@ -361,6 +375,68 @@ def _macd_trend_setup_for_candle(request: DecisionRequest) -> Setup | None:
     return setup
 
 
+def _stochastic_pullback_setup(request: DecisionRequest) -> Setup | None:
+    candles = request.candles
+    if len(candles) < 60:
+        return None
+    closes = [candle.close for candle in candles]
+    stochastic_k, stochastic_d = _stochastic_series(candles)
+    current = candles[-1]
+    ema50 = _ema(closes[-50:])
+    atr14 = _atr(candles, 14)
+    bullish = (
+        current.close > ema50
+        and stochastic_k[-2] <= stochastic_d[-2]
+        and stochastic_k[-1] > stochastic_d[-1]
+        and min(stochastic_k[-2], stochastic_d[-2]) <= 35
+    )
+    bearish = (
+        current.close < ema50
+        and stochastic_k[-2] >= stochastic_d[-2]
+        and stochastic_k[-1] < stochastic_d[-1]
+        and max(stochastic_k[-2], stochastic_d[-2]) >= 65
+    )
+    if not bullish and not bearish:
+        return None
+    action = DecisionAction.BUY if bullish else DecisionAction.SELL
+    entry = request.ask if bullish else request.bid
+    recent = candles[-3:]
+    stop = min(candle.low for candle in recent) - atr14 * .25 if bullish else max(candle.high for candle in recent) + atr14 * .25
+    stop_distance = abs(entry - stop)
+    if stop_distance <= 0:
+        return None
+    partial = entry + stop_distance if bullish else entry - stop_distance
+    target = entry + stop_distance * 2 if bullish else entry - stop_distance * 2
+    return Setup(
+        action=action,
+        setup_type="stochastic_trend_pullback",
+        entry=entry,
+        stop=stop,
+        partial=partial,
+        target=target,
+        stop_points=stop_distance / request.point_size,
+        flow_mode="not_applicable",
+        ema20=_ema(closes[-20:]),
+        atr14=atr14,
+        ema50=ema50,
+        stochastic_k=stochastic_k[-1],
+        stochastic_d=stochastic_d[-1],
+    )
+
+
+def _stochastic_pullback_setup_for_candle(request: DecisionRequest) -> Setup | None:
+    if not request.candles:
+        return None
+    key = f"stochastic_pullback:{request.bot_id or request.symbol}:{request.symbol}:{request.timeframe}"
+    candle_timestamp = request.candles[-1].timestamp_utc
+    cached = _setup_cache.get(key)
+    if cached and cached[0] == candle_timestamp:
+        return cached[1]
+    setup = _stochastic_pullback_setup(request)
+    _setup_cache[key] = (candle_timestamp, setup)
+    return setup
+
+
 def _candidate_response(
     request: DecisionRequest,
     settings: Settings,
@@ -411,6 +487,10 @@ def _candidate_response(
         metadata["macd_signal"] = round(setup.macd_signal, 5)
     if setup.macd_histogram is not None:
         metadata["macd_histogram"] = round(setup.macd_histogram, 5)
+    if setup.stochastic_k is not None:
+        metadata["stochastic_k"] = round(setup.stochastic_k, 5)
+    if setup.stochastic_d is not None:
+        metadata["stochastic_d"] = round(setup.stochastic_d, 5)
     return DecisionResponse(
         action=setup.action if executable else DecisionAction.HOLD,
         reason=reason,
@@ -556,6 +636,33 @@ def _evaluate_macd_trend(request: DecisionRequest, settings: Settings, strategy_
     )
 
 
+def _evaluate_stochastic_pullback(request: DecisionRequest, settings: Settings, strategy_profile: str) -> DecisionResponse:
+    setup = _stochastic_pullback_setup_for_candle(request)
+    checks = [
+        RiskCheck(name="symbol_match", passed=request.symbol.upper() == settings.default_symbol.upper(), detail=f"expected={settings.default_symbol}"),
+        RiskCheck(name="timeframe_match", passed=request.timeframe.upper() == settings.default_timeframe.upper(), detail=f"expected={settings.default_timeframe}"),
+        RiskCheck(name="spread_limit", passed=request.spread_points <= settings.max_spread_points, detail=f"max={settings.max_spread_points}"),
+        RiskCheck(name="stochastic_pullback_setup", passed=setup is not None, detail="stochastic_14_3_3 crossover + ema50 trend"),
+    ]
+    if not all(check.passed for check in checks[:3]):
+        return DecisionResponse(action=DecisionAction.HOLD, reason="market_filter_mismatch", risk_checks=checks)
+    if setup is None:
+        return DecisionResponse(action=DecisionAction.HOLD, reason="stochastic_pullback_setup_not_confirmed", risk_checks=checks)
+    flow = FlowAnalysis(True, False, False, "not_applicable")
+    executable = settings.enable_live_decisions and settings.fimath_mode == "live"
+    checks.append(RiskCheck(name="shadow_mode", passed=not executable, detail=f"mode={settings.fimath_mode}"))
+    return _candidate_response(
+        request,
+        settings,
+        setup,
+        checks,
+        flow,
+        executable=executable,
+        reason="stochastic_pullback_validated" if executable else "stochastic_pullback_shadow_signal",
+        strategy_profile=strategy_profile,
+    )
+
+
 def evaluate_decision(request: DecisionRequest, settings: Settings, strategy_profile: str | None = None) -> DecisionResponse:
     profile = strategy_profile or settings.strategy_profile
     if profile == "momentum_atr_breakout":
@@ -564,6 +671,8 @@ def evaluate_decision(request: DecisionRequest, settings: Settings, strategy_pro
         return _evaluate_rsi_bollinger(request, settings, profile)
     if profile == "macd_trend_crossover":
         return _evaluate_macd_trend(request, settings, profile)
+    if profile == "stochastic_trend_pullback":
+        return _evaluate_stochastic_pullback(request, settings, profile)
     if profile == "fimath_ema20_flow":
         return _evaluate_fimath(request, settings, profile)
     return DecisionResponse(

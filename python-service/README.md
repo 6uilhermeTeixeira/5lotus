@@ -29,6 +29,7 @@ Perfis atuais, executados em paralelo:
 - Bot 2: `momentum_atr_breakout`
 - Bot 3: `rsi_bollinger_reversion`
 - Bot 4: `macd_trend_crossover`
+- Bot 5: `stochastic_trend_pullback`
 - risco por operacao: `1%` da banca
 - risco/retorno final: `2R`, com parcial de `50%` em `1R`
 
@@ -46,6 +47,9 @@ o stop usa o extremo com buffer de ATR(14), a parcial fica na média de 20 e o a
 
 O MACD Trend usa o cruzamento MACD(12,26,9) a favor da MME50. O stop fica a 1 ATR(14),
 com parcial em 1R e alvo final em 2R, sem filtro de fluxo para manter a amostra independente.
+
+O Stochastic Pullback usa a MME50 como direção e o cruzamento do Estocástico lento (14,3,3)
+para detectar o fim de uma correção. O stop fica além dos três candles recentes, com buffer de ATR.
 
 Todo candidato técnico é gravado uma vez por candle com motivo, spread, `book_z`, `tick_z` e
 `flow_score`. Dois paper tracks não sobrepostos são mantidos em paralelo:
@@ -122,7 +126,7 @@ open http://127.0.0.1:8000/login
 
 O servico expoe um portal protegido por senha em `/login`. Depois do acesso, `/bots` lista os
 testes disponiveis e cada bot possui uma pagina individual em `/bots/<id>`. A rota antiga
-`/results` redireciona para o primeiro bot do catalogo. A página `/compare` apresenta os quatro
+`/results` redireciona para o primeiro bot do catalogo. A página `/compare` apresenta os cinco
 perfis lado a lado e atualiza seus indicadores pela API autenticada `/api/compare`.
 
 O catálogo fica em `data/bots.json`. Para adicionar outro bot, inclua um novo item com `id`
@@ -162,6 +166,8 @@ A migration `20260731100000_add_bot_3_rsi_bollinger.sql` cadastra o terceiro per
 RLS e a ausência de privilégios para `anon`/`authenticated` no catálogo.
 A migration `20260731103000_add_bot_4_macd_trend.sql` cadastra o quarto perfil com as mesmas
 garantias de acesso privado ao catálogo.
+A migration `20260731110000_add_bot_5_stochastic_pullback.sql` cadastra o quinto perfil sem
+alterar o formato das tabelas existentes.
 
 Formato esperado de cada trade no JSON:
 

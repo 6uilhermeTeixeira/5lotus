@@ -113,7 +113,7 @@ O serviço trabalha com estes pressupostos:
 
 - ativo base: `XAUUSD`
 - timeframe base: `M5`
-- perfis de estratégia: `fimath_ema20_flow` no Bot 1, `momentum_atr_breakout` no Bot 2, `rsi_bollinger_reversion` no Bot 3 e `macd_trend_crossover` no Bot 4
+- perfis de estratégia: `fimath_ema20_flow` no Bot 1, `momentum_atr_breakout` no Bot 2, `rsi_bollinger_reversion` no Bot 3, `macd_trend_crossover` no Bot 4 e `stochastic_trend_pullback` no Bot 5
 - risco máximo por operação: `1%` da banca
 - gatilho: pullback/rejeição da MME20 ou padrão fora-dentro
 - stop: estrutura da rejeição com buffer de ATR(14)
@@ -131,6 +131,7 @@ Quando existe candidato, `metadata` inclui:
 - no Momentum ATR, MME50 e nível de rompimento
 - no RSI Bollinger, RSI(14), banda superior, banda inferior e média de 20 períodos
 - no MACD Trend, linha MACD, linha de sinal, histograma e MME50
+- no Stochastic Pullback, %K, %D e MME50
 
 ## Travas de execucao
 

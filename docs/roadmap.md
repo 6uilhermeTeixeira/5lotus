@@ -28,7 +28,7 @@
 - [ ] backtest historico
 - [x] replay controlado
 - [x] paper trading em demo
-- [x] quatro estratégias independentes em shadow no mesmo runtime
+- [x] cinco estratégias independentes em shadow no mesmo runtime
 - [x] comparação consolidada no portal
 - [ ] validacao de risco e falhas
 
