@@ -17,20 +17,41 @@ Foi criado um servico minimo com:
 - `GET /results`
 - `GET /login`
 - `GET /bots`
+- `GET /compare`
+- `GET /api/compare`
 - `POST /decision`
 
-Perfil atual:
+Perfis atuais, executados em paralelo:
 
 - ativo base: `XAUUSD`
 - timeframe base: `M5`
-- estrategia base: `fimath_ema20_flow`
+- Bot 1: `fimath_ema20_flow`
+- Bot 2: `momentum_atr_breakout`
+- Bot 3: `rsi_bollinger_reversion`
 - risco por operacao: `1%` da banca
 - risco/retorno final: `2R`, com parcial de `50%` em `1R`
 
-A Fimath usa MME20, pullback ou fora-dentro e confirmação obrigatória de fluxo inferida da
-profundidade de mercado e dos ticks do MT5. Por padrão ela opera em `shadow`: grava sinais e
-paper trades, mas retorna `hold` até `DAYTRADE_FIMATH_MODE=live` e
-`DAYTRADE_ENABLE_LIVE_DECISIONS=true` serem habilitados manualmente.
+A Fimath usa MME20, pullback ou fora-dentro. O fluxo inferido da profundidade de mercado e
+dos ticks do MT5 é normalizado por uma janela temporal e, na política padrão `veto`, só bloqueia
+o setup quando livro e agressão apresentam forte contradição simultânea.
+
+O Momentum ATR usa alinhamento MME20/MME50 e o rompimento do canal dos 12 candles anteriores.
+O stop fica a `1,2 ATR(14)` e o fluxo não é usado como bloqueio, criando uma amostra independente
+para comparação com a Fimath.
+
+O RSI Bollinger busca reversão à média após uma excursão além das Bandas de Bollinger de 20
+períodos. A entrada exige reentrada na banda, candle de reação e RSI(14) em região de exaustão;
+o stop usa o extremo com buffer de ATR(14), a parcial fica na média de 20 e o alvo final em 2R.
+
+Todo candidato técnico é gravado uma vez por candle com motivo, spread, `book_z`, `tick_z` e
+`flow_score`. Dois paper tracks não sobrepostos são mantidos em paralelo:
+
+- `technical`: todos os candidatos técnicos;
+- `flow_confirmed`: apenas candidatos com confirmação forte do fluxo.
+
+Por padrão o serviço opera em `shadow` e retorna `hold` até `DAYTRADE_FIMATH_MODE=live` e
+`DAYTRADE_ENABLE_LIVE_DECISIONS=true` serem habilitados manualmente. Mesmo em live, a amostra
+mínima configurada de paper trades encerrados continua sendo uma trava.
 
 Por seguranca, `POST /decision` ainda pode retornar `hold` mesmo quando o setup estiver confirmado, enquanto `DAYTRADE_ENABLE_LIVE_DECISIONS` estiver desligado.
 
@@ -54,11 +75,22 @@ python3 -m venv .venv
 DAYTRADE_ENABLE_LIVE_DECISIONS=false ./run-local.sh
 ```
 
-Para habilitar decisoes executaveis:
+Variáveis de calibração:
+
+```bash
+DAYTRADE_FIMATH_FLOW_POLICY=veto
+DAYTRADE_FIMATH_FLOW_WINDOW_SECONDS=300
+DAYTRADE_CHART_CACHE_LIMIT=5000
+DAYTRADE_FIMATH_FLOW_MIN_SAMPLES=30
+DAYTRADE_FIMATH_FLOW_Z_THRESHOLD=1.0
+DAYTRADE_FIMATH_MIN_CLOSED_PAPER_TRADES=30
+```
+
+Para preparar decisões executáveis após a validação dos paper tracks:
 
 ```bash
 cd /home/codexops/2Lotus/python-service
-DAYTRADE_ENABLE_LIVE_DECISIONS=true ./run-local.sh
+DAYTRADE_FIMATH_MODE=live DAYTRADE_ENABLE_LIVE_DECISIONS=true ./run-local.sh
 ```
 
 ## Como testar
@@ -86,7 +118,8 @@ open http://127.0.0.1:8000/login
 
 O servico expoe um portal protegido por senha em `/login`. Depois do acesso, `/bots` lista os
 testes disponiveis e cada bot possui uma pagina individual em `/bots/<id>`. A rota antiga
-`/results` redireciona para o primeiro bot do catalogo.
+`/results` redireciona para o primeiro bot do catalogo. A página `/compare` apresenta os três
+perfis lado a lado e atualiza seus indicadores pela API autenticada `/api/compare`.
 
 O catálogo fica em `data/bots.json`. Para adicionar outro bot, inclua um novo item com `id`
 único e um `results_file` dentro de `data/`; em seguida, crie esse JSON com a lista de trades.
@@ -116,6 +149,13 @@ O MT5 deve registrar cada trade fechado ou atualizado em `POST /api/trades`, env
 header `X-2Lotus-Ingest-Key`. O payload possui `bot_id` e `trade`, com o mesmo formato de trade
 documentado abaixo. A chave de ingestao e validada no servidor; a `service_role` nunca e exposta
 ao navegador ou ao MT5.
+
+As tabelas `strategy_signals` e `paper_trades` são privadas e acessadas somente pela API com
+`service_role`. A migration `20260731090000_add_strategy_candidate_telemetry.sql` adiciona a
+telemetria dos candidatos e a chave composta `(signal_key, variant)` dos paper tracks.
+A migration `20260731093000_add_bot_2_momentum_atr.sql` cadastra o segundo perfil no catálogo.
+A migration `20260731100000_add_bot_3_rsi_bollinger.sql` cadastra o terceiro perfil e reafirma
+RLS e a ausência de privilégios para `anon`/`authenticated` no catálogo.
 
 Formato esperado de cada trade no JSON:
 

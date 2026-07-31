@@ -1,0 +1,82 @@
+name: 2lotus
+
+services:
+  mt5:
+    build:
+      context: .
+      dockerfile: infra/mt5-runtime/Dockerfile
+    image: 2lotus-mt5-runtime:local
+    container_name: 2lotus-mt5-desktop
+    restart: unless-stopped
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    environment:
+      DISPLAY_ID: ":99"
+      DOWNLOAD_DIR: /data/downloads
+      HOME: /data/home
+      HOME_DIR: /data/home
+      LOG_DIR: /data/logs
+      NOVNC_PORT: "6080"
+      RFB_PORT: "5900"
+      WINEPREFIX: /data/mt5-prefix
+    ports:
+      - "127.0.0.1:6080:6080"
+      - "127.0.0.1:5900:5900"
+    volumes:
+      - ./.runtime/downloads:/data/downloads
+      - ./.runtime/mt5-prefix:/data/mt5-prefix
+      - ./.runtime/logs:/data/logs
+      - ./.runtime/home:/data/home
+    command: ["start-remote-desktop"]
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "curl --fail --silent http://127.0.0.1:6080/vnc.html >/dev/null && pgrep -f '[t]erminal64.exe' >/dev/null",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+  api:
+    build:
+      context: ./python-service
+      dockerfile: Dockerfile
+    image: 2lotus-api-runtime:local
+    container_name: 2lotus-api
+    restart: unless-stopped
+    network_mode: "service:mt5"
+    depends_on:
+      mt5:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DAYTRADE_ENABLE_LIVE_DECISIONS: "false"
+      DAYTRADE_FIMATH_MODE: shadow
+      DAYTRADE_FIMATH_FLOW_POLICY: veto
+      DAYTRADE_HOST: 127.0.0.1
+      DAYTRADE_PORT: "8000"
+      DAYTRADE_RESULTS_STORE: SUPABASE
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import json,urllib.request; c=json.load(urllib.request.urlopen('http://127.0.0.1:8000/config', timeout=5)); assert c['fimath_mode']=='shadow' and c['enable_live_decisions'] is False",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

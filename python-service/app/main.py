@@ -9,9 +9,9 @@ from fastapi.staticfiles import StaticFiles
 
 from .auth import SESSION_COOKIE_NAME, create_session_value, has_valid_session, password_matches, read_login_password
 from .config import get_settings
-from .pages import render_catalog_page, render_login_page, render_results_page
+from .pages import render_catalog_page, render_comparison_page, render_login_page, render_results_page
 from .results_store import get_bot, load_bots_catalog, load_results_snapshot, resolve_bot_results_file
-from .schemas import BotCatalogItem, CandleIngestRequest, DecisionRequest, DecisionResponse, HealthResponse, MarketChartResponse, ResultsResponse, TradeIngestRequest
+from .schemas import BotCatalogItem, CandleIngestRequest, DecisionAction, DecisionRequest, DecisionResponse, HealthResponse, MarketChartResponse, ResultsResponse, TradeIngestRequest
 from .strategy import evaluate_decision
 from .supabase_store import SupabaseStore
 
@@ -121,6 +121,13 @@ def bots_page(request: Request) -> HTMLResponse | RedirectResponse:
     return render_catalog_page(_list_bots())
 
 
+@app.get("/compare", response_class=HTMLResponse, response_model=None, include_in_schema=False)
+def comparison_page(request: Request) -> HTMLResponse | RedirectResponse:
+    if redirect := _require_page_session(request):
+        return redirect
+    return render_comparison_page(_list_bots())
+
+
 @app.get("/bots/{bot_id}", response_class=HTMLResponse, response_model=None, include_in_schema=False)
 def bot_results_page(bot_id: str, request: Request) -> HTMLResponse | RedirectResponse:
     if redirect := _require_page_session(request):
@@ -140,6 +147,27 @@ def legacy_results(request: Request) -> RedirectResponse:
 def read_bots(request: Request) -> list[BotCatalogItem]:
     _require_api_session(request)
     return _list_bots()
+
+
+@app.get("/api/compare")
+def read_comparison(request: Request) -> dict[str, object]:
+    _require_api_session(request)
+    bots = _list_bots()
+    snapshots = []
+    for bot in bots:
+        results = _load_bot_results(bot)
+        snapshots.append(
+            {
+                "id": bot.id,
+                "name": bot.name,
+                "strategy_profile": bot.strategy_profile,
+                "symbol": bot.symbol,
+                "timeframe": bot.timeframe,
+                "latest_trade_at_utc": results.latest_trade_at_utc,
+                "summary": results.summary.model_dump(mode="json"),
+            }
+        )
+    return {"updated_at_utc": datetime.now(timezone.utc), "bots": snapshots}
 
 
 @app.get("/api/bots/{bot_id}/results", response_model=ResultsResponse)
@@ -205,7 +233,11 @@ def read_config() -> dict[str, str | int | float | bool]:
         "min_risk_reward": settings.min_risk_reward,
         "fimath_mode": settings.fimath_mode,
         "fimath_flow_window_seconds": settings.fimath_flow_window_seconds,
+        "fimath_flow_min_samples": settings.fimath_flow_min_samples,
+        "fimath_flow_z_threshold": settings.fimath_flow_z_threshold,
+        "fimath_flow_policy": settings.fimath_flow_policy,
         "fimath_partial_pct": settings.fimath_partial_pct,
+        "fimath_min_closed_paper_trades": settings.fimath_min_closed_paper_trades,
         "chart_cache_limit": settings.chart_cache_limit,
         "enable_live_decisions": settings.enable_live_decisions,
         "dashboard_auth_configured": settings.dashboard_auth_configured,
@@ -218,19 +250,42 @@ def read_config() -> dict[str, str | int | float | bool]:
 def decision(payload: DecisionRequest, x_2lotus_ingest_key: str | None = Header(default=None)) -> DecisionResponse:
     _require_ingest_key(x_2lotus_ingest_key)
     store: SupabaseStore | None = None
+    strategy_profile = settings.strategy_profile
     if payload.bot_id and _uses_supabase_results():
         bot = _find_bot(payload.bot_id)
+        strategy_profile = bot.strategy_profile
         if bot.symbol != payload.symbol or bot.timeframe != payload.timeframe:
             raise HTTPException(status_code=422, detail="decision symbol or timeframe does not match bot configuration")
         store = SupabaseStore(settings)
         store.upsert_candles(payload.bot_id, payload.symbol, payload.timeframe, payload.candles)
         store.advance_paper_trades(payload.bot_id, payload.candles)
-    response = evaluate_decision(payload, settings)
-    if payload.bot_id and store and response.action.value in {"buy", "sell"} and store.closed_paper_trade_count(payload.bot_id) < 30:
-        response.action = response.action.HOLD
-        response.reason = "fimath_shadow_minimum_not_reached"
-        response.size = 0.0
-    if payload.bot_id and _uses_supabase_results() and response.reason == "fimath_shadow_signal":
-        SupabaseStore(settings).record_shadow_signal(payload, response)
-    logger.info("decision request_id=%s symbol=%s timeframe=%s action=%s reason=%s", payload.request_id, payload.symbol, payload.timeframe, response.action.value, response.reason)
+    response = evaluate_decision(payload, settings, strategy_profile)
+    if payload.bot_id and store and response.metadata.get("candidate"):
+        signal_key = store.record_strategy_candidate(payload, response)
+        if signal_key:
+            store.record_paper_trade(signal_key, payload, response, "technical")
+            if response.metadata.get("flow_confirmed"):
+                store.record_paper_trade(signal_key, payload, response, "flow_confirmed")
+    if payload.bot_id and store and response.action.value in {"buy", "sell"}:
+        validation_variant = "flow_confirmed" if strategy_profile == "fimath_ema20_flow" and settings.fimath_flow_policy == "required" else "technical"
+        closed_count = store.closed_paper_trade_count(payload.bot_id, validation_variant)
+        response.metadata["validation_variant"] = validation_variant
+        response.metadata["closed_paper_trades"] = closed_count
+        if closed_count < settings.fimath_min_closed_paper_trades:
+            response.action = DecisionAction.HOLD
+            response.reason = "shadow_minimum_not_reached"
+            response.size = 0.0
+    logger.info(
+        "decision request_id=%s symbol=%s timeframe=%s action=%s reason=%s candidate=%s flow_status=%s book_z=%s tick_z=%s flow_score=%s",
+        payload.request_id,
+        payload.symbol,
+        payload.timeframe,
+        response.action.value,
+        response.reason,
+        response.metadata.get("candidate", False),
+        response.metadata.get("flow_status"),
+        response.metadata.get("book_z"),
+        response.metadata.get("tick_z"),
+        response.metadata.get("flow_score"),
+    )
     return response

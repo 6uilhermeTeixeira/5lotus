@@ -3,31 +3,33 @@
 ## Fase 0 - Preparacao do ambiente
 
 - [x] instalar Wine
-- [ ] instalar MT5 no Linux
+- [x] instalar MT5 no Linux
 - [x] validar execucao headless
-- [ ] conectar conta demo
+- [x] conectar conta demo
 - [x] documentar paths, logs e recuperacao
 
 ## Fase 1 - Base do projeto
 
 - [x] definir estrategia inicial
-- [ ] definir simbolos e timeframes
-- [ ] definir regras de entrada e saida
+- [x] definir simbolos e timeframes
+- [x] definir regras de entrada e saida
 - [x] definir limites de risco
 - [ ] definir horario operacional
 
 ## Fase 2 - Arquitetura executavel
 
-- [ ] criar EA MQL5 minimo
-- [ ] criar Python service minimo
-- [ ] criar contrato HTTP entre EA e Python
-- [ ] registrar logs estruturados
+- [x] criar EA MQL5 minimo
+- [x] criar Python service minimo
+- [x] criar contrato HTTP entre EA e Python
+- [x] registrar logs estruturados
 
 ## Fase 3 - Simulacao e validacao
 
 - [ ] backtest historico
-- [ ] replay controlado
-- [ ] paper trading em demo
+- [x] replay controlado
+- [x] paper trading em demo
+- [x] três estratégias independentes em shadow no mesmo runtime
+- [x] comparação consolidada no portal
 - [ ] validacao de risco e falhas
 
 ## Fase 4 - Operacao assistida

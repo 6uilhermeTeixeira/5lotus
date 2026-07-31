@@ -26,6 +26,10 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Container restarts preserve /tmp. Remove only the stale artifacts for this
+# dedicated display before starting a fresh X server.
+rm -f "/tmp/.X${DISPLAY_NUM}-lock" "/tmp/.X11-unix/X${DISPLAY_NUM}"
+
 Xvfb "$DISPLAY" -screen 0 "$SCREEN_GEOMETRY" >"$LOG_DIR/xvfb-remote.log" 2>&1 &
 PIDS+=("$!")
 sleep 2
@@ -62,4 +66,8 @@ echo "novnc_url=http://127.0.0.1:${NOVNC_PORT}/vnc.html?host=127.0.0.1&port=${NO
 echo "bootstrap_log=$LOG_DIR/bootstrap-session.log"
 echo "Attach in the browser and complete the MT5 and WebView2 installers if they require interaction."
 
-wait "${PIDS[2]}"
+# The container must exit when any critical runtime process exits so Docker's
+# restart policy can recover the complete demo harness.
+wait -n "${PIDS[0]}" "${PIDS[2]}" "${PIDS[3]}"
+echo "A critical MT5 runtime process exited; requesting container restart." >&2
+exit 1

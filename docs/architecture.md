@@ -1,4 +1,4 @@
-# Arquitetura inicial recomendada
+# Arquitetura operacional
 
 ## Recomendacao
 
@@ -22,9 +22,9 @@ Essa separacao respeita melhor as restricoes do ambiente:
 MT5 terminal
   -> Expert Advisor MQL5
     -> coleta estado do mercado / conta / posicoes
-    -> envia contexto para Python local
+    -> envia o mesmo contexto para bot-1, bot-2 e bot-3
 Python strategy service
-  -> aplica estrategia
+  -> seleciona a estratégia pelo perfil cadastrado do bot
   -> aplica risco
   -> responde: buy / sell / close / hold
 Expert Advisor MQL5
@@ -33,31 +33,17 @@ Expert Advisor MQL5
   -> registra resultado
 ```
 
-## Estado atual da implementacao
+## Estado atual
 
-Ja existe um esqueleto inicial para esse fluxo:
-
-- `python-service/app/main.py` expõe `health`, `config` e `decision`
-- `mt5/experts/SyncLeadBridgeEA.mq5` monta o payload minimo e chama o servico Python
-
-Decisao intencional desta fase:
-
-- o servico ainda responde `hold` por padrao
-- a camada MT5 ainda nao executa ordens
-
-Isso preserva seguranca enquanto o runtime do MT5 ainda esta em estabilizacao.
-
-## Perfil inicial ja definido
-
-- estrategia: `price action`
-- risco por operacao: `5%` da banca
-
-No servico Python, isso ja aparece como:
-
-- `strategy_profile=price_action`
-- `risk_per_trade_pct=5.0`
-
-O que ainda falta fechar e o gatilho exato de entrada e invalidacao do setup.
+- Estratégias `fimath_ema20_flow`, `momentum_atr_breakout` e `rsi_bollinger_reversion` para XAUUSD/M5.
+- Um único EA consulta os três bots a cada ciclo; apenas o bot primário poderia receber autorização de execução.
+- Setup técnico calculado uma vez por candle fechado e resposta consultada pelo EA a cada cinco segundos.
+- Fluxo amostrado continuamente em janela temporal, com z-scores do livro e dos ticks.
+- Política padrão `veto`: somente forte contradição simultânea bloqueia um setup.
+- Cada candidato é deduplicado por bot, timeframe, candle, lado e setup; chaves e consultas incluem `bot_id` para impedir colisão entre estratégias.
+- Supabase mantém telemetria em `strategy_signals` e paper tracks `technical` e `flow_confirmed`.
+- Candles e negócios originados no horário do servidor MT5 são convertidos para UTC no EA.
+- API e EA permanecem em shadow/execução desligada no Compose.
 
 ## Componentes
 
@@ -81,20 +67,15 @@ Responsabilidades:
 - aplicar filtros de spread, volatilidade e exposicao
 - expor endpoints locais de saude e decisao
 
-### 3. Persistencia
+### 3. Persistência Supabase
 
-Fase 1:
+- `market_candles`: cache OHLCV.
+- `strategy_signals`: candidato, payload, resposta, motivo e métricas de fluxo.
+- `paper_trades`: resultados comparáveis por variant, sem posições sobrepostas em cada track.
+- `trade_results`: negócios realmente encerrados no MT5.
 
-- SQLite local ou Postgres em Docker
-
-Registros minimos:
-
-- market snapshots relevantes
-- sinais emitidos
-- ordens solicitadas
-- ordens executadas
-- erros
-- metricas de risco
+RLS permanece habilitado e os papéis `anon`/`authenticated` não recebem acesso; a escrita
+privilegiada fica restrita ao serviço Python.
 
 ## Alternativas avaliadas
 

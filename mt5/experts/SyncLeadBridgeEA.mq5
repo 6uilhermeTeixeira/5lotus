@@ -7,10 +7,11 @@ input string TradeResultsUrl = "http://127.0.0.1:8000/api/trades";
 input string CandleCacheUrl = "http://127.0.0.1:8000/api/candles";
 input string LotusIngestApiKey = "";
 input string ResultsBotId = "bot-1";
+input string ShadowBotIds = "bot-2,bot-3";
 input string StrategySymbol = "XAUUSD";
 input string StrategyTimeframe = "M5";
-input int HistoryBars = 30;
-input int HistoryCacheBars = 50000;
+input int HistoryBars = 60;
+input int HistoryCacheBars = 2000;
 input int PollIntervalSeconds = 5;
 input int RequestTimeoutMs = 3000;
 input bool EnableOrderExecution = false;
@@ -38,7 +39,7 @@ int OnInit()
    EventSetTimer(PollIntervalSeconds);
    MarketBookAdd(_Symbol);
    trade.SetExpertMagicNumber(StrategyMagicNumber);
-   CacheHistory();
+   CacheConfiguredBots();
    Print("SyncLeadBridgeEA initialized. Add the service URLs to MT5 WebRequest allowlist.");
    return(INIT_SUCCEEDED);
 }
@@ -77,20 +78,38 @@ void OnTimer()
       return;
    }
 
-   string payload = BuildDecisionPayload(tick);
+   PollDecision(tick, ResultsBotId, EnableOrderExecution);
+
+   string shadowIds[];
+   int shadowCount = StringSplit(ShadowBotIds, StringGetCharacter(",", 0), shadowIds);
+   for(int index = 0; index < shadowCount; index++)
+   {
+      StringTrimLeft(shadowIds[index]);
+      StringTrimRight(shadowIds[index]);
+      if(shadowIds[index] != "" && shadowIds[index] != ResultsBotId)
+         PollDecision(tick, shadowIds[index], false);
+   }
+
+   upTicks = downTicks = neutralTicks = 0;
+   upVolume = downVolume = 0.0;
+}
+
+void PollDecision(const MqlTick &tick, const string botId, const bool allowExecution)
+{
+   string payload = BuildDecisionPayload(tick, botId);
    string response = "";
    int status = PostJson(StrategyServiceUrl, payload, response);
 
-   PrintFormat("Decision poll status=%d response=%s", status, response);
+   PrintFormat("Decision poll bot_id=%s status=%d response=%s", botId, status, response);
 
-   if(status == 200 && EnableOrderExecution)
+   if(status == 200 && allowExecution)
       TryExecuteDecision(response);
 }
 
-string BuildDecisionPayload(const MqlTick &tick)
+string BuildDecisionPayload(const MqlTick &tick, const string botId)
 {
    MqlRates rates[];
-   string request_id = StringFormat("%s-%u", _Symbol, GetTickCount());
+   string request_id = StringFormat("%s-%s-%u", botId, _Symbol, GetTickCount());
    string timestamp_utc = ToIsoUtc(TimeGMT());
    double spread_points = (tick.ask - tick.bid) / _Point;
    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
@@ -111,7 +130,7 @@ string BuildDecisionPayload(const MqlTick &tick)
 
    string json =
       "{"
-      "\"bot_id\":\"" + ResultsBotId + "\","
+      "\"bot_id\":\"" + botId + "\","
       "\"request_id\":\"" + request_id + "\","
       "\"timestamp_utc\":\"" + timestamp_utc + "\","
       "\"symbol\":\"" + _Symbol + "\","
@@ -140,13 +159,24 @@ string BuildDecisionPayload(const MqlTick &tick)
       "}"
       "}";
 
-   upTicks = downTicks = neutralTicks = 0;
-   upVolume = downVolume = 0.0;
-
    return json;
 }
 
-void CacheHistory()
+void CacheConfiguredBots()
+{
+   CacheHistory(ResultsBotId);
+   string shadowIds[];
+   int shadowCount = StringSplit(ShadowBotIds, StringGetCharacter(",", 0), shadowIds);
+   for(int index = 0; index < shadowCount; index++)
+   {
+      StringTrimLeft(shadowIds[index]);
+      StringTrimRight(shadowIds[index]);
+      if(shadowIds[index] != "" && shadowIds[index] != ResultsBotId)
+         CacheHistory(shadowIds[index]);
+   }
+}
+
+void CacheHistory(const string botId)
 {
    MqlRates rates[];
    int copied = CopyRates(_Symbol, ResolveTimeframe(StrategyTimeframe), 1, HistoryCacheBars, rates);
@@ -154,10 +184,10 @@ void CacheHistory()
    for(int start = 0; start < copied; start += 1000)
    {
       int count = MathMin(1000, copied - start);
-      string payload = "{\"bot_id\":\"" + ResultsBotId + "\",\"symbol\":\"" + _Symbol + "\",\"timeframe\":\"" + StrategyTimeframe + "\",\"candles\":" + SerializeRatesRange(rates, start, count) + "}";
+      string payload = "{\"bot_id\":\"" + botId + "\",\"symbol\":\"" + _Symbol + "\",\"timeframe\":\"" + StrategyTimeframe + "\",\"candles\":" + SerializeRatesRange(rates, start, count) + "}";
       string response = "";
       int status = PostJson(CandleCacheUrl, payload, response);
-      PrintFormat("History cache batch start=%d count=%d status=%d", start, count, status);
+      PrintFormat("History cache bot_id=%s batch start=%d count=%d status=%d", botId, start, count, status);
    }
 }
 
@@ -266,8 +296,8 @@ void ReportClosedDeal(const ulong closingDeal)
          "\"timeframe\":\"" + StrategyTimeframe + "\","
          "\"setup\":\"mt5_closed_trade\","
          "\"side\":\"" + side + "\","
-         "\"opened_at_utc\":\"" + ToIsoUtc(openedAt) + "\","
-         "\"closed_at_utc\":\"" + ToIsoUtc(closedAt) + "\","
+         "\"opened_at_utc\":\"" + ServerTimeToIsoUtc(openedAt) + "\","
+         "\"closed_at_utc\":\"" + ServerTimeToIsoUtc(closedAt) + "\","
          "\"volume_lots\":" + DoubleToString(HistoryDealGetDouble(closingDeal, DEAL_VOLUME), 2) + ","
          "\"entry_price\":" + DoubleToString(HistoryDealGetDouble(openingDeal, DEAL_PRICE), _Digits) + ","
          "\"exit_price\":" + DoubleToString(HistoryDealGetDouble(closingDeal, DEAL_PRICE), _Digits) + ","
@@ -291,6 +321,12 @@ string ToIsoUtc(const datetime value)
    StringReplace(formatted, ".", "-");
    StringReplace(formatted, " ", "T");
    return formatted + "Z";
+}
+
+string ServerTimeToIsoUtc(const datetime value)
+{
+   int serverOffsetSeconds = (int)(TimeTradeServer() - TimeGMT());
+   return ToIsoUtc(value - serverOffsetSeconds);
 }
 
 void TryExecuteDecision(const string response)
@@ -379,7 +415,7 @@ string SerializeRatesRange(MqlRates &rates[], const int start, const int count)
          json += ",";
 
       json += "{"
-         "\"timestamp_utc\":\"" + ToIsoUtc(rates[i].time) + "\","
+         "\"timestamp_utc\":\"" + ServerTimeToIsoUtc(rates[i].time) + "\","
          "\"open\":" + DoubleToString(rates[i].open, _Digits) + ","
          "\"high\":" + DoubleToString(rates[i].high, _Digits) + ","
          "\"low\":" + DoubleToString(rates[i].low, _Digits) + ","

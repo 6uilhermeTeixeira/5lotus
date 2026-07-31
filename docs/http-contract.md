@@ -109,31 +109,39 @@ Resposta minima:
 
 ## Decisao atual
 
-Nesta fase, o servico trabalha com estes pressupostos:
+O serviço trabalha com estes pressupostos:
 
 - ativo base: `XAUUSD`
 - timeframe base: `M5`
-- perfil de estrategia: `price_action_breakout_pullback`
-- risco maximo por operacao: `5%` da banca
-- gatilho: `breakout + pullback + ignition candle`
-- stop: atras do ultimo topo/fundo relevante
-- risco/retorno minimo: `1:1.5`
+- perfis de estratégia: `fimath_ema20_flow` no Bot 1, `momentum_atr_breakout` no Bot 2 e `rsi_bollinger_reversion` no Bot 3
+- risco máximo por operação: `1%` da banca
+- gatilho: pullback/rejeição da MME20 ou padrão fora-dentro
+- stop: estrutura da rejeição com buffer de ATR(14)
+- parcial de 50% em 1R, breakeven e alvo final em 2R
 - o servico pode calcular `suggested_size`
-- a decisao final continua conservadora por padrao enquanto `DAYTRADE_ENABLE_LIVE_DECISIONS` nao estiver ativo
+- fluxo padrão `veto`: somente forte contradição simultânea de livro e ticks bloqueia
+- a decisão continua em `hold` enquanto shadow/live e a amostra mínima não forem liberados
 
-Isso e intencional:
+Quando existe candidato, `metadata` inclui:
 
-- a deteccao automatica do setup ja esta no servico Python, mas o fluxo completo ainda precisa ser validado dentro do terminal demo
-- o sizing e o risco ja podem ser validados desde agora
-- a execucao automatica no terminal continua bloqueada ate estabilizar o fluxo no demo
+- `candidate`, `candle_timestamp_utc`, `suggested_action` e `setup_type`
+- `flow_status`, `flow_ready`, `flow_confirmed` e `flow_contradicted`
+- `book_z`, `tick_z` e `flow_score` quando a janela está aquecida
+- MME20, ATR(14), tamanho sugerido e política aplicada
+- no Momentum ATR, MME50 e nível de rompimento
+- no RSI Bollinger, RSI(14), banda superior, banda inferior e média de 20 períodos
 
 ## Travas de execucao
 
-Para disparar ordens automaticamente, as duas travas precisam estar ligadas:
+Para disparar ordens automaticamente, todas as travas precisam estar liberadas:
 
 1. no servico Python:
+   `DAYTRADE_FIMATH_MODE=live`
+2. no servico Python:
    `DAYTRADE_ENABLE_LIVE_DECISIONS=true`
-2. no EA:
+3. no paper trading:
+   amostra mínima encerrada no variant exigido pela política
+4. no EA:
    `EnableOrderExecution=true`
 
 ## Fluxo de teste

@@ -18,8 +18,14 @@ class Settings:
         self.enable_live_decisions = getenv("DAYTRADE_ENABLE_LIVE_DECISIONS", "false").lower() == "true"
         self.fimath_mode = getenv("DAYTRADE_FIMATH_MODE", "shadow").lower()
         self.fimath_flow_window_seconds = int(getenv("DAYTRADE_FIMATH_FLOW_WINDOW_SECONDS", "300"))
+        self.fimath_flow_min_samples = int(getenv("DAYTRADE_FIMATH_FLOW_MIN_SAMPLES", "30"))
+        self.fimath_flow_z_threshold = float(getenv("DAYTRADE_FIMATH_FLOW_Z_THRESHOLD", "1.0"))
+        self.fimath_flow_policy = getenv("DAYTRADE_FIMATH_FLOW_POLICY", "veto").lower()
+        if self.fimath_flow_policy not in {"required", "veto"}:
+            raise ValueError("DAYTRADE_FIMATH_FLOW_POLICY must be 'required' or 'veto'")
         self.fimath_partial_pct = float(getenv("DAYTRADE_FIMATH_PARTIAL_PCT", "50"))
-        self.chart_cache_limit = int(getenv("DAYTRADE_CHART_CACHE_LIMIT", "50000"))
+        self.fimath_min_closed_paper_trades = int(getenv("DAYTRADE_FIMATH_MIN_CLOSED_PAPER_TRADES", "30"))
+        self.chart_cache_limit = int(getenv("DAYTRADE_CHART_CACHE_LIMIT", "5000"))
         self.results_store_path = Path(
             getenv("DAYTRADE_RESULTS_STORE_PATH", str(service_root / "data" / "trade-results.json"))
         )

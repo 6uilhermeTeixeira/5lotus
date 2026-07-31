@@ -27,9 +27,45 @@ def render_catalog_page(bots: list[BotCatalogItem]) -> HTMLResponse:
         f'''<a class="bot card" href="/bots/{escape(bot.id)}"><p class="muted">{escape(bot.symbol)} · {escape(bot.timeframe)}</p><h2>{escape(bot.name)}</h2><p class="muted">{escape(bot.description)}</p><strong>Ver resultados →</strong></a>'''
         for bot in bots
     ) or '<p class="muted">Nenhum bot foi cadastrado.</p>'
-    return _page("2Lotus | Bots de teste", f"""<main><header class="header"><div><a class="brand" href="/bots" aria-label="2Lotus"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><h1>Resultados dos bots</h1><p class="muted">Selecione um teste para visualizar seu desempenho.</p></div><form method="post" action="/logout"><button class="link-button" type="submit">Sair</button></form></header><section class="grid">{cards}</section></main><style>
+    return _page("2Lotus | Bots de teste", f"""<main><header class="header"><div><a class="brand" href="/bots" aria-label="2Lotus"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><h1>Resultados dos bots</h1><p class="muted">Selecione um teste para visualizar seu desempenho.</p></div><div class="header-actions"><a href="/compare">Comparar estratégias</a><form method="post" action="/logout"><button class="link-button" type="submit">Sair</button></form></div></header><section class="grid">{cards}</section></main><style>
+    .header-actions {{ display:flex; gap:16px; align-items:center; }} .header-actions a {{ color:var(--text); }}
     .grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; }} .bot {{ min-height:220px; display:flex; flex-direction:column; align-items:flex-start; padding:22px; color:var(--text); text-decoration:none; }} .bot h2,.bot p {{ margin-bottom:12px; }} .bot strong {{ color:var(--green); margin-top:auto; }}
     </style>""")
+
+
+def render_comparison_page(bots: list[BotCatalogItem]) -> HTMLResponse:
+    rows = "".join(
+        f'''<tr data-bot-id="{escape(bot.id)}"><td><a href="/bots/{escape(bot.id)}">{escape(bot.name)}</a><small>{escape(bot.strategy_profile)}</small></td><td>{escape(bot.symbol)} · {escape(bot.timeframe)}</td><td data-field="trades">-</td><td data-field="open">-</td><td data-field="win-rate">-</td><td data-field="profit-factor">-</td><td data-field="net-pnl">-</td><td data-field="latest">-</td></tr>'''
+        for bot in bots
+    ) or '<tr><td colspan="8" class="muted">Nenhum bot foi cadastrado.</td></tr>'
+    return _page("2Lotus | Comparação", f"""<main><header class="header"><div><a class="brand brand-compact" href="/bots" aria-label="2Lotus"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><h1>Comparação das estratégias</h1><p class="muted">Todos os resultados abaixo são paper trades enquanto o modo shadow estiver ativo.</p></div><div class="actions"><a href="/bots">Todos os bots</a><form method="post" action="/logout"><button class="link-button" type="submit">Sair</button></form><p class="muted" id="updated-at">Carregando...</p></div></header>
+    <section class="summary-grid"><article class="panel"><p class="muted">Estratégias simultâneas</p><strong>{len(bots)}</strong></article><article class="panel"><p class="muted">Mercado comparado</p><strong>XAUUSD · M5</strong></article><article class="panel"><p class="muted">Execução</p><strong class="yellow">Shadow</strong></article></section>
+    <section class="panel table-panel"><div class="table-wrap"><table><thead><tr><th>Bot / estratégia</th><th>Mercado</th><th>Fechados</th><th>Abertos</th><th>Win rate</th><th>Profit factor</th><th>PnL líquido</th><th>Último evento</th></tr></thead><tbody>{rows}</tbody></table></div></section>
+    <p class="muted note">As posições são isoladas por bot e variante. Um sinal de uma estratégia não bloqueia nem encerra posições das demais.</p></main><style>
+    .actions {{ display:flex; justify-content:flex-end; align-items:flex-start; gap:14px; flex-wrap:wrap; }} .actions a {{ color:var(--text); }} .actions p {{ width:100%; text-align:right; }} .summary-grid {{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:18px; }} .summary-grid .panel {{ padding:18px; }} .summary-grid strong {{ display:block; font-size:24px; }} .table-panel {{ padding:0; overflow:hidden; }} .table-wrap {{ overflow-x:auto; }} table {{ width:100%; border-collapse:collapse; min-width:980px; }} th,td {{ padding:16px; text-align:left; border-bottom:1px solid rgba(255,255,255,.16); }} th {{ color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.05em; }} td a {{ color:var(--text); font-weight:700; }} td small {{ display:block; margin-top:5px; color:var(--muted); }} .green {{ color:var(--green); }} .red {{ color:var(--red); }} .yellow {{ color:var(--yellow); }} .note {{ margin:18px 2px 0; }} @media(max-width:720px) {{ .summary-grid {{ grid-template-columns:1fr; }} }}
+    </style><script>
+    const money = value => new Intl.NumberFormat('pt-BR', {{style:'currency',currency:'USD'}}).format(value || 0);
+    const date = value => value ? new Date(value).toLocaleString('pt-BR', {{timeZone:'UTC'}}) + ' UTC' : 'Sem eventos';
+    const color = value => value > 0 ? 'green' : value < 0 ? 'red' : 'yellow';
+    async function loadComparison() {{
+      const response = await fetch('/api/compare');
+      if (!response.ok) throw new Error('Não foi possível carregar a comparação.');
+      const data = await response.json();
+      for (const bot of data.bots) {{
+        const row = document.querySelector(`[data-bot-id="${{bot.id}}"]`);
+        if (!row) continue;
+        const summary = bot.summary;
+        row.querySelector('[data-field="trades"]').textContent = summary.trades_count;
+        row.querySelector('[data-field="open"]').textContent = summary.open_positions;
+        row.querySelector('[data-field="win-rate"]').textContent = summary.win_rate_pct.toFixed(2) + '%';
+        row.querySelector('[data-field="profit-factor"]').textContent = summary.profit_factor.toFixed(2);
+        const pnl = row.querySelector('[data-field="net-pnl"]'); pnl.textContent = money(summary.net_pnl); pnl.className = color(summary.net_pnl);
+        row.querySelector('[data-field="latest"]').textContent = date(bot.latest_trade_at_utc);
+      }}
+      document.getElementById('updated-at').textContent = 'Atualizado em ' + date(data.updated_at_utc);
+    }}
+    loadComparison().catch(error => document.getElementById('updated-at').textContent = error.message);
+    </script>""")
 
 
 def render_strategy_description(description: str) -> str:
@@ -43,7 +79,7 @@ def render_strategy_description(description: str) -> str:
 def render_results_page(bot: BotCatalogItem) -> HTMLResponse:
     bot_id = escape(bot.id)
     strategy_description = render_strategy_description(bot.strategy_description or bot.description)
-    return _page(f"{bot.name} | Resultados", f"""<main><header class="header"><div><a class="brand brand-compact" href="/bots" aria-label="Voltar para todos os bots"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><p class="muted">{escape(bot.symbol)} · {escape(bot.timeframe)} · {escape(bot.strategy_profile)}</p><h1>{escape(bot.name)}</h1><p class="muted">{escape(bot.description)}</p></div><div class="actions"><a href="/bots">Todos os bots</a><form method="post" action="/logout"><button class="link-button" type="submit">Sair</button></form><p class="muted" id="latest-trade">Carregando...</p></div></header>
+    return _page(f"{bot.name} | Resultados", f"""<main><header class="header"><div><a class="brand brand-compact" href="/bots" aria-label="Voltar para todos os bots"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><p class="muted">{escape(bot.symbol)} · {escape(bot.timeframe)} · {escape(bot.strategy_profile)}</p><h1>{escape(bot.name)}</h1><p class="muted">{escape(bot.description)}</p></div><div class="actions"><a href="/compare">Comparar</a><a href="/bots">Todos os bots</a><form method="post" action="/logout"><button class="link-button" type="submit">Sair</button></form><p class="muted" id="latest-trade">Carregando...</p></div></header>
     <section class="cards"><article class="card"><p class="muted">PnL líquido</p><strong id="net-pnl">-</strong><span id="gross-pnl"></span></article><article class="card"><p class="muted">Trades fechados</p><strong id="trades-count">-</strong><span id="open-positions"></span></article><article class="card"><p class="muted">Win rate</p><strong id="win-rate">-</strong><span id="wl-breakdown"></span></article><article class="card"><p class="muted">Profit factor</p><strong id="profit-factor">-</strong><span id="avg-rr"></span></article><article class="card"><p class="muted">Melhor / pior</p><strong id="best-trade">-</strong><span id="worst-trade"></span></article></section>
     <section class="panel strategy-card"><p class="muted">Estratégia utilizada</p><h2>{escape(bot.strategy_profile)}</h2>{strategy_description}</section>
     <section class="panel chart-panel"><div class="chart-heading"><div><h2>Preço e operações</h2><p class="muted">Arraste para voltar ou avançar no tempo; use o scroll para alterar a quantidade de candles visíveis.</p></div><div class="legend"><label>Tempo <select id="chart-timeframe"><option value="M5">M5</option><option value="M15">M15</option><option value="H1">H1</option></select></label><span><i class="entry-buy"></i>Compra</span><span><i class="entry-sell"></i>Venda</span><span><i class="exit"></i>Fechamento</span><button id="chart-reset" type="button">Mais recente</button></div></div><div id="market-chart-empty" class="muted">Carregando gráfico...</div><svg id="market-chart" viewBox="0 0 1000 360" role="img" aria-label="Gráfico de preço com operações do bot" tabindex="0" hidden></svg><input id="chart-timeline" type="range" min="0" value="0" aria-label="Navegar no histórico do gráfico"></section>
@@ -84,7 +120,7 @@ def render_results_page(bot: BotCatalogItem) -> HTMLResponse:
         const marks = (data.trades || []).flatMap(trade => {{
           const eventIndex = nearestIndex(+new Date(trade.opened_at_utc));
           if (eventIndex < start || eventIndex >= end) return [];
-          const candle = part[eventIndex - start], xx = x(eventIndex - start), testEvent = trade.setup === 'fimath_paper_trade';
+          const candle = part[eventIndex - start], xx = x(eventIndex - start), testEvent = trade.setup.endsWith('_paper_trade');
           const price = +trade.entry_price, hasMatchingPrice = price >= lo && price <= hi;
           const yy = hasMatchingPrice ? y(price) : Math.max(T + 10, y(candle.high) - 12);
           const buy = trade.side === 'buy', fill = testEvent ? '#4f8cff' : (buy ? '#41d392' : '#ff6b81');

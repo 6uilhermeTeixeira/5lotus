@@ -54,14 +54,25 @@ fi
 echo "Initializing wine prefix at $WINEPREFIX"
 "$WINE_CMD" wineboot -i >"$LOG_DIR/wineboot-mt5.log" 2>&1 || true
 
-echo "Installing WebView2 runtime"
-"$WINE_CMD" "$DOWNLOAD_DIR/webview2.exe" /silent /install >"$LOG_DIR/webview2-mt5.log" 2>&1 || true
+TERMINAL_EXE="$PREFIX_DIR/drive_c/Program Files/MetaTrader 5/terminal64.exe"
 
-echo "Launching MetaTrader 5 installer"
-echo "If the installer requires interaction, attach to the container display flow in the next setup step."
-"$WINE_CMD" "$DOWNLOAD_DIR/mt5setup.exe" >"$LOG_DIR/mt5setup.log" 2>&1 || true
+if [[ ! -f "$TERMINAL_EXE" ]]; then
+  echo "Installing WebView2 runtime"
+  "$WINE_CMD" "$DOWNLOAD_DIR/webview2.exe" /silent /install >"$LOG_DIR/webview2-mt5.log" 2>&1 || true
+
+  echo "Launching MetaTrader 5 installer"
+  echo "If the installer requires interaction, attach to the container display flow in the next setup step."
+  "$WINE_CMD" "$DOWNLOAD_DIR/mt5setup.exe" >"$LOG_DIR/mt5setup.log" 2>&1 || true
+fi
+
+if [[ ! -f "$TERMINAL_EXE" ]]; then
+  echo "MetaTrader terminal was not found after bootstrap: $TERMINAL_EXE" >&2
+  exit 1
+fi
 
 echo "bootstrap_finished=yes"
 echo "wine_prefix=$WINEPREFIX"
 echo "downloads_dir=$DOWNLOAD_DIR"
 echo "logs=$LOG_DIR"
+echo "Launching installed MetaTrader terminal"
+exec "$WINE_CMD" "$TERMINAL_EXE"
