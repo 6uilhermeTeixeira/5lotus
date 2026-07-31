@@ -24,6 +24,9 @@ class Setup:
     rsi14: float | None = None
     bollinger_upper: float | None = None
     bollinger_lower: float | None = None
+    macd_line: float | None = None
+    macd_signal: float | None = None
+    macd_histogram: float | None = None
 
 
 @dataclass
@@ -53,6 +56,16 @@ def _ema(values: list[float], period: int = 20) -> float:
     alpha = 2 / (period + 1)
     for value in values[1:]:
         result += alpha * (value - result)
+    return result
+
+
+def _ema_series(values: list[float], period: int) -> list[float]:
+    if not values:
+        return []
+    alpha = 2 / (period + 1)
+    result = [values[0]]
+    for value in values[1:]:
+        result.append(result[-1] + alpha * (value - result[-1]))
     return result
 
 
@@ -293,6 +306,61 @@ def _rsi_bollinger_setup_for_candle(request: DecisionRequest) -> Setup | None:
     return setup
 
 
+def _macd_trend_setup(request: DecisionRequest) -> Setup | None:
+    candles = request.candles
+    if len(candles) < 60:
+        return None
+    closes = [candle.close for candle in candles]
+    ema12 = _ema_series(closes, 12)
+    ema26 = _ema_series(closes, 26)
+    macd = [fast - slow for fast, slow in zip(ema12, ema26)]
+    signal = _ema_series(macd, 9)
+    current = candles[-1]
+    ema50 = _ema(closes[-50:])
+    atr14 = _atr(candles, 14)
+    bullish = macd[-2] <= signal[-2] and macd[-1] > signal[-1] and current.close > ema50
+    bearish = macd[-2] >= signal[-2] and macd[-1] < signal[-1] and current.close < ema50
+    if not bullish and not bearish:
+        return None
+    action = DecisionAction.BUY if bullish else DecisionAction.SELL
+    entry = request.ask if bullish else request.bid
+    stop_distance = atr14
+    if stop_distance <= 0:
+        return None
+    stop = entry - stop_distance if bullish else entry + stop_distance
+    partial = entry + stop_distance if bullish else entry - stop_distance
+    target = entry + stop_distance * 2 if bullish else entry - stop_distance * 2
+    return Setup(
+        action=action,
+        setup_type="macd_trend_crossover",
+        entry=entry,
+        stop=stop,
+        partial=partial,
+        target=target,
+        stop_points=stop_distance / request.point_size,
+        flow_mode="not_applicable",
+        ema20=_ema(closes[-20:]),
+        atr14=atr14,
+        ema50=ema50,
+        macd_line=macd[-1],
+        macd_signal=signal[-1],
+        macd_histogram=macd[-1] - signal[-1],
+    )
+
+
+def _macd_trend_setup_for_candle(request: DecisionRequest) -> Setup | None:
+    if not request.candles:
+        return None
+    key = f"macd_trend:{request.bot_id or request.symbol}:{request.symbol}:{request.timeframe}"
+    candle_timestamp = request.candles[-1].timestamp_utc
+    cached = _setup_cache.get(key)
+    if cached and cached[0] == candle_timestamp:
+        return cached[1]
+    setup = _macd_trend_setup(request)
+    _setup_cache[key] = (candle_timestamp, setup)
+    return setup
+
+
 def _candidate_response(
     request: DecisionRequest,
     settings: Settings,
@@ -337,6 +405,12 @@ def _candidate_response(
         metadata["bollinger_upper"] = round(setup.bollinger_upper, 5)
     if setup.bollinger_lower is not None:
         metadata["bollinger_lower"] = round(setup.bollinger_lower, 5)
+    if setup.macd_line is not None:
+        metadata["macd_line"] = round(setup.macd_line, 5)
+    if setup.macd_signal is not None:
+        metadata["macd_signal"] = round(setup.macd_signal, 5)
+    if setup.macd_histogram is not None:
+        metadata["macd_histogram"] = round(setup.macd_histogram, 5)
     return DecisionResponse(
         action=setup.action if executable else DecisionAction.HOLD,
         reason=reason,
@@ -455,12 +529,41 @@ def _evaluate_rsi_bollinger(request: DecisionRequest, settings: Settings, strate
     )
 
 
+def _evaluate_macd_trend(request: DecisionRequest, settings: Settings, strategy_profile: str) -> DecisionResponse:
+    setup = _macd_trend_setup_for_candle(request)
+    checks = [
+        RiskCheck(name="symbol_match", passed=request.symbol.upper() == settings.default_symbol.upper(), detail=f"expected={settings.default_symbol}"),
+        RiskCheck(name="timeframe_match", passed=request.timeframe.upper() == settings.default_timeframe.upper(), detail=f"expected={settings.default_timeframe}"),
+        RiskCheck(name="spread_limit", passed=request.spread_points <= settings.max_spread_points, detail=f"max={settings.max_spread_points}"),
+        RiskCheck(name="macd_trend_setup", passed=setup is not None, detail="macd_12_26_9 crossover + ema50 trend"),
+    ]
+    if not all(check.passed for check in checks[:3]):
+        return DecisionResponse(action=DecisionAction.HOLD, reason="market_filter_mismatch", risk_checks=checks)
+    if setup is None:
+        return DecisionResponse(action=DecisionAction.HOLD, reason="macd_trend_setup_not_confirmed", risk_checks=checks)
+    flow = FlowAnalysis(True, False, False, "not_applicable")
+    executable = settings.enable_live_decisions and settings.fimath_mode == "live"
+    checks.append(RiskCheck(name="shadow_mode", passed=not executable, detail=f"mode={settings.fimath_mode}"))
+    return _candidate_response(
+        request,
+        settings,
+        setup,
+        checks,
+        flow,
+        executable=executable,
+        reason="macd_trend_validated" if executable else "macd_trend_shadow_signal",
+        strategy_profile=strategy_profile,
+    )
+
+
 def evaluate_decision(request: DecisionRequest, settings: Settings, strategy_profile: str | None = None) -> DecisionResponse:
     profile = strategy_profile or settings.strategy_profile
     if profile == "momentum_atr_breakout":
         return _evaluate_momentum_atr(request, settings, profile)
     if profile == "rsi_bollinger_reversion":
         return _evaluate_rsi_bollinger(request, settings, profile)
+    if profile == "macd_trend_crossover":
+        return _evaluate_macd_trend(request, settings, profile)
     if profile == "fimath_ema20_flow":
         return _evaluate_fimath(request, settings, profile)
     return DecisionResponse(

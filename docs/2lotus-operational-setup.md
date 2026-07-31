@@ -46,7 +46,7 @@ Preencha os inputs:
 - `StrategyServiceUrl`: `http://127.0.0.1:8000/decision`
 - `TradeResultsUrl`: `http://127.0.0.1:8000/api/trades`
 - `ResultsBotId`: `bot-1`
-- `ShadowBotIds`: `bot-2,bot-3` (aceita uma lista separada por vírgulas)
+- `ShadowBotIds`: `bot-2,bot-3,bot-4` (aceita uma lista separada por vírgulas)
 - `HistoryCacheBars`: `2000` por bot, suficiente para aquecimento e histórico recente sem atrasar a inicialização
 - `LotusIngestApiKey`: valor de `DAYTRADE_INGEST_API_KEY`
 - `EnableOrderExecution`: `false`
@@ -68,7 +68,7 @@ O resultado deve indicar `"status":"ok"`. Após o fechamento de um trade demo, o
 `POST /api/trades` com a chave no header `X-2Lotus-Ingest-Key`; o painel 2Lotus passa a mostrar a
 operação gravada no Supabase.
 
-Durante shadow, confirme também nos logs que os três `bot_id` recebem HTTP 200. `strategy_signals`
+Durante shadow, confirme também nos logs que os quatro `bot_id` recebem HTTP 200. `strategy_signals`
 recebe os candidatos quando cada setup ocorre e `paper_trades` mantém o variant `technical`;
 o Bot 1 também acompanha `flow_confirmed`. As chaves de sinal e as consultas de posição são
 segmentadas por bot. A execução real só pode ser avaliada depois da

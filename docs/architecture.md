@@ -22,7 +22,7 @@ Essa separacao respeita melhor as restricoes do ambiente:
 MT5 terminal
   -> Expert Advisor MQL5
     -> coleta estado do mercado / conta / posicoes
-    -> envia o mesmo contexto para bot-1, bot-2 e bot-3
+    -> envia o mesmo contexto para bot-1, bot-2, bot-3 e bot-4
 Python strategy service
   -> seleciona a estratégia pelo perfil cadastrado do bot
   -> aplica risco
@@ -35,8 +35,8 @@ Expert Advisor MQL5
 
 ## Estado atual
 
-- Estratégias `fimath_ema20_flow`, `momentum_atr_breakout` e `rsi_bollinger_reversion` para XAUUSD/M5.
-- Um único EA consulta os três bots a cada ciclo; apenas o bot primário poderia receber autorização de execução.
+- Estratégias `fimath_ema20_flow`, `momentum_atr_breakout`, `rsi_bollinger_reversion` e `macd_trend_crossover` para XAUUSD/M5.
+- Um único EA consulta os quatro bots a cada ciclo; apenas o bot primário poderia receber autorização de execução.
 - Setup técnico calculado uma vez por candle fechado e resposta consultada pelo EA a cada cinco segundos.
 - Fluxo amostrado continuamente em janela temporal, com z-scores do livro e dos ticks.
 - Política padrão `veto`: somente forte contradição simultânea bloqueia um setup.

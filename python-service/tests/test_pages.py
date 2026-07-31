@@ -5,7 +5,7 @@ from app.schemas import BotCatalogItem
 
 
 class ComparisonPageTests(unittest.TestCase):
-    def test_comparison_page_renders_three_independent_bots(self) -> None:
+    def test_comparison_page_renders_four_independent_bots(self) -> None:
         bots = [
             BotCatalogItem(
                 id=f"bot-{index}",
@@ -19,6 +19,7 @@ class ComparisonPageTests(unittest.TestCase):
                 (1, "Bot 1 — Fimath", "fimath_ema20_flow"),
                 (2, "Bot 2 — Momentum ATR", "momentum_atr_breakout"),
                 (3, "Bot 3 — RSI Bollinger", "rsi_bollinger_reversion"),
+                (4, "Bot 4 — MACD Trend", "macd_trend_crossover"),
             ]
         ]
 
@@ -29,6 +30,8 @@ class ComparisonPageTests(unittest.TestCase):
         self.assertIn("Bot 1 — Fimath", html)
         self.assertIn("Bot 2 — Momentum ATR", html)
         self.assertIn("Bot 3 — RSI Bollinger", html)
+        self.assertIn("Bot 4 — MACD Trend", html)
+        self.assertIn("<strong>4</strong>", html)
         self.assertIn("/api/compare", html)
 
 

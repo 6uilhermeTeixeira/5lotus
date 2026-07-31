@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 
 from app.schemas import CandleSnapshot, DecisionResponse
 from app.supabase_store import SupabaseStore
-from tests.test_strategy import bullish_request, mean_reversion_request
+from tests.test_strategy import bullish_request, macd_trend_request, mean_reversion_request
 
 
 class RecordingStore(SupabaseStore):
@@ -67,6 +67,25 @@ class SupabaseStoreTests(unittest.TestCase):
         self.assertTrue(inserted)
         self.assertIn("bot_id=eq.bot-3", store.calls[0][0])
         self.assertEqual(store.calls[-1][2]["bot_id"], "bot-3")
+
+    def test_bot_4_uses_its_own_open_position_scope(self) -> None:
+        store = RecordingStore()
+        request = macd_trend_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
+        response = DecisionResponse(
+            action="hold",
+            reason="macd_trend_shadow_signal",
+            entry_price=102.1,
+            stop_loss_price=101.5,
+            partial_take_profit_price=102.7,
+            final_take_profit_price=103.3,
+            metadata={"suggested_action": "buy"},
+        )
+
+        inserted = store.record_paper_trade("bot-4-signal", request, response, "technical")
+
+        self.assertTrue(inserted)
+        self.assertIn("bot_id=eq.bot-4", store.calls[0][0])
+        self.assertEqual(store.calls[-1][2]["bot_id"], "bot-4")
 
     def test_paper_results_are_exposed_as_simulated_trades(self) -> None:
         result = PaperResultsStore()._load_paper_results("bot-2")[0]

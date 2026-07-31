@@ -160,6 +160,37 @@ def mean_reversion_request(timestamp: datetime) -> DecisionRequest:
     )
 
 
+def macd_trend_request(timestamp: datetime) -> DecisionRequest:
+    closes = [100 + index * 0.03 for index in range(57)]
+    closes.extend([closes[-1] - 0.05, closes[-1] - 0.10, closes[-1] + 0.40])
+    candles = [
+        CandleSnapshot(
+            timestamp_utc=timestamp - timedelta(minutes=(len(closes) - index - 1) * 5),
+            open=close - 0.03,
+            high=close + 0.15,
+            low=close - 0.15,
+            close=close,
+            volume=100 + index,
+        )
+        for index, close in enumerate(closes)
+    ]
+    return DecisionRequest(
+        bot_id="bot-4",
+        request_id=f"macd-trend-{timestamp.timestamp()}",
+        timestamp_utc=timestamp + timedelta(seconds=5),
+        symbol="XAUUSD",
+        timeframe="M5",
+        bid=candles[-1].close,
+        ask=candles[-1].close + 0.1,
+        spread_points=10,
+        point_size=0.01,
+        value_per_point_per_lot=1,
+        candles=candles,
+        positions=[],
+        account=AccountSnapshot(balance=10_000, equity=10_000, margin_free=10_000),
+    )
+
+
 class FlowAnalysisTests(unittest.TestCase):
     def test_strong_directional_flow_is_confirmed(self) -> None:
         start = datetime(2026, 7, 31, tzinfo=timezone.utc)
@@ -245,20 +276,35 @@ class DecisionTests(unittest.TestCase):
         self.assertIn("rsi14", response.metadata)
         self.assertIn("bollinger_lower", response.metadata)
 
-    def test_three_profiles_keep_independent_bot_scoped_state(self) -> None:
+    def test_macd_trend_profile_records_independent_shadow_candidate(self) -> None:
+        request = macd_trend_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
+
+        response = evaluate_decision(request, settings(), "macd_trend_crossover")
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.reason, "macd_trend_shadow_signal")
+        self.assertTrue(response.metadata["candidate"])
+        self.assertEqual(response.metadata["strategy_profile"], "macd_trend_crossover")
+        self.assertEqual(response.metadata["suggested_action"], "buy")
+        self.assertIn("macd_line", response.metadata)
+        self.assertIn("macd_signal", response.metadata)
+        self.assertGreater(response.metadata["macd_histogram"], 0)
+
+    def test_four_profiles_keep_independent_bot_scoped_state(self) -> None:
         candle_time = datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc)
         cases = [
             (bullish_request(candle_time), "fimath_ema20_flow"),
             (momentum_request(candle_time), "momentum_atr_breakout"),
             (mean_reversion_request(candle_time), "rsi_bollinger_reversion"),
+            (macd_trend_request(candle_time), "macd_trend_crossover"),
         ]
 
         responses = [evaluate_decision(request, settings(), profile) for request, profile in cases]
 
-        self.assertEqual({request.bot_id for request, _ in cases}, {"bot-1", "bot-2", "bot-3"})
+        self.assertEqual({request.bot_id for request, _ in cases}, {"bot-1", "bot-2", "bot-3", "bot-4"})
         self.assertEqual(
             {response.metadata["strategy_profile"] for response in responses},
-            {"fimath_ema20_flow", "momentum_atr_breakout", "rsi_bollinger_reversion"},
+            {"fimath_ema20_flow", "momentum_atr_breakout", "rsi_bollinger_reversion", "macd_trend_crossover"},
         )
         self.assertTrue(all(response.action == DecisionAction.HOLD for response in responses))
 
