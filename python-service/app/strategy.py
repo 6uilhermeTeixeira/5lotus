@@ -1,6 +1,6 @@
 from collections import defaultdict, deque
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta, timezone
 from statistics import fmean, pstdev
 
 from .config import Settings
@@ -663,6 +663,40 @@ def _evaluate_stochastic_pullback(request: DecisionRequest, settings: Settings, 
     )
 
 
+def _evaluate_stochastic_sell_session(request: DecisionRequest, settings: Settings, strategy_profile: str) -> DecisionResponse:
+    response = _evaluate_stochastic_pullback(request, settings, strategy_profile)
+    if not response.metadata.get("candidate"):
+        return response
+
+    suggested_action = str(response.metadata.get("suggested_action", ""))
+    before_entry_cutoff = request.timestamp_utc.astimezone(timezone.utc).time() < time(18, 0)
+    sell_only = suggested_action == DecisionAction.SELL.value
+    response.risk_checks.extend(
+        [
+            RiskCheck(name="experimental_sell_only", passed=sell_only, detail=f"suggested_action={suggested_action}"),
+            RiskCheck(name="experimental_entry_cutoff", passed=before_entry_cutoff, detail="entry_before=18:00_UTC"),
+        ]
+    )
+    response.metadata["experiment"] = "sell_only_entry_before_18utc"
+    if not sell_only or not before_entry_cutoff:
+        response.action = DecisionAction.HOLD
+        response.reason = "experimental_side_or_session_block"
+        response.size = 0.0
+        response.metadata["base_candidate"] = True
+        response.metadata["candidate"] = False
+        response.metadata["experimental_block_reason"] = "buy_side" if not sell_only else "entry_at_or_after_18utc"
+        return response
+
+    response.action = DecisionAction.HOLD
+    response.reason = "stochastic_sell_session_shadow_signal"
+    response.size = 0.0
+    response.metadata["experimental_shadow_lock"] = True
+    response.risk_checks.append(
+        RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled")
+    )
+    return response
+
+
 def evaluate_decision(request: DecisionRequest, settings: Settings, strategy_profile: str | None = None) -> DecisionResponse:
     profile = strategy_profile or settings.strategy_profile
     if profile == "momentum_atr_breakout":
@@ -673,6 +707,8 @@ def evaluate_decision(request: DecisionRequest, settings: Settings, strategy_pro
         return _evaluate_macd_trend(request, settings, profile)
     if profile == "stochastic_trend_pullback":
         return _evaluate_stochastic_pullback(request, settings, profile)
+    if profile == "stochastic_sell_session":
+        return _evaluate_stochastic_sell_session(request, settings, profile)
     if profile == "fimath_ema20_flow":
         return _evaluate_fimath(request, settings, profile)
     return DecisionResponse(

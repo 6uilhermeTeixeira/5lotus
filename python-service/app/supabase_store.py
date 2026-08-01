@@ -231,16 +231,7 @@ class SupabaseStore:
         return len(rows) if isinstance(rows, list) else 0
 
     def load_chart(self, bot: BotCatalogItem, limit: int = 5000) -> MarketChartResponse:
-        candle_rows: list[object] = []
-        for offset in range(0, limit, 1000):
-            query = urlencode({"bot_id": f"eq.{bot.id}", "symbol": f"eq.{bot.symbol}", "timeframe": f"eq.{bot.timeframe}", "select": "timestamp_utc,open,high,low,close,volume", "order": "timestamp_utc.desc", "limit": "1000", "offset": str(offset)})
-            page = self._request(f"market_candles?{query}")
-            if not isinstance(page, list) or not page:
-                break
-            candle_rows.extend(page)
-            if len(page) < 1000:
-                break
-        candles = [CandleSnapshot.model_validate(row) for row in reversed(candle_rows)]
+        candles = self.load_candles(bot, limit)
         trades_query = urlencode(
             {
                 "bot_id": f"eq.{bot.id}",
@@ -254,3 +245,16 @@ class SupabaseStore:
         combined_rows = (trade_rows if isinstance(trade_rows, list) else []) + self._load_paper_results(bot.id)
         trades = [TradeResult.model_validate(row) for row in combined_rows if isinstance(row, dict)]
         return MarketChartResponse(bot_id=bot.id, symbol=bot.symbol, timeframe=bot.timeframe, candles=candles, trades=trades)
+
+    def load_candles(self, bot: BotCatalogItem, limit: int = 5000, source_bot_id: str | None = None) -> list[CandleSnapshot]:
+        candle_rows: list[object] = []
+        market_data_bot_id = source_bot_id or bot.id
+        for offset in range(0, limit, 1000):
+            query = urlencode({"bot_id": f"eq.{market_data_bot_id}", "symbol": f"eq.{bot.symbol}", "timeframe": f"eq.{bot.timeframe}", "select": "timestamp_utc,open,high,low,close,volume", "order": "timestamp_utc.desc", "limit": "1000", "offset": str(offset)})
+            page = self._request(f"market_candles?{query}")
+            if not isinstance(page, list) or not page:
+                break
+            candle_rows.extend(page)
+            if len(page) < 1000:
+                break
+        return [CandleSnapshot.model_validate(row) for row in reversed(candle_rows)]

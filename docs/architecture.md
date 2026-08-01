@@ -22,7 +22,7 @@ Essa separacao respeita melhor as restricoes do ambiente:
 MT5 terminal
   -> Expert Advisor MQL5
     -> coleta estado do mercado / conta / posicoes
-    -> envia o mesmo contexto para bot-1, bot-2, bot-3, bot-4 e bot-5
+    -> envia o mesmo contexto para bot-1 até bot-6
 Python strategy service
   -> seleciona a estratégia pelo perfil cadastrado do bot
   -> aplica risco
@@ -35,13 +35,20 @@ Expert Advisor MQL5
 
 ## Estado atual
 
-- Estratégias `fimath_ema20_flow`, `momentum_atr_breakout`, `rsi_bollinger_reversion`, `macd_trend_crossover` e `stochastic_trend_pullback` para XAUUSD/M5.
-- Um único EA consulta os cinco bots a cada ciclo; apenas o bot primário poderia receber autorização de execução.
+- Estratégias `fimath_ema20_flow`, `momentum_atr_breakout`, `rsi_bollinger_reversion`, `macd_trend_crossover` e `stochastic_trend_pullback`, além da variante experimental `stochastic_sell_session`, para XAUUSD/M5.
+- Um único EA consulta os seis bots a cada ciclo; apenas o bot primário poderia receber autorização de execução.
+- O Bot 6 replica o setup do Bot 5, mas admite somente vendas antes das 18h UTC; ele permanece isolado em shadow para forward test.
 - Setup técnico calculado uma vez por candle fechado e resposta consultada pelo EA a cada cinco segundos.
 - Fluxo amostrado continuamente em janela temporal, com z-scores do livro e dos ticks.
 - Política padrão `veto`: somente forte contradição simultânea bloqueia um setup.
 - Cada candidato é deduplicado por bot, timeframe, candle, lado e setup; chaves e consultas incluem `bot_id` para impedir colisão entre estratégias.
 - Supabase mantém telemetria em `strategy_signals` e paper tracks `technical` e `flow_confirmed`.
+- O replay histórico lê `market_candles`, reaplica o motor sem look-ahead e produz resultados efêmeros para o portal, isolados das tabelas operacionais.
+- O histórico profundo é canônico por símbolo/timeframe (`bot-1` para XAUUSD/M5); estratégias não duplicam a mesma série para fins de replay.
+- Um classificador de regime H1 usa ADX, EMA50/EMA200 e percentil de ATR antes de autorizar candidatos no replay.
+- Controles de sessão, limite diário, cooldown, spread, slippage e comissão pertencem ao harness e não alteram a geração original dos sinais.
+- O cache OHLCV profundo pertence ao mercado e é persistido apenas como `bot-1`; os demais bots reutilizam essa série canônica no replay.
+- O gráfico entrega no máximo os 30 dias mais recentes de candles, enquanto métricas e janelas de validação usam todo o período solicitado.
 - Candles e negócios originados no horário do servidor MT5 são convertidos para UTC no EA.
 - API e EA permanecem em shadow/execução desligada no Compose.
 

@@ -43,6 +43,9 @@ Ja existe implementacao para:
 - calcular tamanho de posicao pelo risco de `5%`
 - permitir envio automatico da ordem pelo EA quando as travas forem habilitadas
 - expor uma pagina separada de acompanhamento de resultados em `python-service` via `GET /results`
+- validar as estratégias candle a candle nos últimos 120 dias disponíveis e apresentar entradas, saídas e métricas simuladas sem depender do mercado aberto
+- filtrar sinais por regime H1, sessão e limites diários, com custos de execução e validação temporal explícitos
+- acompanhar uma variante experimental Stochastic somente vendida antes das 18h UTC, isolada em shadow como Bot 6
 
 ## Estrutura inicial
 

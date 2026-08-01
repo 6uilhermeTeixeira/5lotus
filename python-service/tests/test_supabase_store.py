@@ -49,6 +49,15 @@ class PaperResultsStore(RecordingStore):
 
 
 class SupabaseStoreTests(unittest.TestCase):
+    def test_replay_can_reuse_canonical_market_history(self) -> None:
+        store = RecordingStore()
+        bot = type("Bot", (), {"id": "bot-4", "symbol": "XAUUSD", "timeframe": "M5"})()
+
+        candles = store.load_candles(bot, 1000, source_bot_id="bot-1")
+
+        self.assertEqual(candles, [])
+        self.assertIn("bot_id=eq.bot-1", store.calls[0][0])
+
     def test_bot_3_uses_its_own_open_position_scope(self) -> None:
         store = RecordingStore()
         request = mean_reversion_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))

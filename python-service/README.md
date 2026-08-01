@@ -19,6 +19,7 @@ Foi criado um servico minimo com:
 - `GET /bots`
 - `GET /compare`
 - `GET /api/compare`
+- `GET /api/bots/<id>/historical-replay?days=120`
 - `POST /decision`
 
 Perfis atuais, executados em paralelo:
@@ -30,6 +31,7 @@ Perfis atuais, executados em paralelo:
 - Bot 3: `rsi_bollinger_reversion`
 - Bot 4: `macd_trend_crossover`
 - Bot 5: `stochastic_trend_pullback`
+- Bot 6: `stochastic_sell_session` — variante shadow somente vendida, com entradas antes das 18h UTC
 - risco por operacao: `1%` da banca
 - risco/retorno final: `2R`, com parcial de `50%` em `1R`
 
@@ -50,6 +52,23 @@ com parcial em 1R e alvo final em 2R, sem filtro de fluxo para manter a amostra 
 
 O Stochastic Pullback usa a MME50 como direção e o cruzamento do Estocástico lento (14,3,3)
 para detectar o fim de uma correção. O stop fica além dos três candles recentes, com buffer de ATR.
+
+O replay histórico usa os candles persistidos no Supabase e executa o mesmo motor em ordem
+cronológica, sempre com uma janela móvel de 60 candles. A página individual abre por padrão o
+validação dos 120 dias anteriores ao último candle disponível e permite alternar para os dados
+ao vivo/shadow. Os resultados do replay são calculados sob demanda e não são gravados nas tabelas
+de trades reais ou paper trades.
+
+O replay aprimorado separa geração de sinal e autorização por regime. Estratégias de tendência
+só entram quando ADX(14) e EMA50/EMA200 em H1 confirmam tendência e direção; RSI Bollinger só
+entra em range. Transição e volatilidade extrema ficam sem operação. A simulação também:
+
+- usa o histórico canônico do `bot-1` para todos os bots XAUUSD/M5;
+- restringe entradas à sessão UTC configurada e fecha posições no fim do dia;
+- aplica bid/ask, spread, slippage e comissão configurável;
+- limita operações diárias, perda diária e adiciona cooldown após loss;
+- divide o resultado em janelas temporais mensais de 30 dias;
+- mantém status `insufficient_history` até existirem pelo menos 90 dias avaliados.
 
 Todo candidato técnico é gravado uma vez por candle com motivo, spread, `book_z`, `tick_z` e
 `flow_score`. Dois paper tracks não sobrepostos são mantidos em paralelo:
@@ -92,6 +111,25 @@ DAYTRADE_CHART_CACHE_LIMIT=5000
 DAYTRADE_FIMATH_FLOW_MIN_SAMPLES=30
 DAYTRADE_FIMATH_FLOW_Z_THRESHOLD=1.0
 DAYTRADE_FIMATH_MIN_CLOSED_PAPER_TRADES=30
+DAYTRADE_BACKTEST_BALANCE=10000
+DAYTRADE_BACKTEST_SPREAD_POINTS=10
+DAYTRADE_BACKTEST_POINT_SIZE=0.01
+DAYTRADE_BACKTEST_VALUE_PER_POINT_PER_LOT=1
+DAYTRADE_BACKTEST_CANDLE_LIMIT=100000
+DAYTRADE_BACKTEST_MARKET_DATA_BOT_ID=bot-1
+DAYTRADE_BACKTEST_RISK_PER_TRADE_PCT=0.25
+DAYTRADE_BACKTEST_SLIPPAGE_POINTS=2
+DAYTRADE_BACKTEST_COMMISSION_PER_LOT=0
+DAYTRADE_BACKTEST_SESSION_START_UTC=06:00
+DAYTRADE_BACKTEST_SESSION_END_UTC=21:00
+DAYTRADE_BACKTEST_MAX_TRADES_PER_DAY=4
+DAYTRADE_BACKTEST_DAILY_LOSS_LIMIT_R=2
+DAYTRADE_BACKTEST_COOLDOWN_BARS_AFTER_LOSS=3
+DAYTRADE_BACKTEST_REGIME_ENABLED=true
+DAYTRADE_BACKTEST_REGIME_TREND_ADX=25
+DAYTRADE_BACKTEST_REGIME_RANGE_ADX=20
+DAYTRADE_BACKTEST_REGIME_HIGH_VOLATILITY_PERCENTILE=90
+DAYTRADE_BACKTEST_VALIDATION_FOLD_DAYS=5
 ```
 
 Para preparar decisões executáveis após a validação dos paper tracks:
@@ -126,7 +164,7 @@ open http://127.0.0.1:8000/login
 
 O servico expoe um portal protegido por senha em `/login`. Depois do acesso, `/bots` lista os
 testes disponiveis e cada bot possui uma pagina individual em `/bots/<id>`. A rota antiga
-`/results` redireciona para o primeiro bot do catalogo. A página `/compare` apresenta os cinco
+`/results` redireciona para o primeiro bot do catalogo. A página `/compare` apresenta os seis
 perfis lado a lado e atualiza seus indicadores pela API autenticada `/api/compare`.
 
 O catálogo fica em `data/bots.json`. Para adicionar outro bot, inclua um novo item com `id`

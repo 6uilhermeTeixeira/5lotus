@@ -8,10 +8,11 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .auth import SESSION_COOKIE_NAME, create_session_value, has_valid_session, password_matches, read_login_password
+from .backtest import run_historical_replay
 from .config import get_settings
 from .pages import render_catalog_page, render_comparison_page, render_login_page, render_results_page
 from .results_store import get_bot, load_bots_catalog, load_results_snapshot, resolve_bot_results_file
-from .schemas import BotCatalogItem, CandleIngestRequest, DecisionAction, DecisionRequest, DecisionResponse, HealthResponse, MarketChartResponse, ResultsResponse, TradeIngestRequest
+from .schemas import BotCatalogItem, CandleIngestRequest, DecisionAction, DecisionRequest, DecisionResponse, HealthResponse, HistoricalReplayResponse, MarketChartResponse, ResultsResponse, TradeIngestRequest
 from .strategy import evaluate_decision
 from .supabase_store import SupabaseStore
 
@@ -185,6 +186,21 @@ def read_bot_chart(bot_id: str, request: Request) -> MarketChartResponse:
     return SupabaseStore(settings).load_chart(bot, settings.chart_cache_limit)
 
 
+@app.get("/api/bots/{bot_id}/historical-replay", response_model=HistoricalReplayResponse)
+def read_historical_replay(bot_id: str, request: Request, days: int = 120) -> HistoricalReplayResponse:
+    _require_api_session(request)
+    if days < 1 or days > 365:
+        raise HTTPException(status_code=422, detail="replay days must be between 1 and 365")
+    bot = _find_bot(bot_id)
+    if not _uses_supabase_results():
+        raise HTTPException(status_code=503, detail="historical replay requires DAYTRADE_RESULTS_STORE=SUPABASE")
+    source_bot_id = settings.backtest_market_data_bot_id if bot.symbol == settings.default_symbol and bot.timeframe == settings.default_timeframe else bot.id
+    candles = SupabaseStore(settings).load_candles(bot, settings.backtest_candle_limit, source_bot_id=source_bot_id)
+    if not candles:
+        raise HTTPException(status_code=404, detail="no historical candles available for replay")
+    return run_historical_replay(bot, candles, settings, days=days)
+
+
 @app.get("/api/results", response_model=ResultsResponse, deprecated=True)
 def read_legacy_results(request: Request) -> ResultsResponse:
     _require_api_session(request)
@@ -239,6 +255,16 @@ def read_config() -> dict[str, str | int | float | bool]:
         "fimath_partial_pct": settings.fimath_partial_pct,
         "fimath_min_closed_paper_trades": settings.fimath_min_closed_paper_trades,
         "chart_cache_limit": settings.chart_cache_limit,
+        "backtest_balance": settings.backtest_balance,
+        "backtest_spread_points": settings.backtest_spread_points,
+        "backtest_candle_limit": settings.backtest_candle_limit,
+        "backtest_market_data_bot_id": settings.backtest_market_data_bot_id,
+        "backtest_risk_per_trade_pct": settings.backtest_risk_per_trade_pct,
+        "backtest_slippage_points": settings.backtest_slippage_points,
+        "backtest_commission_per_lot": settings.backtest_commission_per_lot,
+        "backtest_session_start_utc": settings.backtest_session_start_utc,
+        "backtest_session_end_utc": settings.backtest_session_end_utc,
+        "backtest_regime_enabled": settings.backtest_regime_enabled,
         "enable_live_decisions": settings.enable_live_decisions,
         "dashboard_auth_configured": settings.dashboard_auth_configured,
         "results_store": settings.results_store,

@@ -47,7 +47,8 @@ Preencha os inputs:
 - `TradeResultsUrl`: `http://127.0.0.1:8000/api/trades`
 - `ResultsBotId`: `bot-1`
 - `ShadowBotIds`: `bot-2,bot-3,bot-4,bot-5` (aceita uma lista separada por vírgulas)
-- `HistoryCacheBars`: `2000` por bot, suficiente para aquecimento e histórico recente sem atrasar a inicialização
+- `ExperimentalBotId`: `bot-6` (força o polling do experimento mesmo em gráficos que preservam a lista shadow antiga)
+- `HistoryCacheBars`: `100000` somente no bot canônico, visando aproximadamente um ano de M5 quando a corretora disponibilizar essa profundidade
 - `LotusIngestApiKey`: valor de `DAYTRADE_INGEST_API_KEY`
 - `EnableOrderExecution`: `false`
 
@@ -57,6 +58,19 @@ com deslocamento de horário não são reescritos automaticamente.
 
 O MT5 e a API local usam a mesma rede privada de containers; por isso o EA usa `127.0.0.1` sem
 expor a API para a rede externa.
+
+Como `api` usa `network_mode: service:mt5`, não reinicie somente o container MT5: a API ficaria
+presa ao namespace de rede anterior e o EA receberia `WebRequest 1001`. Depois de recompilar o EA,
+reinicie nesta ordem e confirme a conectividade:
+
+```bash
+docker restart 2lotus-mt5-desktop
+docker restart 2lotus-api
+docker exec 2lotus-mt5-desktop curl --fail http://127.0.0.1:8000/health
+```
+
+O EA impõe internamente um piso de 100000 candles para o histórico canônico, mesmo quando um
+gráfico antigo ainda preserva `HistoryCacheBars=2000` nos inputs salvos.
 
 ## Verificações antes do primeiro trade
 
@@ -68,11 +82,15 @@ O resultado deve indicar `"status":"ok"`. Após o fechamento de um trade demo, o
 `POST /api/trades` com a chave no header `X-2Lotus-Ingest-Key`; o painel 2Lotus passa a mostrar a
 operação gravada no Supabase.
 
-Durante shadow, confirme também nos logs que os cinco `bot_id` recebem HTTP 200. `strategy_signals`
+Durante shadow, confirme também nos logs que os seis `bot_id` recebem HTTP 200. `strategy_signals`
 recebe os candidatos quando cada setup ocorre e `paper_trades` mantém o variant `technical`;
 o Bot 1 também acompanha `flow_confirmed`. As chaves de sinal e as consultas de posição são
 segmentadas por bot. A execução real só pode ser avaliada depois da
 amostra mínima e deve continuar com `EnableOrderExecution=false` até aprovação explícita.
+
+O Bot 6 é uma experiência controlada: reutiliza o Stochastic Pullback, aceita somente vendas
+com timestamp anterior às 18h UTC e mantém a liquidação diária padrão até 21h UTC. Seu status
+`promising_not_live` autoriza apenas shadow/forward test, nunca execução automática.
 
 ## Segurança e recuperação
 

@@ -1,11 +1,11 @@
 import unittest
 
-from app.pages import render_comparison_page
+from app.pages import render_comparison_page, render_results_page
 from app.schemas import BotCatalogItem
 
 
 class ComparisonPageTests(unittest.TestCase):
-    def test_comparison_page_renders_five_independent_bots(self) -> None:
+    def test_comparison_page_renders_six_independent_bots(self) -> None:
         bots = [
             BotCatalogItem(
                 id=f"bot-{index}",
@@ -21,6 +21,7 @@ class ComparisonPageTests(unittest.TestCase):
                 (3, "Bot 3 — RSI Bollinger", "rsi_bollinger_reversion"),
                 (4, "Bot 4 — MACD Trend", "macd_trend_crossover"),
                 (5, "Bot 5 — Stochastic Pullback", "stochastic_trend_pullback"),
+                (6, "Bot 6 — Stochastic Sell 18 UTC", "stochastic_sell_session"),
             ]
         ]
 
@@ -33,8 +34,28 @@ class ComparisonPageTests(unittest.TestCase):
         self.assertIn("Bot 3 — RSI Bollinger", html)
         self.assertIn("Bot 4 — MACD Trend", html)
         self.assertIn("Bot 5 — Stochastic Pullback", html)
-        self.assertIn("<strong>5</strong>", html)
+        self.assertIn("Bot 6 — Stochastic Sell 18 UTC", html)
+        self.assertIn("<strong>6</strong>", html)
         self.assertIn("/api/compare", html)
+
+    def test_results_page_defaults_to_long_historical_validation(self) -> None:
+        bot = BotCatalogItem(
+            id="bot-4",
+            name="Bot 4 — MACD Trend",
+            description="Teste",
+            strategy_profile="macd_trend_crossover",
+            symbol="XAUUSD",
+            timeframe="M5",
+        )
+
+        html = bytes(render_results_page(bot).body).decode("utf-8")
+
+        self.assertIn("Validação histórica", html)
+        self.assertIn('<option value="120" selected>120 dias</option>', html)
+        self.assertIn('<option value="365">365 dias</option>', html)
+        self.assertIn("/api/bots/bot-4/historical-replay?days=", html)
+        self.assertIn("Preço e eventos simulados", html)
+        self.assertIn("Premissas do replay", html)
 
 
 if __name__ == "__main__":

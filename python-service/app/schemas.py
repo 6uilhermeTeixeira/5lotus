@@ -184,3 +184,40 @@ class CandleIngestRequest(BaseModel):
     symbol: str
     timeframe: str
     candles: list[CandleSnapshot] = Field(default_factory=list, max_length=1000)
+
+
+class ReplayValidationFold(BaseModel):
+    period_start_utc: datetime
+    period_end_utc: datetime
+    trades_count: int
+    expectancy_r: float
+    profit_factor: float
+    net_pnl: float
+    positive: bool
+
+
+class HistoricalReplayResponse(BaseModel):
+    bot_id: str
+    symbol: str
+    timeframe: str
+    period_start_utc: datetime
+    period_end_utc: datetime
+    candles_evaluated: int
+    candidates_detected: int
+    candidates_eligible: int = 0
+    candidates_blocked: int = 0
+    regime_counts: dict[str, int] = Field(default_factory=dict)
+    blocked_reasons: dict[str, int] = Field(default_factory=dict)
+    expectancy_r: float = 0.0
+    max_drawdown_r: float = 0.0
+    max_consecutive_losses: int = 0
+    forced_session_closes: int = 0
+    total_costs: float = 0.0
+    validation_status: str = "research_only"
+    validation_reason: str = ""
+    validation_folds: list[ReplayValidationFold] = Field(default_factory=list)
+    assumptions: list[str] = Field(default_factory=list)
+    summary: ResultsSummary
+    daily_pnl: list[DailyPnlPoint] = Field(default_factory=list)
+    candles: list[CandleSnapshot] = Field(default_factory=list)
+    trades: list[TradeResult] = Field(default_factory=list)

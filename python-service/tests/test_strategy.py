@@ -222,6 +222,21 @@ def stochastic_pullback_request(timestamp: datetime) -> DecisionRequest:
     )
 
 
+def stochastic_sell_request(timestamp: datetime) -> DecisionRequest:
+    request = stochastic_pullback_request(timestamp)
+    request.bot_id = "bot-6"
+    pivot = 200.0
+    for candle in request.candles:
+        old_open, old_high, old_low, old_close = candle.open, candle.high, candle.low, candle.close
+        candle.open = pivot - old_open
+        candle.high = pivot - old_low
+        candle.low = pivot - old_high
+        candle.close = pivot - old_close
+    request.bid = request.candles[-1].close
+    request.ask = request.bid + 0.1
+    return request
+
+
 class FlowAnalysisTests(unittest.TestCase):
     def test_strong_directional_flow_is_confirmed(self) -> None:
         start = datetime(2026, 7, 31, tzinfo=timezone.utc)
@@ -334,7 +349,53 @@ class DecisionTests(unittest.TestCase):
         self.assertGreater(response.metadata["stochastic_k"], response.metadata["stochastic_d"])
         self.assertIn("ema50", response.metadata)
 
-    def test_five_profiles_keep_independent_bot_scoped_state(self) -> None:
+    def test_stochastic_sell_experiment_blocks_buy_candidates(self) -> None:
+        request = stochastic_pullback_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
+        request.bot_id = "bot-6"
+
+        response = evaluate_decision(request, settings(), "stochastic_sell_session")
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.reason, "experimental_side_or_session_block")
+        self.assertFalse(response.metadata["candidate"])
+        self.assertTrue(response.metadata["base_candidate"])
+        self.assertEqual(response.metadata["experimental_block_reason"], "buy_side")
+
+    def test_stochastic_sell_experiment_accepts_sell_before_18_utc(self) -> None:
+        request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
+
+        response = evaluate_decision(request, settings(), "stochastic_sell_session")
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.reason, "stochastic_sell_session_shadow_signal")
+        self.assertTrue(response.metadata["candidate"])
+        self.assertEqual(response.metadata["suggested_action"], "sell")
+        self.assertEqual(response.metadata["experiment"], "sell_only_entry_before_18utc")
+        self.assertTrue(response.metadata["experimental_shadow_lock"])
+
+    def test_stochastic_sell_experiment_stays_shadow_when_global_live_is_enabled(self) -> None:
+        configured = settings()
+        configured.enable_live_decisions = True
+        configured.fimath_mode = "live"
+        request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
+
+        response = evaluate_decision(request, configured, "stochastic_sell_session")
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.size, 0)
+        self.assertEqual(response.reason, "stochastic_sell_session_shadow_signal")
+        self.assertTrue(response.metadata["experimental_shadow_lock"])
+
+    def test_stochastic_sell_experiment_blocks_entries_at_18_utc(self) -> None:
+        request = stochastic_sell_request(datetime(2026, 7, 31, 18, 20, tzinfo=timezone.utc))
+
+        response = evaluate_decision(request, settings(), "stochastic_sell_session")
+
+        self.assertEqual(response.reason, "experimental_side_or_session_block")
+        self.assertFalse(response.metadata["candidate"])
+        self.assertEqual(response.metadata["experimental_block_reason"], "entry_at_or_after_18utc")
+
+    def test_six_profiles_keep_independent_bot_scoped_state(self) -> None:
         candle_time = datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc)
         cases = [
             (bullish_request(candle_time), "fimath_ema20_flow"),
@@ -342,14 +403,15 @@ class DecisionTests(unittest.TestCase):
             (mean_reversion_request(candle_time), "rsi_bollinger_reversion"),
             (macd_trend_request(candle_time), "macd_trend_crossover"),
             (stochastic_pullback_request(candle_time), "stochastic_trend_pullback"),
+            (stochastic_sell_request(candle_time), "stochastic_sell_session"),
         ]
 
         responses = [evaluate_decision(request, settings(), profile) for request, profile in cases]
 
-        self.assertEqual({request.bot_id for request, _ in cases}, {"bot-1", "bot-2", "bot-3", "bot-4", "bot-5"})
+        self.assertEqual({request.bot_id for request, _ in cases}, {"bot-1", "bot-2", "bot-3", "bot-4", "bot-5", "bot-6"})
         self.assertEqual(
             {response.metadata["strategy_profile"] for response in responses},
-            {"fimath_ema20_flow", "momentum_atr_breakout", "rsi_bollinger_reversion", "macd_trend_crossover", "stochastic_trend_pullback"},
+            {"fimath_ema20_flow", "momentum_atr_breakout", "rsi_bollinger_reversion", "macd_trend_crossover", "stochastic_trend_pullback", "stochastic_sell_session"},
         )
         self.assertTrue(all(response.action == DecisionAction.HOLD for response in responses))
 

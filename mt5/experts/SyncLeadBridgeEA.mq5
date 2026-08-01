@@ -8,10 +8,11 @@ input string CandleCacheUrl = "http://127.0.0.1:8000/api/candles";
 input string LotusIngestApiKey = "";
 input string ResultsBotId = "bot-1";
 input string ShadowBotIds = "bot-2,bot-3,bot-4,bot-5";
+input string ExperimentalBotId = "bot-6";
 input string StrategySymbol = "XAUUSD";
 input string StrategyTimeframe = "M5";
 input int HistoryBars = 60;
-input int HistoryCacheBars = 2000;
+input int HistoryCacheBars = 100000;
 input int PollIntervalSeconds = 5;
 input int RequestTimeoutMs = 3000;
 input bool EnableOrderExecution = false;
@@ -82,13 +83,22 @@ void OnTimer()
 
    string shadowIds[];
    int shadowCount = StringSplit(ShadowBotIds, StringGetCharacter(",", 0), shadowIds);
+   bool experimentalPolled = ExperimentalBotId == ResultsBotId;
    for(int index = 0; index < shadowCount; index++)
    {
       StringTrimLeft(shadowIds[index]);
       StringTrimRight(shadowIds[index]);
       if(shadowIds[index] != "" && shadowIds[index] != ResultsBotId)
+      {
          PollDecision(tick, shadowIds[index], false);
+         if(shadowIds[index] == ExperimentalBotId)
+            experimentalPolled = true;
+      }
    }
+   // New inputs use their default even when an existing chart retains its old
+   // ShadowBotIds value, so the experiment can be introduced without touching secrets.
+   if(ExperimentalBotId != "" && !experimentalPolled)
+      PollDecision(tick, ExperimentalBotId, false);
 
    upTicks = downTicks = neutralTicks = 0;
    upVolume = downVolume = 0.0;
@@ -164,22 +174,18 @@ string BuildDecisionPayload(const MqlTick &tick, const string botId)
 
 void CacheConfiguredBots()
 {
+   // OHLCV belongs to the market, not to a strategy. Keep one deep canonical
+   // history and let every XAUUSD/M5 bot reuse it during historical replay.
    CacheHistory(ResultsBotId);
-   string shadowIds[];
-   int shadowCount = StringSplit(ShadowBotIds, StringGetCharacter(",", 0), shadowIds);
-   for(int index = 0; index < shadowCount; index++)
-   {
-      StringTrimLeft(shadowIds[index]);
-      StringTrimRight(shadowIds[index]);
-      if(shadowIds[index] != "" && shadowIds[index] != ResultsBotId)
-         CacheHistory(shadowIds[index]);
-   }
 }
 
 void CacheHistory(const string botId)
 {
    MqlRates rates[];
-   int copied = CopyRates(_Symbol, ResolveTimeframe(StrategyTimeframe), 1, HistoryCacheBars, rates);
+   // Existing charts retain their saved inputs across recompiles. Enforce the
+   // canonical-history floor even when an older chart still has 2000 configured.
+   int requestedBars = HistoryCacheBars < 100000 ? 100000 : HistoryCacheBars;
+   int copied = CopyRates(_Symbol, ResolveTimeframe(StrategyTimeframe), 1, requestedBars, rates);
    if(copied <= 0) { Print("No history available for cache."); return; }
    for(int start = 0; start < copied; start += 1000)
    {

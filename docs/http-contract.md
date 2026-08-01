@@ -113,7 +113,7 @@ O serviço trabalha com estes pressupostos:
 
 - ativo base: `XAUUSD`
 - timeframe base: `M5`
-- perfis de estratégia: `fimath_ema20_flow` no Bot 1, `momentum_atr_breakout` no Bot 2, `rsi_bollinger_reversion` no Bot 3, `macd_trend_crossover` no Bot 4 e `stochastic_trend_pullback` no Bot 5
+- perfis de estratégia: `fimath_ema20_flow` no Bot 1, `momentum_atr_breakout` no Bot 2, `rsi_bollinger_reversion` no Bot 3, `macd_trend_crossover` no Bot 4, `stochastic_trend_pullback` no Bot 5 e a variante shadow `stochastic_sell_session` no Bot 6
 - risco máximo por operação: `1%` da banca
 - gatilho: pullback/rejeição da MME20 ou padrão fora-dentro
 - stop: estrutura da rejeição com buffer de ATR(14)
@@ -151,3 +151,31 @@ Para disparar ordens automaticamente, todas as travas precisam estar liberadas:
 O roteiro operacional completo de teste em demo esta em:
 
 - `docs/demo-test-playbook.md`
+
+## Replay histórico autenticado
+
+- `GET /api/bots/{bot_id}/historical-replay?days=120`
+- `days` aceita valores de `1` a `30`
+- requer a mesma sessão autenticada do portal
+- requer candles em `market_candles` e `DAYTRADE_RESULTS_STORE=SUPABASE`
+
+O período termina no fechamento do candle mais recente disponível. A resposta inclui candles,
+operações simuladas, contagem de candidatos, resumo de performance, PnL diário e as premissas do
+cálculo. O replay não persiste registros e nunca aciona o endpoint de execução do MT5.
+
+Regras de simulação:
+
+- cada decisão recebe no máximo os 60 candles que estariam disponíveis naquele instante;
+- uma estratégia mantém no máximo uma posição simulada aberta por vez;
+- parcial em 1R move o stop do saldo para breakeven e o alvo final permanece em 2R;
+- quando o OHLC toca stop e alvo no mesmo candle, o stop vence;
+- entrada, spread, slippage e custos são aproximações configuráveis;
+- para `fimath_ema20_flow`, apenas o gatilho técnico pode ser reconstruído porque OHLC não contém livro nem sequência de ticks.
+- todos os bots XAUUSD/M5 reutilizam o histórico canônico do Bot 1, evitando coberturas diferentes para o mesmo mercado;
+- entradas fora da sessão configurada são bloqueadas e qualquer posição restante é fechada no fim do dia;
+- compras usam ask na entrada e bid na saída; vendas usam bid na entrada e ask na saída;
+- slippage e comissão são aplicados aos fills;
+- estratégias de tendência exigem H1 em tendência e lado alinhado; reversão à média exige regime de range;
+- a resposta inclui expectativa em R, drawdown em R, bloqueios, regimes e janelas temporais de validação;
+- menos de 90 dias resulta em `validation_status=insufficient_history`, mesmo que o PnL do mês seja positivo;
+- a estabilidade usa janelas de 30 dias por padrão, adequadas à frequência observada das estratégias.
