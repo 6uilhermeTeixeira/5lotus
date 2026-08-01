@@ -11,6 +11,7 @@ from .strategy import evaluate_decision
 
 
 HISTORY_BARS = 60
+MULTITIMEFRAME_HISTORY_BARS = 1000
 
 
 @dataclass
@@ -35,6 +36,8 @@ class _OpenTrade:
     realized_gross_pnl: float = 0.0
     partial_hit: bool = False
     regime: str = "unknown"
+    bars_held: int = 0
+    max_holding_bars: int | None = None
 
 
 def _timeframe_delta(timeframe: str) -> timedelta:
@@ -111,6 +114,7 @@ def _finish_trade(
 
 
 def _advance_trade(trade: _OpenTrade, candle: CandleSnapshot, settings: Settings) -> TradeResult | None:
+    trade.bars_held += 1
     spread_price = settings.backtest_spread_points * trade.point_size
     slippage_price = settings.backtest_slippage_points * trade.point_size
     buy = trade.side == "buy"
@@ -123,6 +127,8 @@ def _advance_trade(trade: _OpenTrade, candle: CandleSnapshot, settings: Settings
     if not trade.partial_hit and partial_reached:
         fraction = trade.partial_close_pct / 100
         partial_fill = _exit_fill(trade.partial_price, trade.side, slippage_price)
+        if fraction >= 1:
+            return _finish_trade(trade, candle.timestamp_utc, partial_fill, settings, "target")
         trade.realized_gross_pnl += _pnl_for_fill(trade, partial_fill, fraction)
         trade.remaining_fraction -= fraction
         trade.partial_hit = True
@@ -131,6 +137,8 @@ def _advance_trade(trade: _OpenTrade, candle: CandleSnapshot, settings: Settings
     target_reached = quote_high >= trade.target_price if buy else quote_low <= trade.target_price
     if trade.partial_hit and target_reached:
         return _finish_trade(trade, candle.timestamp_utc, _exit_fill(trade.target_price, trade.side, slippage_price), settings, "target")
+    if trade.max_holding_bars is not None and trade.bars_held >= trade.max_holding_bars:
+        return _force_close(trade, candle, settings, "max_holding_bars")
     return None
 
 
@@ -194,7 +202,8 @@ def run_historical_replay(
     period_end = ordered[-1].timestamp_utc + interval
     requested_start = period_end - timedelta(days=days)
     first_visible = next((index for index, candle in enumerate(ordered) if candle.timestamp_utc >= requested_start), len(ordered) - 1)
-    evaluation_start = max(HISTORY_BARS - 1, first_visible)
+    history_bars = MULTITIMEFRAME_HISTORY_BARS if bot.strategy_profile == "multitimeframe_trend_pullback" else HISTORY_BARS
+    evaluation_start = max(history_bars - 1, first_visible)
     replay_settings = _replay_settings(settings, bot)
     regime_timeline = build_regime_timeline(ordered, settings) if settings.backtest_regime_enabled else ([], [])
     session_start = _parse_time(settings.backtest_session_start_utc)
@@ -243,7 +252,7 @@ def run_historical_replay(
             open_trade = None
             forced_session_closes += 1
 
-        history = ordered[max(0, index - HISTORY_BARS + 1):index + 1]
+        history = ordered[max(0, index - history_bars + 1):index + 1]
         request = DecisionRequest(
             bot_id=f"replay-{bot.id}",
             request_id=f"replay-{bot.id}-{int(candle.timestamp_utc.timestamp())}",
@@ -267,14 +276,18 @@ def run_historical_replay(
         side = str(response.metadata["suggested_action"])
         regime: RegimeSnapshot = regime_at(regime_timeline, candle_end) if settings.backtest_regime_enabled else RegimeSnapshot("disabled", side, "regime_filter_disabled")
         regime_counts[regime.name] += 1
-        regime_allowed, regime_reason = regime_allows(bot.strategy_profile, side, regime) if settings.backtest_regime_enabled else (True, "regime_filter_disabled")
+        if bot.strategy_profile == "multitimeframe_trend_pullback":
+            regime_allowed, regime_reason = True, "strategy_uses_internal_h1_m15_regime"
+        else:
+            regime_allowed, regime_reason = regime_allows(bot.strategy_profile, side, regime) if settings.backtest_regime_enabled else (True, "regime_filter_disabled")
         if not regime_allowed:
             blocked_reasons[regime_reason] += 1
             previous_candle = candle
             continue
         day = candle_end.date()
         session_allowed = session_start <= candle_end.time() < session_end
-        risk_allowed = trades_per_day[day] < settings.backtest_max_trades_per_day and daily_outcome_r[day] > -settings.backtest_daily_loss_limit_r
+        daily_trade_cap = min(settings.backtest_max_trades_per_day, 2) if bot.strategy_profile == "multitimeframe_trend_pullback" else settings.backtest_max_trades_per_day
+        risk_allowed = trades_per_day[day] < daily_trade_cap and daily_outcome_r[day] > -settings.backtest_daily_loss_limit_r
         cooldown_allowed = index > cooldown_until_index
         if not session_allowed:
             blocked_reasons["outside_liquid_session"] += 1
@@ -308,8 +321,10 @@ def run_historical_replay(
                 point_size=settings.backtest_point_size,
                 value_per_point_per_lot=settings.backtest_value_per_point_per_lot,
                 partial_close_pct=settings.fimath_partial_pct,
+                max_holding_bars=int(response.metadata["max_holding_bars"]) if "max_holding_bars" in response.metadata else None,
                 regime=(f"{regime.name}:{regime.direction}:adx={regime.adx:.2f}:atr_pct={regime.atr_percentile:.1f}" if regime.adx is not None and regime.atr_percentile is not None else f"{regime.name}:{regime.direction}"),
             )
+            open_trade.partial_close_pct = response.partial_close_pct
             trades_per_day[day] += 1
         previous_candle = candle
 

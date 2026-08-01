@@ -5,7 +5,7 @@ from app.schemas import BotCatalogItem
 
 
 class ComparisonPageTests(unittest.TestCase):
-    def test_comparison_page_renders_six_independent_bots(self) -> None:
+    def test_comparison_page_renders_seven_independent_bots(self) -> None:
         bots = [
             BotCatalogItem(
                 id=f"bot-{index}",
@@ -22,6 +22,7 @@ class ComparisonPageTests(unittest.TestCase):
                 (4, "Bot 4 — MACD Trend", "macd_trend_crossover"),
                 (5, "Bot 5 — Stochastic Pullback", "stochastic_trend_pullback"),
                 (6, "Bot 6 — Stochastic Sell 18 UTC", "stochastic_sell_session"),
+                (7, "Bot 7 — Tendência Multitemporal", "multitimeframe_trend_pullback"),
             ]
         ]
 
@@ -35,7 +36,8 @@ class ComparisonPageTests(unittest.TestCase):
         self.assertIn("Bot 4 — MACD Trend", html)
         self.assertIn("Bot 5 — Stochastic Pullback", html)
         self.assertIn("Bot 6 — Stochastic Sell 18 UTC", html)
-        self.assertIn("<strong>6</strong>", html)
+        self.assertIn("Bot 7 — Tendência Multitemporal", html)
+        self.assertIn("<strong>7</strong>", html)
         self.assertIn("/api/compare", html)
 
     def test_results_page_defaults_to_long_historical_validation(self) -> None:

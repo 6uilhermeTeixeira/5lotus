@@ -46,6 +46,7 @@ Ja existe implementacao para:
 - validar as estratégias candle a candle nos últimos 120 dias disponíveis e apresentar entradas, saídas e métricas simuladas sem depender do mercado aberto
 - filtrar sinais por regime H1, sessão e limites diários, com custos de execução e validação temporal explícitos
 - acompanhar uma variante experimental Stochastic somente vendida antes das 18h UTC, isolada em shadow como Bot 6
+- acompanhar o Bot 7 multitemporal em shadow, com tendência H1, confirmação M15, gatilho M5, somente compras entre 13h e 16h UTC e metade do risco padrão por operação
 
 ## Estrutura inicial
 

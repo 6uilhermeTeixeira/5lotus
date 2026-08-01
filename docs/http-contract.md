@@ -113,7 +113,8 @@ O serviço trabalha com estes pressupostos:
 
 - ativo base: `XAUUSD`
 - timeframe base: `M5`
-- perfis de estratégia: `fimath_ema20_flow` no Bot 1, `momentum_atr_breakout` no Bot 2, `rsi_bollinger_reversion` no Bot 3, `macd_trend_crossover` no Bot 4, `stochastic_trend_pullback` no Bot 5 e a variante shadow `stochastic_sell_session` no Bot 6
+- perfis de estratégia: `fimath_ema20_flow` no Bot 1, `momentum_atr_breakout` no Bot 2, `rsi_bollinger_reversion` no Bot 3, `macd_trend_crossover` no Bot 4, `stochastic_trend_pullback` no Bot 5, `stochastic_sell_session` no Bot 6 e `multitimeframe_trend_pullback` no Bot 7
+- no Bot 7, `risk_amount`, `suggested_size` e `effective_risk_pct` já incorporam o multiplicador experimental de risco `0,5`; o alvo é `0,75R` e somente sinais de compra entre 13:00 e 15:59 UTC são candidatos
 - risco máximo por operação: `1%` da banca
 - gatilho: pullback/rejeição da MME20 ou padrão fora-dentro
 - stop: estrutura da rejeição com buffer de ATR(14)

@@ -32,6 +32,7 @@ Perfis atuais, executados em paralelo:
 - Bot 4: `macd_trend_crossover`
 - Bot 5: `stochastic_trend_pullback`
 - Bot 6: `stochastic_sell_session` — variante shadow somente vendida, com entradas antes das 18h UTC
+- Bot 7: `multitimeframe_trend_pullback` — tendência H1/M15, pullback M5 somente comprado entre 13h e 16h UTC, alvo de 0,75R e 50% do risco padrão, bloqueado em shadow
 - risco por operacao: `1%` da banca
 - risco/retorno final: `2R`, com parcial de `50%` em `1R`
 
@@ -164,7 +165,7 @@ open http://127.0.0.1:8000/login
 
 O servico expoe um portal protegido por senha em `/login`. Depois do acesso, `/bots` lista os
 testes disponiveis e cada bot possui uma pagina individual em `/bots/<id>`. A rota antiga
-`/results` redireciona para o primeiro bot do catalogo. A página `/compare` apresenta os seis
+`/results` redireciona para o primeiro bot do catalogo. A página `/compare` apresenta os sete
 perfis lado a lado e atualiza seus indicadores pela API autenticada `/api/compare`.
 
 O catálogo fica em `data/bots.json`. Para adicionar outro bot, inclua um novo item com `id`

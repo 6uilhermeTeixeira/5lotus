@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -157,15 +157,29 @@ class SupabaseStore:
             entry = float(trade["entry_price"])
             partial = float(trade["partial_price"])
             target = float(trade["target_price"])
+            initial_stop = float(trade["initial_stop_price"])
+            risk = abs(entry - initial_stop)
+            partial_fraction = float(trade.get("partial_close_pct", 50)) / 100
+            direction = 1 if buy else -1
+            partial_r = direction * (partial - entry) / risk if risk else 0
+            target_r = direction * (target - entry) / risk if risk else 0
             patch: dict[str, object] = {}
             # Conservative intrabar rule: a stop has precedence over all targets.
             stopped = candle.low <= stop if buy else candle.high >= stop
             if stopped:
-                patch = {"status": "closed", "closed_at_utc": candle.timestamp_utc.isoformat(), "outcome_r": 0.5 if trade["partial_hit"] else -1}
+                outcome_r = partial_fraction * partial_r if trade["partial_hit"] else -1
+                patch = {"status": "closed", "closed_at_utc": candle.timestamp_utc.isoformat(), "outcome_r": outcome_r}
             elif not trade["partial_hit"] and (candle.high >= partial if buy else candle.low <= partial):
-                patch = {"partial_hit": True, "stop_price": entry}
+                if partial_fraction >= 1:
+                    patch = {"partial_hit": True, "status": "closed", "closed_at_utc": candle.timestamp_utc.isoformat(), "outcome_r": partial_r}
+                else:
+                    patch = {"partial_hit": True, "stop_price": entry}
             elif trade["partial_hit"] and (candle.high >= target if buy else candle.low <= target):
-                patch = {"status": "closed", "closed_at_utc": candle.timestamp_utc.isoformat(), "outcome_r": 1.5}
+                outcome_r = partial_fraction * partial_r + (1 - partial_fraction) * target_r
+                patch = {"status": "closed", "closed_at_utc": candle.timestamp_utc.isoformat(), "outcome_r": outcome_r}
+            elif trade.get("expires_at_utc") and candle.timestamp_utc + timedelta(minutes=5) >= datetime.fromisoformat(str(trade["expires_at_utc"])):
+                outcome_r = direction * (candle.close - entry) / risk if risk else 0
+                patch = {"status": "closed", "closed_at_utc": candle.timestamp_utc.isoformat(), "outcome_r": outcome_r}
             if patch:
                 filters = urlencode({"signal_key": f"eq.{trade['signal_key']}", "variant": f"eq.{trade['variant']}"})
                 self._request(f"paper_trades?{filters}", method="PATCH", payload=patch, prefer="return=minimal")
@@ -221,6 +235,10 @@ class SupabaseStore:
             "signal_key": signal_key, "variant": variant, "bot_id": payload.bot_id, "side": str(response.metadata.get("suggested_action", "buy")),
             "entry_price": response.entry_price, "initial_stop_price": response.stop_loss_price, "stop_price": response.stop_loss_price,
             "partial_price": response.partial_take_profit_price, "target_price": response.final_take_profit_price,
+            "partial_close_pct": response.partial_close_pct,
+            "expires_at_utc": (
+                payload.timestamp_utc + timedelta(minutes=5 * int(response.metadata["max_holding_bars"]))
+            ).isoformat() if "max_holding_bars" in response.metadata else None,
             "opened_at_utc": payload.timestamp_utc.isoformat(),
         }, prefer="resolution=ignore-duplicates,return=minimal")
         return True

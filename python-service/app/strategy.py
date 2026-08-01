@@ -29,6 +29,15 @@ class Setup:
     macd_histogram: float | None = None
     stochastic_k: float | None = None
     stochastic_d: float | None = None
+    partial_close_pct: float | None = None
+    move_stop_to_breakeven: bool = True
+    max_holding_bars: int | None = None
+    h1_ema20: float | None = None
+    h1_ema50: float | None = None
+    m15_ema9: float | None = None
+    m15_ema21: float | None = None
+    trend_strength: float | None = None
+    risk_multiplier: float = 1.0
 
 
 @dataclass
@@ -437,6 +446,120 @@ def _stochastic_pullback_setup_for_candle(request: DecisionRequest) -> Setup | N
     return setup
 
 
+def _aggregate_complete(candles: list[CandleSnapshot], minutes: int) -> list[CandleSnapshot]:
+    grouped: list[CandleSnapshot] = []
+    bucket: list[CandleSnapshot] = []
+    bucket_time: datetime | None = None
+    expected = minutes // 5
+    for candle in candles:
+        current_bucket = candle.timestamp_utc.replace(
+            minute=(candle.timestamp_utc.minute // minutes) * minutes,
+            second=0,
+            microsecond=0,
+        )
+        if bucket_time is not None and current_bucket != bucket_time:
+            if len(bucket) == expected:
+                grouped.append(CandleSnapshot(
+                    timestamp_utc=bucket_time,
+                    open=bucket[0].open,
+                    high=max(row.high for row in bucket),
+                    low=min(row.low for row in bucket),
+                    close=bucket[-1].close,
+                    volume=sum(row.volume for row in bucket),
+                ))
+            bucket = []
+        bucket_time = current_bucket
+        bucket.append(candle)
+    if bucket_time is not None and len(bucket) == expected:
+        grouped.append(CandleSnapshot(
+            timestamp_utc=bucket_time,
+            open=bucket[0].open,
+            high=max(row.high for row in bucket),
+            low=min(row.low for row in bucket),
+            close=bucket[-1].close,
+            volume=sum(row.volume for row in bucket),
+        ))
+    return grouped
+
+
+def _multitimeframe_trend_pullback_setup(request: DecisionRequest) -> Setup | None:
+    candles = request.candles
+    if len(candles) < 600 or not time(13, 0) <= request.timestamp_utc.astimezone(timezone.utc).time() < time(16, 0):
+        return None
+    hourly = _aggregate_complete(candles, 60)
+    fifteen_minute = _aggregate_complete(candles, 15)
+    if len(hourly) < 51 or len(fifteen_minute) < 22:
+        return None
+    hourly_closes = [row.close for row in hourly]
+    m15_closes = [row.close for row in fifteen_minute]
+    h1_ema20 = _ema(hourly_closes, 20)
+    h1_previous_ema20 = _ema(hourly_closes[:-1], 20)
+    h1_ema50 = _ema(hourly_closes, 50)
+    h1_atr14 = _atr(hourly, 14)
+    m15_ema9 = _ema(m15_closes, 9)
+    m15_previous_ema9 = _ema(m15_closes[:-1], 9)
+    m15_ema21 = _ema(m15_closes, 21)
+    closes = [row.close for row in candles]
+    ema9 = _ema(closes, 9)
+    ema21 = _ema(closes, 21)
+    atr14 = _atr(candles, 14)
+    current = candles[-1]
+    strength = abs(h1_ema20 - h1_ema50) / h1_atr14 if h1_atr14 else 0.0
+    bullish = (
+        strength >= .7
+        and h1_ema20 > h1_ema50
+        and h1_ema20 > h1_previous_ema20
+        and m15_ema9 > m15_ema21
+        and m15_ema9 > m15_previous_ema9
+        and ema9 > ema21
+        and current.low <= ema9
+        and current.close > ema9
+        and current.close > current.open
+    )
+    if not bullish:
+        return None
+    action = DecisionAction.BUY
+    entry = request.ask
+    stop_distance = atr14 * 1.2
+    stop = entry - stop_distance
+    target = entry + stop_distance * .75
+    return Setup(
+        action=action,
+        setup_type="multitimeframe_trend_pullback",
+        entry=entry,
+        stop=stop,
+        partial=target,
+        target=target,
+        stop_points=stop_distance / request.point_size,
+        flow_mode="not_applicable",
+        ema20=ema9,
+        atr14=atr14,
+        ema50=ema21,
+        partial_close_pct=100.0,
+        move_stop_to_breakeven=False,
+        max_holding_bars=12,
+        h1_ema20=h1_ema20,
+        h1_ema50=h1_ema50,
+        m15_ema9=m15_ema9,
+        m15_ema21=m15_ema21,
+        trend_strength=strength,
+        risk_multiplier=.5,
+    )
+
+
+def _multitimeframe_setup_for_candle(request: DecisionRequest) -> Setup | None:
+    if not request.candles:
+        return None
+    key = f"multitimeframe:{request.bot_id or request.symbol}:{request.symbol}:{request.timeframe}"
+    candle_timestamp = request.candles[-1].timestamp_utc
+    cached = _setup_cache.get(key)
+    if cached and cached[0] == candle_timestamp:
+        return cached[1]
+    setup = _multitimeframe_trend_pullback_setup(request)
+    _setup_cache[key] = (candle_timestamp, setup)
+    return setup
+
+
 def _candidate_response(
     request: DecisionRequest,
     settings: Settings,
@@ -448,7 +571,8 @@ def _candidate_response(
     reason: str,
     strategy_profile: str,
 ) -> DecisionResponse:
-    size = round(_position_size(request.account.balance, settings.risk_per_trade_pct, setup.stop_points, request.value_per_point_per_lot), 2)
+    effective_risk_pct = settings.risk_per_trade_pct * setup.risk_multiplier
+    size = round(_position_size(request.account.balance, effective_risk_pct, setup.stop_points, request.value_per_point_per_lot), 2)
     candle_timestamp = request.candles[-1].timestamp_utc
     metadata: dict[str, str | int | float | bool] = {
         "strategy_profile": strategy_profile,
@@ -464,6 +588,8 @@ def _candidate_response(
         "atr14": round(setup.atr14, 5),
         "suggested_size": size,
         "suggested_action": setup.action.value,
+        "risk_multiplier": setup.risk_multiplier,
+        "effective_risk_pct": round(effective_risk_pct, 5),
     }
     if flow.book_z is not None:
         metadata["book_z"] = round(flow.book_z, 5)
@@ -491,20 +617,27 @@ def _candidate_response(
         metadata["stochastic_k"] = round(setup.stochastic_k, 5)
     if setup.stochastic_d is not None:
         metadata["stochastic_d"] = round(setup.stochastic_d, 5)
+    for name in ("h1_ema20", "h1_ema50", "m15_ema9", "m15_ema21", "trend_strength"):
+        value = getattr(setup, name)
+        if value is not None:
+            metadata[name] = round(value, 5)
+    if setup.max_holding_bars is not None:
+        metadata["max_holding_bars"] = setup.max_holding_bars
+    partial_close_pct = setup.partial_close_pct if setup.partial_close_pct is not None else settings.fimath_partial_pct
     return DecisionResponse(
         action=setup.action if executable else DecisionAction.HOLD,
         reason=reason,
         size=size if executable else 0.0,
-        risk_amount=round(request.account.balance * settings.risk_per_trade_pct / 100, 2),
+        risk_amount=round(request.account.balance * effective_risk_pct / 100, 2),
         entry_price=setup.entry,
         stop_loss_price=setup.stop,
         take_profit_price=setup.target,
         stop_loss_points=round(setup.stop_points, 2),
-        take_profit_points=round(setup.stop_points * 2, 2),
+        take_profit_points=round(abs(setup.target - setup.entry) / request.point_size, 2),
         partial_take_profit_price=setup.partial,
         final_take_profit_price=setup.target,
-        partial_close_pct=settings.fimath_partial_pct,
-        move_stop_to_breakeven=True,
+        partial_close_pct=partial_close_pct,
+        move_stop_to_breakeven=setup.move_stop_to_breakeven,
         risk_checks=checks,
         metadata=metadata,
     )
@@ -697,6 +830,34 @@ def _evaluate_stochastic_sell_session(request: DecisionRequest, settings: Settin
     return response
 
 
+def _evaluate_multitimeframe_trend_pullback(request: DecisionRequest, settings: Settings, strategy_profile: str) -> DecisionResponse:
+    setup = _multitimeframe_setup_for_candle(request)
+    checks = [
+        RiskCheck(name="symbol_match", passed=request.symbol.upper() == settings.default_symbol.upper(), detail=f"expected={settings.default_symbol}"),
+        RiskCheck(name="timeframe_match", passed=request.timeframe.upper() == settings.default_timeframe.upper(), detail=f"expected={settings.default_timeframe}"),
+        RiskCheck(name="spread_limit", passed=request.spread_points <= settings.max_spread_points, detail=f"max={settings.max_spread_points}"),
+        RiskCheck(name="multitimeframe_setup", passed=setup is not None, detail="bullish_h1_ema20_50_strength_0.7 + bullish_m15_ema9_21 + m5_pullback + 13_16utc"),
+    ]
+    if not all(check.passed for check in checks[:3]):
+        return DecisionResponse(action=DecisionAction.HOLD, reason="market_filter_mismatch", risk_checks=checks)
+    if setup is None:
+        return DecisionResponse(action=DecisionAction.HOLD, reason="multitimeframe_setup_not_confirmed", risk_checks=checks)
+    response = _candidate_response(
+        request,
+        settings,
+        setup,
+        checks,
+        FlowAnalysis(True, False, False, "not_applicable"),
+        executable=False,
+        reason="multitimeframe_trend_pullback_shadow_signal",
+        strategy_profile=strategy_profile,
+    )
+    response.metadata["experimental_shadow_lock"] = True
+    response.metadata["research_status"] = "exploratory_requires_forward_validation"
+    response.risk_checks.append(RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled"))
+    return response
+
+
 def evaluate_decision(request: DecisionRequest, settings: Settings, strategy_profile: str | None = None) -> DecisionResponse:
     profile = strategy_profile or settings.strategy_profile
     if profile == "momentum_atr_breakout":
@@ -709,6 +870,8 @@ def evaluate_decision(request: DecisionRequest, settings: Settings, strategy_pro
         return _evaluate_stochastic_pullback(request, settings, profile)
     if profile == "stochastic_sell_session":
         return _evaluate_stochastic_sell_session(request, settings, profile)
+    if profile == "multitimeframe_trend_pullback":
+        return _evaluate_multitimeframe_trend_pullback(request, settings, profile)
     if profile == "fimath_ema20_flow":
         return _evaluate_fimath(request, settings, profile)
     return DecisionResponse(

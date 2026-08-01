@@ -237,6 +237,54 @@ def stochastic_sell_request(timestamp: datetime) -> DecisionRequest:
     return request
 
 
+def multitimeframe_sell_request(decision_time: datetime) -> DecisionRequest:
+    first = decision_time - timedelta(minutes=5 * 1000)
+    candles = []
+    for index in range(1000):
+        close = 220 - index * .03
+        candles.append(CandleSnapshot(
+            timestamp_utc=first + timedelta(minutes=index * 5),
+            open=close + .02,
+            high=close + .08,
+            low=close - .08,
+            close=close,
+            volume=100,
+        ))
+    current = candles[-1]
+    current.open = current.close + .18
+    current.high = current.open + .08
+    current.low = current.close - .08
+    return DecisionRequest(
+        bot_id="bot-7",
+        request_id=f"multitimeframe-{decision_time.timestamp()}",
+        timestamp_utc=decision_time,
+        symbol="XAUUSD",
+        timeframe="M5",
+        bid=current.close,
+        ask=current.close + .1,
+        spread_points=10,
+        point_size=.01,
+        value_per_point_per_lot=1,
+        candles=candles,
+        positions=[],
+        account=AccountSnapshot(balance=10_000, equity=10_000, margin_free=10_000),
+    )
+
+
+def multitimeframe_buy_request(decision_time: datetime) -> DecisionRequest:
+    request = multitimeframe_sell_request(decision_time)
+    pivot = 200.0
+    for candle in request.candles:
+        old_open, old_high, old_low, old_close = candle.open, candle.high, candle.low, candle.close
+        candle.open = pivot - old_open
+        candle.high = pivot - old_low
+        candle.low = pivot - old_high
+        candle.close = pivot - old_close
+    request.bid = request.candles[-1].close
+    request.ask = request.bid + .1
+    return request
+
+
 class FlowAnalysisTests(unittest.TestCase):
     def test_strong_directional_flow_is_confirmed(self) -> None:
         start = datetime(2026, 7, 31, tzinfo=timezone.utc)
@@ -395,7 +443,41 @@ class DecisionTests(unittest.TestCase):
         self.assertFalse(response.metadata["candidate"])
         self.assertEqual(response.metadata["experimental_block_reason"], "entry_at_or_after_18utc")
 
-    def test_six_profiles_keep_independent_bot_scoped_state(self) -> None:
+    def test_multitimeframe_profile_aligns_h1_m15_and_m5_in_shadow(self) -> None:
+        request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+
+        response = evaluate_decision(request, settings(), "multitimeframe_trend_pullback")
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.reason, "multitimeframe_trend_pullback_shadow_signal")
+        self.assertTrue(response.metadata["candidate"])
+        self.assertEqual(response.metadata["suggested_action"], "buy")
+        self.assertGreaterEqual(response.metadata["trend_strength"], .7)
+        self.assertEqual(response.metadata["risk_multiplier"], .5)
+        self.assertEqual(response.metadata["effective_risk_pct"], .5)
+        self.assertEqual(response.risk_amount, 50)
+        self.assertAlmostEqual(response.take_profit_points / response.stop_loss_points, .75, places=2)
+        self.assertEqual(response.partial_close_pct, 100)
+        self.assertEqual(response.metadata["max_holding_bars"], 12)
+        self.assertTrue(response.metadata["experimental_shadow_lock"])
+
+    def test_multitimeframe_profile_blocks_entries_outside_research_session(self) -> None:
+        request = multitimeframe_buy_request(datetime(2026, 7, 31, 16, 0, tzinfo=timezone.utc))
+
+        response = evaluate_decision(request, settings(), "multitimeframe_trend_pullback")
+
+        self.assertEqual(response.reason, "multitimeframe_setup_not_confirmed")
+        self.assertFalse(response.metadata.get("candidate", False))
+
+    def test_multitimeframe_profile_rejects_sells_in_reduced_loss_experiment(self) -> None:
+        request = multitimeframe_sell_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+
+        response = evaluate_decision(request, settings(), "multitimeframe_trend_pullback")
+
+        self.assertEqual(response.reason, "multitimeframe_setup_not_confirmed")
+        self.assertFalse(response.metadata.get("candidate", False))
+
+    def test_seven_profiles_keep_independent_bot_scoped_state(self) -> None:
         candle_time = datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc)
         cases = [
             (bullish_request(candle_time), "fimath_ema20_flow"),
@@ -404,14 +486,15 @@ class DecisionTests(unittest.TestCase):
             (macd_trend_request(candle_time), "macd_trend_crossover"),
             (stochastic_pullback_request(candle_time), "stochastic_trend_pullback"),
             (stochastic_sell_request(candle_time), "stochastic_sell_session"),
+            (multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc)), "multitimeframe_trend_pullback"),
         ]
 
         responses = [evaluate_decision(request, settings(), profile) for request, profile in cases]
 
-        self.assertEqual({request.bot_id for request, _ in cases}, {"bot-1", "bot-2", "bot-3", "bot-4", "bot-5", "bot-6"})
+        self.assertEqual({request.bot_id for request, _ in cases}, {"bot-1", "bot-2", "bot-3", "bot-4", "bot-5", "bot-6", "bot-7"})
         self.assertEqual(
             {response.metadata["strategy_profile"] for response in responses},
-            {"fimath_ema20_flow", "momentum_atr_breakout", "rsi_bollinger_reversion", "macd_trend_crossover", "stochastic_trend_pullback", "stochastic_sell_session"},
+            {"fimath_ema20_flow", "momentum_atr_breakout", "rsi_bollinger_reversion", "macd_trend_crossover", "stochastic_trend_pullback", "stochastic_sell_session", "multitimeframe_trend_pullback"},
         )
         self.assertTrue(all(response.action == DecisionAction.HOLD for response in responses))
 

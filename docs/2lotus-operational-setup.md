@@ -48,7 +48,9 @@ Preencha os inputs:
 - `ResultsBotId`: `bot-1`
 - `ShadowBotIds`: `bot-2,bot-3,bot-4,bot-5` (aceita uma lista separada por vírgulas)
 - `ExperimentalBotId`: `bot-6` (força o polling do experimento mesmo em gráficos que preservam a lista shadow antiga)
+- `MultitimeframeResearchBotId`: `bot-7` (força o polling do experimento multitemporal sempre sem execução)
 - `HistoryCacheBars`: `100000` somente no bot canônico, visando aproximadamente um ano de M5 quando a corretora disponibilizar essa profundidade
+- `RefreshDeepHistoryOnInit`: `false` por padrão; ative somente para um bootstrap explícito dos 100 mil candles
 - `LotusIngestApiKey`: valor de `DAYTRADE_INGEST_API_KEY`
 - `EnableOrderExecution`: `false`
 
@@ -82,7 +84,7 @@ O resultado deve indicar `"status":"ok"`. Após o fechamento de um trade demo, o
 `POST /api/trades` com a chave no header `X-2Lotus-Ingest-Key`; o painel 2Lotus passa a mostrar a
 operação gravada no Supabase.
 
-Durante shadow, confirme também nos logs que os seis `bot_id` recebem HTTP 200. `strategy_signals`
+Durante shadow, confirme também nos logs que os sete `bot_id` recebem HTTP 200. `strategy_signals`
 recebe os candidatos quando cada setup ocorre e `paper_trades` mantém o variant `technical`;
 o Bot 1 também acompanha `flow_confirmed`. As chaves de sinal e as consultas de posição são
 segmentadas por bot. A execução real só pode ser avaliada depois da
@@ -91,6 +93,13 @@ amostra mínima e deve continuar com `EnableOrderExecution=false` até aprovaç�
 O Bot 6 é uma experiência controlada: reutiliza o Stochastic Pullback, aceita somente vendas
 com timestamp anterior às 18h UTC e mantém a liquidação diária padrão até 21h UTC. Seu status
 `promising_not_live` autoriza apenas shadow/forward test, nunca execução automática.
+
+O Bot 7 é outra experiência controlada: usa MME20/MME50 em H1 para a tendência longa,
+MME9/MME21 em M15 para a tendência curta e pullback na MME9 do M5 como gatilho. As entradas
+ficam limitadas a compras entre 13:00–15:59 UTC, exigem força mínima de 0,7 ATR(H1), usam alvo
+único de 0,75R, stop técnico de 1,2 ATR e apenas 50% do risco padrão por operação. A duração
+máxima continua em 60 minutos. Mesmo que o backtest supere 70%, o EA sempre consulta esse bot
+com execução falsa.
 
 ## Segurança e recuperação
 

@@ -285,6 +285,12 @@ def decision(payload: DecisionRequest, x_2lotus_ingest_key: str | None = Header(
         store = SupabaseStore(settings)
         store.upsert_candles(payload.bot_id, payload.symbol, payload.timeframe, payload.candles)
         store.advance_paper_trades(payload.bot_id, payload.candles)
+        if strategy_profile == "multitimeframe_trend_pullback":
+            payload.candles = store.load_candles(
+                bot,
+                1000,
+                source_bot_id=settings.backtest_market_data_bot_id,
+            )
     response = evaluate_decision(payload, settings, strategy_profile)
     if payload.bot_id and store and response.metadata.get("candidate"):
         signal_key = store.record_strategy_candidate(payload, response)

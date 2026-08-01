@@ -196,6 +196,37 @@ class SupabaseStoreTests(unittest.TestCase):
         patch_calls = [call for call in store.calls if call[1] == "PATCH"]
         self.assertEqual(patch_calls, [])
 
+    def test_full_single_target_paper_trade_closes_at_half_r(self) -> None:
+        store = RecordingStore()
+        store.open_rows = [{
+            "signal_key": "signal-7",
+            "variant": "technical",
+            "side": "buy",
+            "entry_price": 100,
+            "initial_stop_price": 99,
+            "stop_price": 99,
+            "partial_price": 100.5,
+            "target_price": 100.5,
+            "partial_close_pct": 100,
+            "partial_hit": False,
+            "opened_at_utc": "2026-07-31T15:00:00+00:00",
+            "expires_at_utc": "2026-07-31T16:00:00+00:00",
+        }]
+        candle = CandleSnapshot(
+            timestamp_utc="2026-07-31T15:05:00Z",
+            open=100,
+            high=100.6,
+            low=99.8,
+            close=100.5,
+            volume=100,
+        )
+
+        store.advance_paper_trades("bot-7", [candle])
+
+        patch = next(call[2] for call in store.calls if call[1] == "PATCH")
+        self.assertEqual(patch["status"], "closed")
+        self.assertEqual(patch["outcome_r"], .5)
+
 
 if __name__ == "__main__":
     unittest.main()

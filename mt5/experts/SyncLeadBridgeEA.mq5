@@ -9,10 +9,12 @@ input string LotusIngestApiKey = "";
 input string ResultsBotId = "bot-1";
 input string ShadowBotIds = "bot-2,bot-3,bot-4,bot-5";
 input string ExperimentalBotId = "bot-6";
+input string MultitimeframeResearchBotId = "bot-7";
 input string StrategySymbol = "XAUUSD";
 input string StrategyTimeframe = "M5";
 input int HistoryBars = 60;
 input int HistoryCacheBars = 100000;
+input bool RefreshDeepHistoryOnInit = false;
 input int PollIntervalSeconds = 5;
 input int RequestTimeoutMs = 3000;
 input bool EnableOrderExecution = false;
@@ -99,6 +101,8 @@ void OnTimer()
    // ShadowBotIds value, so the experiment can be introduced without touching secrets.
    if(ExperimentalBotId != "" && !experimentalPolled)
       PollDecision(tick, ExperimentalBotId, false);
+   if(MultitimeframeResearchBotId != "" && MultitimeframeResearchBotId != ResultsBotId && MultitimeframeResearchBotId != ExperimentalBotId)
+      PollDecision(tick, MultitimeframeResearchBotId, false);
 
    upTicks = downTicks = neutralTicks = 0;
    upVolume = downVolume = 0.0;
@@ -176,7 +180,10 @@ void CacheConfiguredBots()
 {
    // OHLCV belongs to the market, not to a strategy. Keep one deep canonical
    // history and let every XAUUSD/M5 bot reuse it during historical replay.
-   CacheHistory(ResultsBotId);
+   if(RefreshDeepHistoryOnInit)
+      CacheHistory(ResultsBotId);
+   else
+      Print("Deep history refresh skipped; set RefreshDeepHistoryOnInit=true for an explicit bootstrap.");
 }
 
 void CacheHistory(const string botId)

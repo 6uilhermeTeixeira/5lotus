@@ -117,6 +117,38 @@ class HistoricalReplayTests(unittest.TestCase):
         self.assertEqual(result.exit_price, 101)
         self.assertLess(result.net_pnl, 0)
 
+    def test_single_target_strategy_closes_full_position_at_half_r(self) -> None:
+        opened_at = datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc)
+        trade = _OpenTrade(
+            trade_id="single-target",
+            setup="multitimeframe",
+            symbol="XAUUSD",
+            timeframe="M5",
+            side="buy",
+            opened_at_utc=opened_at,
+            volume_lots=1,
+            entry_price=100,
+            initial_stop_price=99,
+            stop_price=99,
+            partial_price=100.5,
+            target_price=100.5,
+            risk_amount=100,
+            partial_close_pct=100,
+        )
+        candle = CandleSnapshot(
+            timestamp_utc=opened_at + timedelta(minutes=5),
+            open=100,
+            high=100.6,
+            low=99.8,
+            close=100.5,
+            volume=100,
+        )
+
+        result = _advance_trade(trade, candle, replay_settings())
+
+        self.assertIsNotNone(result)
+        self.assertEqual(result.rr_realized, .5)
+
 
 if __name__ == "__main__":
     unittest.main()
