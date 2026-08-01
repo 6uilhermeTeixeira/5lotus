@@ -51,6 +51,9 @@ Preencha os inputs:
 - `MultitimeframeResearchBotId`: `bot-7` (força o polling do experimento multitemporal sempre sem execução)
 - `HistoryCacheBars`: `100000` somente no bot canônico, visando aproximadamente um ano de M5 quando a corretora disponibilizar essa profundidade
 - `RefreshDeepHistoryOnInit`: `false` por padrão; ative somente para um bootstrap explícito dos 100 mil candles
+- `SecondaryHistorySymbol`: `EURUSD`
+- `SecondaryHistoryBotId`: `bot-eur-1`
+- `RefreshSecondaryHistoryOnInit`: `true` durante o primeiro bootstrap; depois pode ser desativado
 - `LotusIngestApiKey`: valor de `DAYTRADE_INGEST_API_KEY`
 - `EnableOrderExecution`: `false`
 
@@ -100,6 +103,13 @@ ficam limitadas a compras entre 13:00–15:59 UTC, exigem força mínima de 0,7 
 único de 0,75R, stop técnico de 1,2 ATR e apenas 50% do risco padrão por operação. A duração
 máxima continua em 60 minutos. Mesmo que o backtest supere 70%, o EA sempre consulta esse bot
 com execução falsa.
+
+O catálogo EUR/USD replica os sete perfis e parâmetros do catálogo XAU/USD. O propósito é medir
+generalização; os resultados não devem ser interpretados como parâmetros otimizados para forex.
+O EA envia o histórico profundo EURUSD/M5 uma única vez para `bot-eur-1`, e os demais bots EUR
+reutilizam essa série. Depois da carga, dentro de `python-service`, execute
+`python -m scripts.cache_backtests --symbol EURUSD --days 365` para atualizar as curvas exibidas
+na tela inicial.
 
 ## Segurança e recuperação
 

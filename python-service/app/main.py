@@ -1,4 +1,5 @@
 import logging
+from copy import copy
 from hmac import compare_digest
 from datetime import datetime, timezone
 from pathlib import Path
@@ -12,7 +13,7 @@ from .backtest import run_historical_replay
 from .config import get_settings
 from .pages import render_catalog_page, render_comparison_page, render_login_page, render_results_page
 from .results_store import get_bot, load_bots_catalog, load_results_snapshot, resolve_bot_results_file
-from .schemas import BotCatalogItem, CandleIngestRequest, DecisionAction, DecisionRequest, DecisionResponse, HealthResponse, HistoricalReplayResponse, MarketChartResponse, ResultsResponse, TradeIngestRequest
+from .schemas import BotCatalogItem, CandleIngestRequest, DecisionAction, DecisionRequest, DecisionResponse, EquityComparisonResponse, EquityPoint, EquitySeries, HealthResponse, HistoricalReplayResponse, MarketChartResponse, ResultsResponse, TradeIngestRequest
 from .strategy import evaluate_decision
 from .supabase_store import SupabaseStore
 
@@ -66,6 +67,14 @@ def _load_bot_results(bot: BotCatalogItem) -> ResultsResponse:
     if _uses_supabase_results():
         return SupabaseStore(settings).load_results(bot.id)
     return load_results_snapshot(resolve_bot_results_file(settings.bots_catalog_path, bot))
+
+
+def _market_data_source_bot_id(bot: BotCatalogItem) -> str:
+    if bot.symbol.upper() == settings.default_symbol.upper() and bot.timeframe.upper() == settings.default_timeframe.upper():
+        return settings.backtest_market_data_bot_id
+    if bot.symbol.upper() == "EURUSD" and bot.timeframe.upper() == "M5":
+        return "bot-eur-1"
+    return bot.id
 
 
 def _require_ingest_key(provided_key: str | None) -> None:
@@ -171,6 +180,41 @@ def read_comparison(request: Request) -> dict[str, object]:
     return {"updated_at_utc": datetime.now(timezone.utc), "bots": snapshots}
 
 
+@app.get("/api/equity-comparison", response_model=EquityComparisonResponse)
+def read_equity_comparison(request: Request, symbol: str = "XAUUSD", days: int = 365) -> EquityComparisonResponse:
+    _require_api_session(request)
+    normalized_symbol = symbol.upper()
+    if days < 1 or days > 365:
+        raise HTTPException(status_code=422, detail="comparison days must be between 1 and 365")
+    bots = [bot for bot in _list_bots() if bot.symbol.upper() == normalized_symbol and bot.timeframe.upper() == "M5"]
+    if not bots:
+        raise HTTPException(status_code=404, detail="no bots configured for symbol")
+    if not _uses_supabase_results():
+        raise HTTPException(status_code=503, detail="equity comparison requires DAYTRADE_RESULTS_STORE=SUPABASE")
+    store = SupabaseStore(settings)
+    series: list[EquitySeries] = []
+    missing: list[str] = []
+    for bot in bots:
+        replay = store.load_backtest_snapshot(bot.id, days)
+        if replay is None:
+            missing.append(bot.id)
+            continue
+        cumulative = 0.0
+        points: list[EquityPoint] = []
+        for point in sorted(replay.daily_pnl, key=lambda item: item.day):
+            cumulative += point.net_pnl
+            points.append(EquityPoint(day=point.day, cumulative_pnl=round(cumulative, 2)))
+        series.append(EquitySeries(bot_id=bot.id, name=bot.name, strategy_profile=bot.strategy_profile, summary=replay.summary, points=points))
+    return EquityComparisonResponse(
+        symbol=normalized_symbol,
+        timeframe="M5",
+        period_days=days,
+        updated_at_utc=datetime.now(timezone.utc),
+        series=series,
+        missing_bot_ids=missing,
+    )
+
+
 @app.get("/api/bots/{bot_id}/results", response_model=ResultsResponse)
 def read_bot_results(bot_id: str, request: Request) -> ResultsResponse:
     _require_api_session(request)
@@ -183,7 +227,7 @@ def read_bot_chart(bot_id: str, request: Request) -> MarketChartResponse:
     bot = _find_bot(bot_id)
     if not _uses_supabase_results():
         raise HTTPException(status_code=503, detail="chart data requires DAYTRADE_RESULTS_STORE=SUPABASE")
-    return SupabaseStore(settings).load_chart(bot, settings.chart_cache_limit)
+    return SupabaseStore(settings).load_chart(bot, settings.chart_cache_limit, source_bot_id=_market_data_source_bot_id(bot))
 
 
 @app.get("/api/bots/{bot_id}/historical-replay", response_model=HistoricalReplayResponse)
@@ -194,8 +238,13 @@ def read_historical_replay(bot_id: str, request: Request, days: int = 120) -> Hi
     bot = _find_bot(bot_id)
     if not _uses_supabase_results():
         raise HTTPException(status_code=503, detail="historical replay requires DAYTRADE_RESULTS_STORE=SUPABASE")
-    source_bot_id = settings.backtest_market_data_bot_id if bot.symbol == settings.default_symbol and bot.timeframe == settings.default_timeframe else bot.id
-    candles = SupabaseStore(settings).load_candles(bot, settings.backtest_candle_limit, source_bot_id=source_bot_id)
+    store = SupabaseStore(settings)
+    source_bot_id = _market_data_source_bot_id(bot)
+    cached = store.load_backtest_snapshot(bot.id, days)
+    if cached is not None:
+        cached.candles = store.load_candles(bot, settings.chart_cache_limit, source_bot_id=source_bot_id)
+        return cached
+    candles = store.load_candles(bot, settings.backtest_candle_limit, source_bot_id=source_bot_id)
     if not candles:
         raise HTTPException(status_code=404, detail="no historical candles available for replay")
     return run_historical_replay(bot, candles, settings, days=days)
@@ -289,9 +338,14 @@ def decision(payload: DecisionRequest, x_2lotus_ingest_key: str | None = Header(
             payload.candles = store.load_candles(
                 bot,
                 1000,
-                source_bot_id=settings.backtest_market_data_bot_id,
+                source_bot_id=_market_data_source_bot_id(bot),
             )
-    response = evaluate_decision(payload, settings, strategy_profile)
+    strategy_settings = settings
+    if payload.bot_id:
+        strategy_settings = copy(settings)
+        strategy_settings.default_symbol = payload.symbol
+        strategy_settings.default_timeframe = payload.timeframe
+    response = evaluate_decision(payload, strategy_settings, strategy_profile)
     if payload.bot_id and store and response.metadata.get("candidate"):
         signal_key = store.record_strategy_candidate(payload, response)
         if signal_key:

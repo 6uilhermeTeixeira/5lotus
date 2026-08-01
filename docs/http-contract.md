@@ -111,7 +111,7 @@ Resposta minima:
 
 O serviço trabalha com estes pressupostos:
 
-- ativo base: `XAUUSD`
+- ativos de pesquisa: `XAUUSD` e `EURUSD`
 - timeframe base: `M5`
 - perfis de estratégia: `fimath_ema20_flow` no Bot 1, `momentum_atr_breakout` no Bot 2, `rsi_bollinger_reversion` no Bot 3, `macd_trend_crossover` no Bot 4, `stochastic_trend_pullback` no Bot 5, `stochastic_sell_session` no Bot 6 e `multitimeframe_trend_pullback` no Bot 7
 - no Bot 7, `risk_amount`, `suggested_size` e `effective_risk_pct` já incorporam o multiplicador experimental de risco `0,5`; o alvo é `0,75R` e somente sinais de compra entre 13:00 e 15:59 UTC são candidatos
@@ -173,6 +173,8 @@ Regras de simulação:
 - entrada, spread, slippage e custos são aproximações configuráveis;
 - para `fimath_ema20_flow`, apenas o gatilho técnico pode ser reconstruído porque OHLC não contém livro nem sequência de ticks.
 - todos os bots XAUUSD/M5 reutilizam o histórico canônico do Bot 1, evitando coberturas diferentes para o mesmo mercado;
+- todos os bots EURUSD/M5 reutilizam o histórico canônico do `bot-eur-1`; o ponto do replay é `0,00001`, enquanto XAUUSD mantém `0,01`;
+- `GET /api/equity-comparison?symbol=XAUUSD|EURUSD&days=365` retorna uma curva acumulada por estratégia a partir de snapshots previamente calculados;
 - entradas fora da sessão configurada são bloqueadas e qualquer posição restante é fechada no fim do dia;
 - compras usam ask na entrada e bid na saída; vendas usam bid na entrada e ask na saída;
 - slippage e comissão são aplicados aos fills;

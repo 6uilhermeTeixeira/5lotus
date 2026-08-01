@@ -1,10 +1,24 @@
 import unittest
 
-from app.pages import render_comparison_page, render_results_page
+from app.pages import render_catalog_page, render_comparison_page, render_results_page
 from app.schemas import BotCatalogItem
 
 
 class ComparisonPageTests(unittest.TestCase):
+    def test_catalog_switches_between_symbols_and_renders_equity_chart(self) -> None:
+        bots = [
+            BotCatalogItem(id=f"bot-{symbol.lower()}-{index}", name=f"Bot {index} {symbol}", description="Teste", strategy_profile="fimath_ema20_flow", symbol=symbol, timeframe="M5")
+            for symbol in ("XAUUSD", "EURUSD") for index in range(1, 8)
+        ]
+
+        html = bytes(render_catalog_page(bots).body).decode("utf-8")
+
+        self.assertIn('data-symbol-toggle="XAUUSD"', html)
+        self.assertIn('data-symbol-toggle="EURUSD"', html)
+        self.assertIn('id="equity-chart"', html)
+        self.assertIn("/api/equity-comparison?symbol=", html)
+        self.assertEqual(html.count('class="bot card"'), 14)
+
     def test_comparison_page_renders_seven_independent_bots(self) -> None:
         bots = [
             BotCatalogItem(
@@ -53,8 +67,8 @@ class ComparisonPageTests(unittest.TestCase):
         html = bytes(render_results_page(bot).body).decode("utf-8")
 
         self.assertIn("Validação histórica", html)
-        self.assertIn('<option value="120" selected>120 dias</option>', html)
-        self.assertIn('<option value="365">365 dias</option>', html)
+        self.assertIn('<option value="120">120 dias</option>', html)
+        self.assertIn('<option value="365" selected>365 dias</option>', html)
         self.assertIn("/api/bots/bot-4/historical-replay?days=", html)
         self.assertIn("Preço e eventos simulados", html)
         self.assertIn("Premissas do replay", html)

@@ -11,10 +11,13 @@ input string ShadowBotIds = "bot-2,bot-3,bot-4,bot-5";
 input string ExperimentalBotId = "bot-6";
 input string MultitimeframeResearchBotId = "bot-7";
 input string StrategySymbol = "XAUUSD";
+input string SecondaryHistorySymbol = "EURUSD";
+input string SecondaryHistoryBotId = "bot-eur-1";
 input string StrategyTimeframe = "M5";
 input int HistoryBars = 60;
 input int HistoryCacheBars = 100000;
 input bool RefreshDeepHistoryOnInit = false;
+input bool RefreshSecondaryHistoryOnInit = true;
 input int PollIntervalSeconds = 5;
 input int RequestTimeoutMs = 3000;
 input bool EnableOrderExecution = false;
@@ -25,6 +28,9 @@ CTrade trade;
 double lastBid = 0.0;
 int upTicks = 0, downTicks = 0, neutralTicks = 0;
 double upVolume = 0.0, downVolume = 0.0;
+bool secondaryHistoryReady = false;
+int secondaryHistoryAttempts = 0;
+string secondaryHistoryCacheKey = "";
 
 int OnInit()
 {
@@ -74,6 +80,14 @@ void OnTradeTransaction(const MqlTradeTransaction &transaction, const MqlTradeRe
 
 void OnTimer()
 {
+   if(RefreshSecondaryHistoryOnInit && !secondaryHistoryReady && secondaryHistoryAttempts < 6)
+   {
+      secondaryHistoryAttempts++;
+      secondaryHistoryReady = CacheHistory(SecondaryHistorySymbol, SecondaryHistoryBotId);
+      if(secondaryHistoryReady && secondaryHistoryCacheKey != "")
+         GlobalVariableSet(secondaryHistoryCacheKey, (double)TimeGMT());
+   }
+
    MqlTick tick;
    if(!SymbolInfoTick(_Symbol, tick))
    {
@@ -179,29 +193,57 @@ string BuildDecisionPayload(const MqlTick &tick, const string botId)
 void CacheConfiguredBots()
 {
    // OHLCV belongs to the market, not to a strategy. Keep one deep canonical
-   // history and let every XAUUSD/M5 bot reuse it during historical replay.
+   // history per symbol and let every bot for that market reuse it.
    if(RefreshDeepHistoryOnInit)
-      CacheHistory(ResultsBotId);
+      CacheHistory(StrategySymbol, ResultsBotId);
    else
       Print("Deep history refresh skipped; set RefreshDeepHistoryOnInit=true for an explicit bootstrap.");
+   if(RefreshSecondaryHistoryOnInit)
+   {
+      secondaryHistoryCacheKey = "2LotusHistory_" + SecondaryHistorySymbol + "_" + StrategyTimeframe;
+      if(GlobalVariableCheck(secondaryHistoryCacheKey))
+      {
+         secondaryHistoryReady = true;
+         PrintFormat("Secondary history already bootstrapped symbol=%s at=%s", SecondaryHistorySymbol, TimeToString((datetime)GlobalVariableGet(secondaryHistoryCacheKey), TIME_DATE|TIME_SECONDS));
+      }
+      else
+      {
+         SymbolSelect(SecondaryHistorySymbol, true);
+         PrintFormat("Secondary history refresh scheduled symbol=%s bot_id=%s", SecondaryHistorySymbol, SecondaryHistoryBotId);
+      }
+   }
 }
 
-void CacheHistory(const string botId)
+bool CacheHistory(const string symbol, const string botId)
 {
+   if(symbol == "" || botId == "")
+      return true;
+   if(!SymbolSelect(symbol, true))
+   {
+      PrintFormat("Unable to select history symbol=%s error=%d", symbol, GetLastError());
+      return false;
+   }
    MqlRates rates[];
    // Existing charts retain their saved inputs across recompiles. Enforce the
    // canonical-history floor even when an older chart still has 2000 configured.
    int requestedBars = HistoryCacheBars < 100000 ? 100000 : HistoryCacheBars;
-   int copied = CopyRates(_Symbol, ResolveTimeframe(StrategyTimeframe), 1, requestedBars, rates);
-   if(copied <= 0) { Print("No history available for cache."); return; }
+   int copied = CopyRates(symbol, ResolveTimeframe(StrategyTimeframe), 1, requestedBars, rates);
+   if(copied <= 0) { PrintFormat("No history available for cache symbol=%s.", symbol); return false; }
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   bool allBatchesSucceeded = true;
    for(int start = 0; start < copied; start += 1000)
    {
       int count = MathMin(1000, copied - start);
-      string payload = "{\"bot_id\":\"" + botId + "\",\"symbol\":\"" + _Symbol + "\",\"timeframe\":\"" + StrategyTimeframe + "\",\"candles\":" + SerializeRatesRange(rates, start, count) + "}";
+      string payload = "{\"bot_id\":\"" + botId + "\",\"symbol\":\"" + symbol + "\",\"timeframe\":\"" + StrategyTimeframe + "\",\"candles\":" + SerializeRatesRangeWithDigits(rates, start, count, digits) + "}";
       string response = "";
       int status = PostJson(CandleCacheUrl, payload, response);
-      PrintFormat("History cache bot_id=%s batch start=%d count=%d status=%d", botId, start, count, status);
+      if(status < 200 || status >= 300)
+         allBatchesSucceeded = false;
+      PrintFormat("History cache bot_id=%s symbol=%s batch start=%d count=%d status=%d", botId, symbol, start, count, status);
    }
+   bool coversYear = rates[0].time <= TimeTradeServer() - 360 * 24 * 60 * 60;
+   PrintFormat("History cache complete bot_id=%s symbol=%s copied=%d covers_year=%s", botId, symbol, copied, coversYear ? "true" : "false");
+   return coversYear && allBatchesSucceeded;
 }
 
 string SerializeBook()
@@ -420,6 +462,11 @@ string SerializeRates(MqlRates &rates[], const int count)
 
 string SerializeRatesRange(MqlRates &rates[], const int start, const int count)
 {
+   return SerializeRatesRangeWithDigits(rates, start, count, _Digits);
+}
+
+string SerializeRatesRangeWithDigits(MqlRates &rates[], const int start, const int count, const int digits)
+{
    string json = "[";
 
    for(int i = start; i < start + count; i++)
@@ -429,10 +476,10 @@ string SerializeRatesRange(MqlRates &rates[], const int start, const int count)
 
       json += "{"
          "\"timestamp_utc\":\"" + ServerTimeToIsoUtc(rates[i].time) + "\","
-         "\"open\":" + DoubleToString(rates[i].open, _Digits) + ","
-         "\"high\":" + DoubleToString(rates[i].high, _Digits) + ","
-         "\"low\":" + DoubleToString(rates[i].low, _Digits) + ","
-         "\"close\":" + DoubleToString(rates[i].close, _Digits) + ","
+         "\"open\":" + DoubleToString(rates[i].open, digits) + ","
+         "\"high\":" + DoubleToString(rates[i].high, digits) + ","
+         "\"low\":" + DoubleToString(rates[i].low, digits) + ","
+         "\"close\":" + DoubleToString(rates[i].close, digits) + ","
          "\"volume\":" + IntegerToString((int)rates[i].tick_volume)
       + "}";
    }

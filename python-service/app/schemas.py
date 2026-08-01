@@ -221,3 +221,25 @@ class HistoricalReplayResponse(BaseModel):
     daily_pnl: list[DailyPnlPoint] = Field(default_factory=list)
     candles: list[CandleSnapshot] = Field(default_factory=list)
     trades: list[TradeResult] = Field(default_factory=list)
+
+
+class EquityPoint(BaseModel):
+    day: date
+    cumulative_pnl: float
+
+
+class EquitySeries(BaseModel):
+    bot_id: str
+    name: str
+    strategy_profile: str
+    summary: ResultsSummary
+    points: list[EquityPoint] = Field(default_factory=list)
+
+
+class EquityComparisonResponse(BaseModel):
+    symbol: str
+    timeframe: str
+    period_days: int
+    updated_at_utc: datetime
+    series: list[EquitySeries] = Field(default_factory=list)
+    missing_bot_ids: list[str] = Field(default_factory=list)

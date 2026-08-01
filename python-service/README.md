@@ -33,6 +33,7 @@ Perfis atuais, executados em paralelo:
 - Bot 5: `stochastic_trend_pullback`
 - Bot 6: `stochastic_sell_session` — variante shadow somente vendida, com entradas antes das 18h UTC
 - Bot 7: `multitimeframe_trend_pullback` — tendência H1/M15, pullback M5 somente comprado entre 13h e 16h UTC, alvo de 0,75R e 50% do risco padrão, bloqueado em shadow
+- Bots `bot-eur-1` a `bot-eur-7`: aplicação em `EURUSD/M5` dos mesmos sete perfis e parâmetros, sem otimização adicional para o novo ativo
 - risco por operacao: `1%` da banca
 - risco/retorno final: `2R`, com parcial de `50%` em `1R`
 
@@ -165,8 +166,13 @@ open http://127.0.0.1:8000/login
 
 O servico expoe um portal protegido por senha em `/login`. Depois do acesso, `/bots` lista os
 testes disponiveis e cada bot possui uma pagina individual em `/bots/<id>`. A rota antiga
-`/results` redireciona para o primeiro bot do catalogo. A página `/compare` apresenta os sete
-perfis lado a lado e atualiza seus indicadores pela API autenticada `/api/compare`.
+`/results` redireciona para o primeiro bot do catalogo. A página `/compare` apresenta os 14
+testes (sete perfis em dois ativos) e atualiza seus indicadores pela API autenticada `/api/compare`.
+
+A tela `/bots` alterna entre XAU/USD e EUR/USD e carrega `/api/equity-comparison?symbol=<ativo>&days=365`.
+As curvas vêm de snapshots compactos em `backtest_snapshots`, gerados por
+`python-service/scripts/cache_backtests.py`; candles permanecem canônicos em `market_candles`
+(`bot-1` para XAUUSD e `bot-eur-1` para EURUSD).
 
 O catálogo fica em `data/bots.json`. Para adicionar outro bot, inclua um novo item com `id`
 único e um `results_file` dentro de `data/`; em seguida, crie esse JSON com a lista de trades.

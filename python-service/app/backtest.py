@@ -14,6 +14,10 @@ HISTORY_BARS = 60
 MULTITIMEFRAME_HISTORY_BARS = 1000
 
 
+def _instrument_point_size(bot: BotCatalogItem, settings: Settings) -> float:
+    return 0.00001 if bot.symbol.upper() == "EURUSD" else settings.backtest_point_size
+
+
 @dataclass
 class _OpenTrade:
     trade_id: str
@@ -208,6 +212,7 @@ def run_historical_replay(
     regime_timeline = build_regime_timeline(ordered, settings) if settings.backtest_regime_enabled else ([], [])
     session_start = _parse_time(settings.backtest_session_start_utc)
     session_end = _parse_time(settings.backtest_session_end_utc)
+    point_size = _instrument_point_size(bot, settings)
     balance = settings.backtest_balance
     open_trade: _OpenTrade | None = None
     previous_candle: CandleSnapshot | None = None
@@ -260,9 +265,9 @@ def run_historical_replay(
             symbol=bot.symbol,
             timeframe=bot.timeframe,
             bid=candle.close,
-            ask=candle.close + settings.backtest_spread_points * settings.backtest_point_size,
+            ask=candle.close + settings.backtest_spread_points * point_size,
             spread_points=settings.backtest_spread_points,
-            point_size=settings.backtest_point_size,
+            point_size=point_size,
             value_per_point_per_lot=settings.backtest_value_per_point_per_lot,
             candles=history,
             positions=[],
@@ -301,7 +306,7 @@ def run_historical_replay(
             blocked_reasons["candidate_missing_prices"] += 1
         else:
             eligible += 1
-            slippage_price = settings.backtest_slippage_points * settings.backtest_point_size
+            slippage_price = settings.backtest_slippage_points * point_size
             raw_entry = float(response.entry_price)
             entry_fill = raw_entry + slippage_price if side == "buy" else raw_entry - slippage_price
             open_trade = _OpenTrade(
@@ -318,7 +323,7 @@ def run_historical_replay(
                 partial_price=float(response.partial_take_profit_price),
                 target_price=float(response.final_take_profit_price),
                 risk_amount=float(response.risk_amount),
-                point_size=settings.backtest_point_size,
+                point_size=point_size,
                 value_per_point_per_lot=settings.backtest_value_per_point_per_lot,
                 partial_close_pct=settings.fimath_partial_pct,
                 max_holding_bars=int(response.metadata["max_holding_bars"]) if "max_holding_bars" in response.metadata else None,
@@ -356,6 +361,7 @@ def run_historical_replay(
         f"Entradas são limitadas à sessão {settings.backtest_session_start_utc}–{settings.backtest_session_end_utc} UTC e posições são encerradas diariamente.",
         "Compras usam ask na entrada e bid na saída; vendas usam bid na entrada e ask na saída.",
         f"O replay aplica spread de {settings.backtest_spread_points:g} pontos, slippage de {settings.backtest_slippage_points:g} pontos por fill e comissão configurada.",
+        f"O tamanho de um ponto usado para {bot.symbol} é {point_size:g}; o valor por ponto/lote permanece o da configuração do harness.",
         "Quando stop e alvo aparecem no mesmo candle, o stop tem precedência; M1/ticks continuam sendo preferíveis para resolver a sequência intrabar.",
     ]
     if bot.strategy_profile == "fimath_ema20_flow":

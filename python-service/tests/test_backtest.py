@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from app.backtest import _OpenTrade, _advance_trade, run_historical_replay
+from app.backtest import _OpenTrade, _advance_trade, _instrument_point_size, run_historical_replay
 from app.schemas import BotCatalogItem, CandleSnapshot
 from tests.test_strategy import macd_trend_request, settings
 
@@ -26,6 +26,11 @@ def replay_settings():
 
 
 class HistoricalReplayTests(unittest.TestCase):
+    def test_eurusd_uses_five_decimal_point_size(self) -> None:
+        bot = BotCatalogItem(id="bot-eur-1", name="EUR", description="Teste", strategy_profile="fimath_ema20_flow", symbol="EURUSD", timeframe="M5")
+
+        self.assertEqual(_instrument_point_size(bot, replay_settings()), .00001)
+
     def test_replay_detects_signal_without_using_future_candle(self) -> None:
         request = macd_trend_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
         bot = BotCatalogItem(

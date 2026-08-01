@@ -6,7 +6,7 @@ from urllib.request import Request, urlopen
 
 from .config import Settings
 from .results_store import build_results_snapshot
-from .schemas import BotCatalogItem, CandleSnapshot, DecisionRequest, DecisionResponse, MarketChartResponse, ResultsResponse, TradeResult
+from .schemas import BotCatalogItem, CandleSnapshot, DecisionRequest, DecisionResponse, HistoricalReplayResponse, MarketChartResponse, ResultsResponse, TradeResult
 
 
 class SupabaseStore:
@@ -43,6 +43,30 @@ class SupabaseStore:
         rows = self._request(f"trade_results?{query}")
         real_trades = rows if isinstance(rows, list) else []
         return build_results_snapshot(real_trades + self._load_paper_results(bot_id), f"supabase:trades:{bot_id}")
+
+    def save_backtest_snapshot(self, replay: HistoricalReplayResponse, period_days: int) -> None:
+        compact_payload = replay.model_dump(mode="json")
+        compact_payload["candles"] = []
+        self._request(
+            "backtest_snapshots?on_conflict=bot_id,period_days",
+            method="POST",
+            payload={
+                "bot_id": replay.bot_id,
+                "period_days": period_days,
+                "period_start_utc": replay.period_start_utc.isoformat(),
+                "period_end_utc": replay.period_end_utc.isoformat(),
+                "payload": compact_payload,
+            },
+            prefer="resolution=merge-duplicates,return=minimal",
+        )
+
+    def load_backtest_snapshot(self, bot_id: str, period_days: int) -> HistoricalReplayResponse | None:
+        query = urlencode({"bot_id": f"eq.{bot_id}", "period_days": f"eq.{period_days}", "select": "payload", "limit": "1"})
+        rows = self._request(f"backtest_snapshots?{query}")
+        if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+            return None
+        payload = rows[0].get("payload")
+        return HistoricalReplayResponse.model_validate(payload) if isinstance(payload, dict) else None
 
     def _load_paper_results(self, bot_id: str) -> list[dict[str, object]]:
         paper_query = urlencode(
@@ -248,8 +272,8 @@ class SupabaseStore:
         rows = self._request(f"paper_trades?{query}")
         return len(rows) if isinstance(rows, list) else 0
 
-    def load_chart(self, bot: BotCatalogItem, limit: int = 5000) -> MarketChartResponse:
-        candles = self.load_candles(bot, limit)
+    def load_chart(self, bot: BotCatalogItem, limit: int = 5000, source_bot_id: str | None = None) -> MarketChartResponse:
+        candles = self.load_candles(bot, limit, source_bot_id=source_bot_id)
         trades_query = urlencode(
             {
                 "bot_id": f"eq.{bot.id}",

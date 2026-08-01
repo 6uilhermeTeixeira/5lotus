@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from app.schemas import CandleSnapshot, DecisionResponse
+from app.schemas import CandleSnapshot, DecisionResponse, HistoricalReplayResponse, ResultsSummary
 from app.supabase_store import SupabaseStore
 from tests.test_strategy import bullish_request, macd_trend_request, mean_reversion_request, stochastic_pullback_request
 
@@ -49,6 +49,30 @@ class PaperResultsStore(RecordingStore):
 
 
 class SupabaseStoreTests(unittest.TestCase):
+    def test_backtest_snapshot_is_compact_and_upserted_by_period(self) -> None:
+        store = RecordingStore()
+        timestamp = datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc)
+        replay = HistoricalReplayResponse(
+            bot_id="bot-eur-1",
+            symbol="EURUSD",
+            timeframe="M5",
+            period_start_utc=timestamp,
+            period_end_utc=timestamp,
+            candles_evaluated=1,
+            candidates_detected=0,
+            summary=ResultsSummary(),
+            candles=[CandleSnapshot(timestamp_utc=timestamp, open=1.1, high=1.2, low=1.0, close=1.1, volume=1)],
+        )
+
+        store.save_backtest_snapshot(replay, 365)
+
+        path, method, payload, prefer = store.calls[-1]
+        self.assertIn("on_conflict=bot_id,period_days", path)
+        self.assertEqual(method, "POST")
+        self.assertEqual(payload["period_days"], 365)
+        self.assertEqual(payload["payload"]["candles"], [])
+        self.assertEqual(prefer, "resolution=merge-duplicates,return=minimal")
+
     def test_replay_can_reuse_canonical_market_history(self) -> None:
         store = RecordingStore()
         bot = type("Bot", (), {"id": "bot-4", "symbol": "XAUUSD", "timeframe": "M5"})()

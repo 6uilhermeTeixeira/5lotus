@@ -35,7 +35,7 @@ Expert Advisor MQL5
 
 ## Estado atual
 
-- Estratégias `fimath_ema20_flow`, `momentum_atr_breakout`, `rsi_bollinger_reversion`, `macd_trend_crossover` e `stochastic_trend_pullback`, além das variantes experimentais `stochastic_sell_session` e `multitimeframe_trend_pullback`, para XAUUSD/M5.
+- Estratégias `fimath_ema20_flow`, `momentum_atr_breakout`, `rsi_bollinger_reversion`, `macd_trend_crossover` e `stochastic_trend_pullback`, além das variantes experimentais `stochastic_sell_session` e `multitimeframe_trend_pullback`, aplicadas com os mesmos parâmetros em XAUUSD/M5 e EURUSD/M5.
 - Um único EA consulta os sete bots a cada ciclo; apenas o bot primário poderia receber autorização de execução.
 - O Bot 6 replica o setup do Bot 5, mas admite somente vendas antes das 18h UTC; ele permanece isolado em shadow para forward test.
 - O Bot 7 deriva candles H1 e M15 completos do histórico canônico M5, exige alinhamento comprador e força mínima de 0,7 ATR(H1), opera somente entre 13h e 16h UTC com metade do risco padrão e permanece bloqueado em shadow.
@@ -46,6 +46,7 @@ Expert Advisor MQL5
 - Supabase mantém telemetria em `strategy_signals` e paper tracks `technical` e `flow_confirmed`.
 - O replay histórico lê `market_candles`, reaplica o motor sem look-ahead e produz resultados efêmeros para o portal, isolados das tabelas operacionais.
 - O histórico profundo é canônico por símbolo/timeframe (`bot-1` para XAUUSD/M5); estratégias não duplicam a mesma série para fins de replay.
+- EURUSD/M5 usa `bot-eur-1` como fonte canônica. `backtest_snapshots` guarda somente o replay compacto, sem duplicar candles, e alimenta o gráfico agregado da tela inicial.
 - Um classificador de regime H1 usa ADX, EMA50/EMA200 e percentil de ATR antes de autorizar candidatos no replay.
 - Controles de sessão, limite diário, cooldown, spread, slippage e comissão pertencem ao harness e não alteram a geração original dos sinais.
 - O cache OHLCV profundo pertence ao mercado e é persistido apenas como `bot-1`; os demais bots reutilizam essa série canônica no replay.
