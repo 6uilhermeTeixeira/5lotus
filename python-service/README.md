@@ -22,20 +22,19 @@ Foi criado um servico minimo com:
 - `GET /api/bots/<id>/historical-replay?days=120`
 - `POST /decision`
 
-Perfis atuais, executados em paralelo:
+Perfis ativos, executados em paralelo:
 
 - ativo base: `XAUUSD`
 - timeframe base: `M5`
-- Bot 1: `fimath_ema20_flow`
-- Bot 2: `momentum_atr_breakout`
-- Bot 3: `rsi_bollinger_reversion`
-- Bot 4: `macd_trend_crossover`
-- Bot 5: `stochastic_trend_pullback`
 - Bot 6: `stochastic_sell_session` — variante shadow somente vendida, com entradas antes das 18h UTC
 - Bot 7: `multitimeframe_trend_pullback` — tendência H1/M15, pullback M5 somente comprado entre 13h e 16h UTC, alvo de 0,75R e 50% do risco padrão, bloqueado em shadow
-- Bots `bot-eur-1` a `bot-eur-7`: aplicação em `EURUSD/M5` dos mesmos sete perfis e parâmetros, sem otimização adicional para o novo ativo
+- Bot 11: `portfolio_6_7_100_75` — variante agressiva com Bot 7 em 100% e Bot 6 em 75%, sob as mesmas travas persistidas e sempre sem execução
+- Bot 12: `happy_gold_zigzag_scalper` — reconstrução shadow da assinatura de 773 operações XAUUSD: pivô M30 confirmado, rompimento M5, lote 0,10, stop de 240 pontos, alvo de 1.000 pontos, break-even em +40, trailing em +120/60, expiração em dois M5 e uma posição
+- Estratégias anteriores e variantes EURUSD aparecem na aba `Arquivadas` para consulta histórica, mas não recebem polling, decisões ou novas operações. Os títulos públicos omitem o identificador técnico `Bot N`.
 - risco por operacao: `1%` da banca
 - risco/retorno final: `2R`, com parcial de `50%` em `1R`
+
+O replay integrado inicial de 365 dias do Bot 9 ficou positivo, mas foi rejeitado pelo gate de estabilidade temporal; ele não substitui o Bot 8 e permanece exclusivamente como pesquisa forward em shadow.
 
 A Fimath usa MME20, pullback ou fora-dentro. O fluxo inferido da profundidade de mercado e
 dos ticks do MT5 é normalizado por uma janela temporal e, na política padrão `veto`, só bloqueia

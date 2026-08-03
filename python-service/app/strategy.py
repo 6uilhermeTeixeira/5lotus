@@ -1,9 +1,12 @@
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
+import json
 from statistics import fmean, pstdev
 
+from .adaptive import ADAPTIVE_MIN_CLOSED_TRADES, ADAPTIVE_MIN_PROFIT_FACTOR, ADAPTIVE_WINDOW_DAYS, select_adaptive_component
 from .config import Settings
+from .regime import RegimeSnapshot, classify_regime
 from .schemas import CandleSnapshot, DecisionAction, DecisionRequest, DecisionResponse, FlowSnapshot, RiskCheck
 
 
@@ -173,6 +176,88 @@ def _flow_analysis(
 
 def _position_size(balance: float, risk_pct: float, stop_points: float, value_per_point: float) -> float:
     return (balance * risk_pct / 100) / (stop_points * value_per_point)
+
+
+def _aggregate_completed_candles(
+    candles: list[CandleSnapshot],
+    timeframe_minutes: int,
+    available_at: datetime,
+) -> list[CandleSnapshot]:
+    """Aggregate lower-timeframe candles without exposing an incomplete bucket."""
+    buckets: dict[datetime, list[CandleSnapshot]] = defaultdict(list)
+    for candle in sorted(candles, key=lambda item: item.timestamp_utc):
+        timestamp = candle.timestamp_utc.astimezone(timezone.utc)
+        bucket_minute = timestamp.minute - timestamp.minute % timeframe_minutes
+        bucket_start = timestamp.replace(minute=bucket_minute, second=0, microsecond=0)
+        if bucket_start + timedelta(minutes=timeframe_minutes) <= available_at.astimezone(timezone.utc):
+            buckets[bucket_start].append(candle)
+    return [
+        CandleSnapshot(
+            timestamp_utc=bucket_start,
+            open=rows[0].open,
+            high=max(row.high for row in rows),
+            low=min(row.low for row in rows),
+            close=rows[-1].close,
+            volume=sum(row.volume for row in rows),
+        )
+        for bucket_start, rows in sorted(buckets.items())
+    ]
+
+
+def _latest_confirmed_zigzag_levels(candles: list[CandleSnapshot], span: int = 2) -> tuple[float | None, float | None]:
+    """Return causal fractal pivots used as a non-repainting ZigZag proxy."""
+    pivot_high: float | None = None
+    pivot_low: float | None = None
+    for index in range(span, len(candles) - span):
+        window = candles[index - span:index + span + 1]
+        current = candles[index]
+        if current.high == max(candle.high for candle in window):
+            pivot_high = current.high
+        if current.low == min(candle.low for candle in window):
+            pivot_low = current.low
+    return pivot_high, pivot_low
+
+
+def _happy_gold_zigzag_setup(request: DecisionRequest) -> Setup | None:
+    if len(request.candles) < 43:
+        return None
+    m30 = _aggregate_completed_candles(request.candles, 30, request.timestamp_utc)
+    if len(m30) < 7:
+        return None
+    pivot_high, pivot_low = _latest_confirmed_zigzag_levels(m30)
+    previous_close = request.candles[-2].close
+    buy_breakout = pivot_high is not None and previous_close <= pivot_high < request.ask
+    sell_breakout = pivot_low is not None and previous_close >= pivot_low > request.bid
+    if not buy_breakout and not sell_breakout:
+        return None
+    if buy_breakout and sell_breakout:
+        buy_distance = request.ask - float(pivot_high)
+        sell_distance = float(pivot_low) - request.bid
+        buy_breakout = buy_distance >= sell_distance
+        sell_breakout = not buy_breakout
+    action = DecisionAction.BUY if buy_breakout else DecisionAction.SELL
+    entry = request.ask if buy_breakout else request.bid
+    stop_points = 240.0
+    target_points = 1000.0
+    stop = entry - stop_points * request.point_size if buy_breakout else entry + stop_points * request.point_size
+    target = entry + target_points * request.point_size if buy_breakout else entry - target_points * request.point_size
+    m30_atr = _atr(m30, min(14, len(m30)))
+    return Setup(
+        action=action,
+        setup_type="happy_gold_zigzag_breakout",
+        entry=entry,
+        stop=stop,
+        partial=target,
+        target=target,
+        stop_points=stop_points,
+        flow_mode="not_applicable",
+        ema20=m30[-1].close,
+        atr14=m30_atr,
+        breakout_level=float(pivot_high if buy_breakout else pivot_low),
+        partial_close_pct=100.0,
+        move_stop_to_breakeven=False,
+        max_holding_bars=2,
+    )
 
 
 def _setup(request: DecisionRequest) -> Setup | None:
@@ -858,6 +943,424 @@ def _evaluate_multitimeframe_trend_pullback(request: DecisionRequest, settings: 
     return response
 
 
+def _evaluate_happy_gold_zigzag_scalper(request: DecisionRequest, settings: Settings, strategy_profile: str) -> DecisionResponse:
+    setup = _happy_gold_zigzag_setup(request)
+    session_time = request.timestamp_utc.astimezone(timezone.utc).time()
+    in_research_session = time(3, 0) <= session_time < time(19, 0)
+    same_symbol_positions = [position for position in request.positions if position.symbol.upper() == request.symbol.upper()]
+    checks = [
+        RiskCheck(name="symbol_match", passed=request.symbol.upper() == "XAUUSD", detail="expected=XAUUSD"),
+        RiskCheck(name="timeframe_match", passed=request.timeframe.upper() == "M5", detail="expected=M5; signal=M30"),
+        RiskCheck(name="spread_limit", passed=request.spread_points <= settings.max_spread_points, detail=f"max={settings.max_spread_points}"),
+        RiskCheck(name="research_session", passed=in_research_session, detail="03:00-19:00_UTC_proxy"),
+        RiskCheck(name="single_position", passed=not same_symbol_positions, detail="max_positions_for_symbol=1"),
+        RiskCheck(name="zigzag_breakout", passed=setup is not None, detail="confirmed_M30_fractal_breakout"),
+    ]
+    if not all(check.passed for check in checks[:5]):
+        return DecisionResponse(
+            action=DecisionAction.HOLD,
+            reason="happy_gold_market_or_risk_filter_mismatch",
+            risk_checks=checks,
+            metadata={"strategy_profile": strategy_profile, "candidate": False, "experimental_shadow_lock": True},
+        )
+    if setup is None:
+        return DecisionResponse(
+            action=DecisionAction.HOLD,
+            reason="happy_gold_zigzag_breakout_not_confirmed",
+            risk_checks=checks,
+            metadata={"strategy_profile": strategy_profile, "candidate": False, "experimental_shadow_lock": True},
+        )
+    response = _candidate_response(
+        request,
+        settings,
+        setup,
+        checks,
+        FlowAnalysis(True, False, False, "not_applicable"),
+        executable=False,
+        reason="happy_gold_zigzag_scalper_shadow_signal",
+        strategy_profile=strategy_profile,
+    )
+    fixed_lot = .10
+    response.risk_amount = round(setup.stop_points * request.value_per_point_per_lot * fixed_lot, 2)
+    break_even_trigger = float(getattr(settings, "happy_gold_break_even_trigger_points", 40))
+    break_even_offset = float(getattr(settings, "happy_gold_break_even_offset_points", 0))
+    trailing_activation = float(getattr(settings, "happy_gold_trailing_activation_points", 120))
+    trailing_distance = float(getattr(settings, "happy_gold_trailing_distance_points", 60))
+    max_holding_bars = int(getattr(settings, "happy_gold_max_holding_bars", 2))
+    response.metadata.update(
+        {
+            "suggested_size": fixed_lot,
+            "signal_timeframe": "M30",
+            "execution_timeframe": "M5",
+            "fixed_stop_points": 240,
+            "fixed_target_points": 1000,
+            "break_even_trigger_points": break_even_trigger,
+            "break_even_offset_points": break_even_offset,
+            "trailing_activation_points": trailing_activation,
+            "trailing_distance_points": trailing_distance,
+            "max_holding_bars": max_holding_bars,
+            "break_even_and_trailing": "active_research_proxy",
+            "source_sample_trades": 773,
+            "experimental_shadow_lock": True,
+            "research_status": "reverse_engineered_proxy_requires_tick_forward_validation",
+        }
+    )
+    response.risk_checks.append(RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled"))
+    return response
+
+
+def _apply_portfolio_allocation(
+    response: DecisionResponse,
+    request: DecisionRequest,
+    settings: Settings,
+    *,
+    component: str,
+    weight: float,
+) -> DecisionResponse:
+    suggested_size = _position_size(
+        request.account.balance,
+        settings.risk_per_trade_pct * weight,
+        float(response.stop_loss_points or 0),
+        request.value_per_point_per_lot,
+    )
+    response.action = DecisionAction.HOLD
+    response.reason = "portfolio_6_7_shadow_signal"
+    response.size = 0.0
+    response.risk_amount = round(request.account.balance * settings.risk_per_trade_pct * weight / 100, 2)
+    response.metadata.update(
+        {
+            "strategy_profile": "portfolio_6_7",
+            "portfolio_component": component,
+            "portfolio_weight_pct": round(weight * 100, 2),
+            "risk_multiplier": weight,
+            "effective_risk_pct": round(settings.risk_per_trade_pct * weight, 5),
+            "suggested_size": round(suggested_size, 2),
+            "portfolio_priority": "bot-7_then_bot-6",
+            "portfolio_shared_position_limit": 1,
+            "portfolio_shared_daily_loss_limit_r": 2,
+            "experimental_shadow_lock": True,
+            "research_status": "integrated_replay_and_forward_validation_required",
+        }
+    )
+    same_symbol_positions = [position for position in request.positions if position.symbol.upper() == request.symbol.upper()]
+    exposure_available = not same_symbol_positions
+    response.risk_checks.extend(
+        [
+            RiskCheck(name="portfolio_shared_exposure", passed=exposure_available, detail="max_positions_for_symbol=1"),
+            RiskCheck(name="portfolio_component_allocation", passed=True, detail=f"{component}={weight:.2f}"),
+            RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled"),
+        ]
+    )
+    if not exposure_available:
+        response.reason = "portfolio_shared_exposure_block"
+        response.metadata["base_candidate"] = True
+        response.metadata["candidate"] = False
+    return response
+
+
+def _evaluate_portfolio_6_7(request: DecisionRequest, settings: Settings) -> DecisionResponse:
+    # Both components are evaluated independently. Bot 7 is selected first when
+    # both produce a candidate on the same candle, preventing opposite exposure.
+    bot_7 = _evaluate_multitimeframe_trend_pullback(request, settings, "portfolio_6_7")
+    bot_6 = _evaluate_stochastic_sell_session(request, settings, "portfolio_6_7")
+    bot_7_candidate = bool(bot_7.metadata.get("candidate"))
+    bot_6_candidate = bool(bot_6.metadata.get("candidate"))
+
+    if bot_7_candidate:
+        bot_7.metadata["portfolio_conflict_detected"] = bot_6_candidate
+        return _apply_portfolio_allocation(bot_7, request, settings, component="bot-7", weight=.75)
+    if bot_6_candidate:
+        bot_6.metadata["portfolio_conflict_detected"] = False
+        return _apply_portfolio_allocation(bot_6, request, settings, component="bot-6", weight=.25)
+
+    return DecisionResponse(
+        action=DecisionAction.HOLD,
+        reason="portfolio_components_not_confirmed",
+        risk_checks=[
+            RiskCheck(name="bot_7_component", passed=False, detail=bot_7.reason),
+            RiskCheck(name="bot_6_component", passed=False, detail=bot_6.reason),
+            RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled"),
+        ],
+        metadata={
+            "strategy_profile": "portfolio_6_7",
+            "candidate": False,
+            "portfolio_priority": "bot-7_then_bot-6",
+            "portfolio_bot_7_reason": bot_7.reason,
+            "portfolio_bot_6_reason": bot_6.reason,
+            "portfolio_shared_position_limit": 1,
+            "portfolio_shared_daily_loss_limit_r": 2,
+            "experimental_shadow_lock": True,
+        },
+    )
+
+
+WEIGHTED_PORTFOLIO_PROFILES = {
+    "portfolio_6_7_75_50": {"bot-7": .75, "bot-6": .50},
+    "portfolio_6_7_100_75": {"bot-7": 1.00, "bot-6": .75},
+}
+
+
+def _portfolio_regime(request: DecisionRequest, settings: Settings) -> RegimeSnapshot:
+    override = getattr(settings, "portfolio_regime_snapshot", None)
+    if isinstance(override, RegimeSnapshot):
+        return override
+    return classify_regime(request.candles, settings)
+
+
+def _portfolio_runtime_risk_check(request: DecisionRequest, settings: Settings) -> tuple[bool, str]:
+    state = getattr(settings, "portfolio_risk_state", {})
+    trades_started = int(state.get("trades_started", 0))
+    daily_outcome_r = float(state.get("daily_outcome_r", 0))
+    cooldown_until_raw = state.get("cooldown_until_utc")
+    cooldown_until = datetime.fromisoformat(str(cooldown_until_raw)) if cooldown_until_raw else None
+    if trades_started >= 2:
+        return False, f"daily_trade_cap:{trades_started}"
+    if daily_outcome_r <= -2:
+        return False, f"daily_loss_limit:{daily_outcome_r:.4f}"
+    if cooldown_until is not None and request.timestamp_utc < cooldown_until:
+        return False, f"loss_cooldown_until:{cooldown_until.isoformat()}"
+    return True, "portfolio_daily_risk_available"
+
+
+def _apply_weighted_portfolio_allocation(
+    response: DecisionResponse,
+    request: DecisionRequest,
+    settings: Settings,
+    *,
+    profile: str,
+    component: str,
+    weight: float,
+) -> DecisionResponse:
+    suggested_size = _position_size(
+        request.account.balance,
+        settings.risk_per_trade_pct * weight,
+        float(response.stop_loss_points or 0),
+        request.value_per_point_per_lot,
+    )
+    response.action = DecisionAction.HOLD
+    response.reason = f"{profile}_shadow_signal"
+    response.size = 0.0
+    response.risk_amount = round(request.account.balance * settings.risk_per_trade_pct * weight / 100, 2)
+    risk_state = getattr(settings, "portfolio_risk_state", {})
+    response.metadata.update(
+        {
+            "strategy_profile": profile,
+            "portfolio_component": component,
+            "portfolio_weight_pct": round(weight * 100, 2),
+            "risk_multiplier": weight,
+            "effective_risk_pct": round(settings.risk_per_trade_pct * weight, 5),
+            "suggested_size": round(suggested_size, 2),
+            "portfolio_priority": "bot-7_then_bot-6",
+            "portfolio_shared_position_limit": 1,
+            "portfolio_shared_daily_trade_limit": 2,
+            "portfolio_shared_daily_loss_limit_r": 2,
+            "portfolio_risk_state_json": json.dumps(risk_state, sort_keys=True, separators=(",", ":")),
+            "experimental_shadow_lock": True,
+            "research_status": "parallel_forward_validation_required",
+        }
+    )
+    same_symbol_positions = [position for position in request.positions if position.symbol.upper() == request.symbol.upper()]
+    exposure_available = not same_symbol_positions
+    daily_risk_available, daily_risk_reason = _portfolio_runtime_risk_check(request, settings)
+    response.risk_checks.extend(
+        [
+            RiskCheck(name="portfolio_shared_exposure", passed=exposure_available, detail="max_positions_for_symbol=1"),
+            RiskCheck(name="portfolio_daily_risk_state", passed=daily_risk_available, detail=daily_risk_reason),
+            RiskCheck(name="portfolio_component_allocation", passed=True, detail=f"{component}={weight:.2f}"),
+            RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled"),
+        ]
+    )
+    if not exposure_available or not daily_risk_available:
+        response.reason = "weighted_portfolio_risk_block"
+        response.metadata["base_candidate"] = True
+        response.metadata["candidate"] = False
+        response.metadata["portfolio_risk_block_reason"] = "shared_exposure" if not exposure_available else daily_risk_reason
+    return response
+
+
+def _evaluate_weighted_portfolio_6_7(request: DecisionRequest, settings: Settings, profile: str) -> DecisionResponse:
+    weights = WEIGHTED_PORTFOLIO_PROFILES[profile]
+    bot_7_request = request.model_copy(update={"candles": request.candles[-1000:]})
+    bot_6_request = request.model_copy(update={"candles": request.candles[-60:]})
+    bot_7 = _evaluate_multitimeframe_trend_pullback(bot_7_request, settings, profile)
+    bot_6 = _evaluate_stochastic_sell_session(bot_6_request, settings, profile)
+    bot_7_candidate = bool(bot_7.metadata.get("candidate"))
+    bot_6_candidate = bool(bot_6.metadata.get("candidate"))
+
+    if bot_7_candidate:
+        bot_7.metadata["portfolio_conflict_detected"] = bot_6_candidate
+        return _apply_weighted_portfolio_allocation(
+            bot_7, request, settings, profile=profile, component="bot-7", weight=weights["bot-7"]
+        )
+    if bot_6_candidate:
+        regime = _portfolio_regime(request, settings)
+        regime_allowed = regime.name == "trend" and regime.direction == "sell"
+        regime_reason = "trend_sell_confirmed" if regime_allowed else f"trend_sell_required:{regime.name}:{regime.direction}"
+        bot_6.metadata.update(
+            {
+                "portfolio_regime": regime.name,
+                "portfolio_regime_direction": regime.direction,
+                "portfolio_regime_adx": regime.adx,
+                "portfolio_regime_atr_percentile": regime.atr_percentile,
+                "portfolio_regime_reason": regime_reason,
+            }
+        )
+        bot_6.risk_checks.append(RiskCheck(name="portfolio_bot_6_sell_regime", passed=regime_allowed, detail=regime_reason))
+        if not regime_allowed:
+            bot_6.action = DecisionAction.HOLD
+            bot_6.reason = "weighted_portfolio_bot_6_regime_block"
+            bot_6.size = 0.0
+            bot_6.metadata.update(
+                {
+                    "strategy_profile": profile,
+                    "portfolio_component": "bot-6",
+                    "base_candidate": True,
+                    "candidate": False,
+                    "experimental_shadow_lock": True,
+                }
+            )
+            return bot_6
+        return _apply_weighted_portfolio_allocation(
+            bot_6, request, settings, profile=profile, component="bot-6", weight=weights["bot-6"]
+        )
+
+    return DecisionResponse(
+        action=DecisionAction.HOLD,
+        reason="weighted_portfolio_components_not_confirmed",
+        risk_checks=[
+            RiskCheck(name="bot_7_component", passed=False, detail=bot_7.reason),
+            RiskCheck(name="bot_6_component", passed=False, detail=bot_6.reason),
+            RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled"),
+        ],
+        metadata={
+            "strategy_profile": profile,
+            "candidate": False,
+            "portfolio_priority": "bot-7_then_bot-6",
+            "portfolio_bot_7_reason": bot_7.reason,
+            "portfolio_bot_6_reason": bot_6.reason,
+            "portfolio_shared_position_limit": 1,
+            "portfolio_shared_daily_trade_limit": 2,
+            "portfolio_shared_daily_loss_limit_r": 2,
+            "experimental_shadow_lock": True,
+        },
+    )
+
+
+def _adaptive_regime(request: DecisionRequest, settings: Settings) -> RegimeSnapshot:
+    override = getattr(settings, "adaptive_regime_snapshot", None)
+    if isinstance(override, RegimeSnapshot):
+        return override
+    return classify_regime(request.candles, settings)
+
+
+def _adaptive_component_response(
+    request: DecisionRequest,
+    settings: Settings,
+    component: str,
+) -> tuple[DecisionResponse, RegimeSnapshot, bool, str]:
+    # The external H1 regime needs roughly 4,000 M5 candles, while the component
+    # setups need at most 1,000. Keeping the full window out of their indicator
+    # loops makes the adaptive replay and polling materially cheaper.
+    component_history_bars = 1000 if component == "bot-7" else 60
+    component_request = request.model_copy(update={"candles": request.candles[-component_history_bars:]})
+    if component == "bot-7":
+        response = _evaluate_multitimeframe_trend_pullback(component_request, settings, "adaptive_portfolio_3_6_7")
+        regime = _adaptive_regime(request, settings) if response.metadata.get("candidate") else RegimeSnapshot("not_evaluated", "none", "setup_not_confirmed")
+        return response, regime, True, "bot_7_internal_h1_m15_regime"
+    if component == "bot-6":
+        response = _evaluate_stochastic_sell_session(component_request, settings, "adaptive_portfolio_3_6_7")
+        if not response.metadata.get("candidate"):
+            return response, RegimeSnapshot("not_evaluated", "none", "setup_not_confirmed"), False, "setup_not_confirmed"
+        regime = _adaptive_regime(request, settings)
+        allowed = regime.name == "trend" and regime.direction == "sell"
+        return response, regime, allowed, "trend_sell_confirmed" if allowed else f"trend_sell_required:{regime.name}:{regime.direction}"
+    response = _evaluate_rsi_bollinger(component_request, settings, "adaptive_portfolio_3_6_7")
+    if not response.metadata.get("candidate"):
+        return response, RegimeSnapshot("not_evaluated", "none", "setup_not_confirmed"), False, "setup_not_confirmed"
+    regime = _adaptive_regime(request, settings)
+    allowed = regime.name == "range" and regime.atr_percentile is not None and regime.atr_percentile >= 25
+    return response, regime, allowed, "range_atr_25_confirmed" if allowed else f"range_atr_25_required:{regime.name}:{regime.atr_percentile}"
+
+
+def _evaluate_adaptive_portfolio_3_6_7(request: DecisionRequest, settings: Settings) -> DecisionResponse:
+    health = getattr(settings, "adaptive_component_health", {})
+    active_component = getattr(settings, "adaptive_active_component", None) or select_adaptive_component(health)
+    common_metadata = {
+        "strategy_profile": "adaptive_portfolio_3_6_7",
+        "adaptive_window_days": ADAPTIVE_WINDOW_DAYS,
+        "adaptive_min_closed_trades": ADAPTIVE_MIN_CLOSED_TRADES,
+        "adaptive_min_profit_factor": ADAPTIVE_MIN_PROFIT_FACTOR,
+        "adaptive_component_health_json": json.dumps(health, sort_keys=True, separators=(",", ":")),
+        "adaptive_active_component": active_component or "none",
+        "adaptive_selection_frozen_utc_day": request.timestamp_utc.astimezone(timezone.utc).date().isoformat(),
+        "portfolio_shared_position_limit": 1,
+        "portfolio_shared_daily_loss_limit_r": 2,
+        "experimental_shadow_lock": True,
+    }
+    if active_component not in {"bot-3", "bot-6", "bot-7"}:
+        return DecisionResponse(
+            action=DecisionAction.HOLD,
+            reason="adaptive_health_gate_not_confirmed",
+            risk_checks=[
+                RiskCheck(name="adaptive_health_gate", passed=False, detail="no_component_passed_120d_expectancy_and_profit_factor"),
+                RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled"),
+            ],
+            metadata={**common_metadata, "candidate": False},
+        )
+
+    response, regime, regime_allowed, regime_reason = _adaptive_component_response(request, settings, active_component)
+    response.metadata.update(common_metadata)
+    response.metadata.update(
+        {
+            "portfolio_component": active_component,
+            "portfolio_weight_pct": 100.0,
+            "risk_multiplier": 1.0,
+            "effective_risk_pct": round(settings.risk_per_trade_pct, 5),
+            "adaptive_regime": regime.name,
+            "adaptive_regime_direction": regime.direction,
+            "adaptive_regime_adx": regime.adx,
+            "adaptive_regime_atr_percentile": regime.atr_percentile,
+            "adaptive_regime_reason": regime_reason,
+            "research_status": "integrated_replay_and_forward_validation_required",
+        }
+    )
+    response.risk_checks.append(RiskCheck(name="adaptive_component_regime", passed=regime_allowed, detail=regime_reason))
+    if not response.metadata.get("candidate"):
+        return response
+    if not regime_allowed:
+        response.action = DecisionAction.HOLD
+        response.reason = "adaptive_component_regime_block"
+        response.size = 0.0
+        response.metadata["base_candidate"] = True
+        response.metadata["candidate"] = False
+        return response
+
+    suggested_size = _position_size(
+        request.account.balance,
+        settings.risk_per_trade_pct,
+        float(response.stop_loss_points or 0),
+        request.value_per_point_per_lot,
+    )
+    response.action = DecisionAction.HOLD
+    response.reason = "adaptive_portfolio_3_6_7_shadow_signal"
+    response.size = 0.0
+    response.risk_amount = round(request.account.balance * settings.risk_per_trade_pct / 100, 2)
+    response.metadata["suggested_size"] = round(suggested_size, 2)
+    same_symbol_positions = [position for position in request.positions if position.symbol.upper() == request.symbol.upper()]
+    exposure_available = not same_symbol_positions
+    response.risk_checks.extend(
+        [
+            RiskCheck(name="portfolio_shared_exposure", passed=exposure_available, detail="max_positions_for_symbol=1"),
+            RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled"),
+        ]
+    )
+    if not exposure_available:
+        response.reason = "adaptive_portfolio_shared_exposure_block"
+        response.metadata["base_candidate"] = True
+        response.metadata["candidate"] = False
+    return response
+
+
 def evaluate_decision(request: DecisionRequest, settings: Settings, strategy_profile: str | None = None) -> DecisionResponse:
     profile = strategy_profile or settings.strategy_profile
     if profile == "momentum_atr_breakout":
@@ -872,6 +1375,14 @@ def evaluate_decision(request: DecisionRequest, settings: Settings, strategy_pro
         return _evaluate_stochastic_sell_session(request, settings, profile)
     if profile == "multitimeframe_trend_pullback":
         return _evaluate_multitimeframe_trend_pullback(request, settings, profile)
+    if profile == "happy_gold_zigzag_scalper":
+        return _evaluate_happy_gold_zigzag_scalper(request, settings, profile)
+    if profile == "portfolio_6_7":
+        return _evaluate_portfolio_6_7(request, settings)
+    if profile == "adaptive_portfolio_3_6_7":
+        return _evaluate_adaptive_portfolio_3_6_7(request, settings)
+    if profile in WEIGHTED_PORTFOLIO_PROFILES:
+        return _evaluate_weighted_portfolio_6_7(request, settings, profile)
     if profile == "fimath_ema20_flow":
         return _evaluate_fimath(request, settings, profile)
     return DecisionResponse(

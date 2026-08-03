@@ -45,6 +45,11 @@ class Settings:
         self.backtest_regime_range_adx = float(getenv("DAYTRADE_BACKTEST_REGIME_RANGE_ADX", "20"))
         self.backtest_regime_high_volatility_percentile = float(getenv("DAYTRADE_BACKTEST_REGIME_HIGH_VOLATILITY_PERCENTILE", "90"))
         self.backtest_validation_fold_days = int(getenv("DAYTRADE_BACKTEST_VALIDATION_FOLD_DAYS", "30"))
+        self.happy_gold_break_even_trigger_points = float(getenv("DAYTRADE_HAPPY_GOLD_BREAK_EVEN_TRIGGER_POINTS", "40"))
+        self.happy_gold_break_even_offset_points = float(getenv("DAYTRADE_HAPPY_GOLD_BREAK_EVEN_OFFSET_POINTS", "0"))
+        self.happy_gold_trailing_activation_points = float(getenv("DAYTRADE_HAPPY_GOLD_TRAILING_ACTIVATION_POINTS", "120"))
+        self.happy_gold_trailing_distance_points = float(getenv("DAYTRADE_HAPPY_GOLD_TRAILING_DISTANCE_POINTS", "60"))
+        self.happy_gold_max_holding_bars = int(getenv("DAYTRADE_HAPPY_GOLD_MAX_HOLDING_BARS", "2"))
         self.results_store_path = Path(
             getenv("DAYTRADE_RESULTS_STORE_PATH", str(service_root / "data" / "trade-results.json"))
         )

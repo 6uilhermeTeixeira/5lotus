@@ -3,7 +3,8 @@ from collections import deque
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 
-from app.schemas import AccountSnapshot, CandleSnapshot, DecisionAction, DecisionRequest, FlowSnapshot, OrderBookLevel
+from app.schemas import AccountSnapshot, CandleSnapshot, DecisionAction, DecisionRequest, FlowSnapshot, OrderBookLevel, PositionSnapshot
+from app.regime import RegimeSnapshot
 from app.strategy import FlowSample, _flow_analysis, evaluate_decision, reset_strategy_state
 
 
@@ -119,6 +120,50 @@ def momentum_request(timestamp: datetime) -> DecisionRequest:
     )
 
 
+def happy_gold_breakout_request(timestamp: datetime) -> DecisionRequest:
+    candles: list[CandleSnapshot] = []
+    bucket_highs = [101.0, 102.0, 106.0, 103.0, 102.0, 101.5, 102.5]
+    bucket_lows = [99.0, 99.5, 100.0, 99.8, 99.6, 99.4, 99.7]
+    start = timestamp - timedelta(hours=3, minutes=30)
+    for bucket, (high, low) in enumerate(zip(bucket_highs, bucket_lows)):
+        for row in range(6):
+            close = 100.5 + bucket * .05 + row * .01
+            candles.append(
+                CandleSnapshot(
+                    timestamp_utc=start + timedelta(minutes=bucket * 30 + row * 5),
+                    open=close - .02,
+                    high=high if row == 2 else close + .1,
+                    low=low if row == 3 else close - .1,
+                    close=close,
+                    volume=100,
+                )
+            )
+    candles[-1].close = 105.8
+    candles.append(
+        CandleSnapshot(
+            timestamp_utc=timestamp,
+            open=105.8,
+            high=106.2,
+            low=105.7,
+            close=106.1,
+            volume=120,
+        )
+    )
+    return DecisionRequest(
+        bot_id="bot-12",
+        request_id=f"happy-gold-{timestamp.timestamp()}",
+        timestamp_utc=timestamp + timedelta(minutes=5),
+        symbol="XAUUSD",
+        timeframe="M5",
+        bid=106.1,
+        ask=106.2,
+        spread_points=10,
+        point_size=.01,
+        value_per_point_per_lot=1,
+        candles=candles,
+        positions=[],
+        account=AccountSnapshot(balance=10_000, equity=10_000, margin_free=10_000),
+    )
 def mean_reversion_request(timestamp: datetime) -> DecisionRequest:
     candles = []
     for index in range(21):
@@ -477,8 +522,214 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.reason, "multitimeframe_setup_not_confirmed")
         self.assertFalse(response.metadata.get("candidate", False))
 
-    def test_seven_profiles_keep_independent_bot_scoped_state(self) -> None:
+    def test_portfolio_6_7_allocates_75_percent_to_bot_7(self) -> None:
+        request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-8"
+
+        response = evaluate_decision(request, settings(), "portfolio_6_7")
+
+        self.assertEqual(response.reason, "portfolio_6_7_shadow_signal")
+        self.assertTrue(response.metadata["candidate"])
+        self.assertEqual(response.metadata["portfolio_component"], "bot-7")
+        self.assertEqual(response.metadata["portfolio_weight_pct"], 75)
+        self.assertEqual(response.metadata["effective_risk_pct"], .75)
+        self.assertEqual(response.risk_amount, 75)
+        self.assertTrue(response.metadata["experimental_shadow_lock"])
+
+    def test_portfolio_6_7_allocates_25_percent_to_bot_6(self) -> None:
+        request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
+        request.bot_id = "bot-8"
+
+        response = evaluate_decision(request, settings(), "portfolio_6_7")
+
+        self.assertEqual(response.reason, "portfolio_6_7_shadow_signal")
+        self.assertEqual(response.metadata["portfolio_component"], "bot-6")
+        self.assertEqual(response.metadata["portfolio_weight_pct"], 25)
+        self.assertEqual(response.risk_amount, 25)
+
+    def test_portfolio_6_7_blocks_new_signal_with_existing_xauusd_exposure(self) -> None:
+        request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-8"
+        request.positions = [PositionSnapshot(symbol="XAUUSD", side="sell", volume=.1, entry_price=100)]
+
+        response = evaluate_decision(request, settings(), "portfolio_6_7")
+
+        self.assertEqual(response.reason, "portfolio_shared_exposure_block")
+        self.assertFalse(response.metadata["candidate"])
+        self.assertTrue(response.metadata["base_candidate"])
+
+    def test_adaptive_portfolio_selects_bot_7_with_frozen_daily_health(self) -> None:
+        request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-9"
+        configured = settings(
+            adaptive_active_component="bot-7",
+            adaptive_component_health={"bot-7": {"closed_trades": 12, "expectancy_r": .2, "profit_factor": 1.5, "eligible": True}},
+            adaptive_regime_snapshot=RegimeSnapshot("transition", "none", "test", adx=23, atr_percentile=40),
+            enable_live_decisions=True,
+            fimath_mode="live",
+        )
+
+        response = evaluate_decision(request, configured, "adaptive_portfolio_3_6_7")
+
+        self.assertEqual(response.reason, "adaptive_portfolio_3_6_7_shadow_signal")
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertTrue(response.metadata["candidate"])
+        self.assertEqual(response.metadata["portfolio_component"], "bot-7")
+        self.assertEqual(response.metadata["portfolio_weight_pct"], 100)
+        self.assertEqual(response.risk_amount, 100)
+        self.assertTrue(response.metadata["experimental_shadow_lock"])
+
+    def test_adaptive_portfolio_requires_sell_trend_for_bot_6(self) -> None:
+        request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
+        request.bot_id = "bot-9"
+        configured = settings(
+            adaptive_active_component="bot-6",
+            adaptive_component_health={},
+            adaptive_regime_snapshot=RegimeSnapshot("range", "both", "test", adx=18, atr_percentile=40),
+        )
+
+        response = evaluate_decision(request, configured, "adaptive_portfolio_3_6_7")
+
+        self.assertEqual(response.reason, "adaptive_component_regime_block")
+        self.assertFalse(response.metadata["candidate"])
+        self.assertTrue(response.metadata["base_candidate"])
+
+    def test_adaptive_portfolio_requires_range_and_atr_25_for_bot_3(self) -> None:
+        request = mean_reversion_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
+        request.bot_id = "bot-9"
+        configured = settings(
+            adaptive_active_component="bot-3",
+            adaptive_component_health={},
+            adaptive_regime_snapshot=RegimeSnapshot("range", "both", "test", adx=18, atr_percentile=30),
+        )
+
+        response = evaluate_decision(request, configured, "adaptive_portfolio_3_6_7")
+
+        self.assertEqual(response.reason, "adaptive_portfolio_3_6_7_shadow_signal")
+        self.assertTrue(response.metadata["candidate"])
+        self.assertEqual(response.metadata["portfolio_component"], "bot-3")
+
+    def test_adaptive_portfolio_stays_flat_without_eligible_health(self) -> None:
+        request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-9"
+
+        response = evaluate_decision(request, settings(adaptive_component_health={}), "adaptive_portfolio_3_6_7")
+
+        self.assertEqual(response.reason, "adaptive_health_gate_not_confirmed")
+        self.assertFalse(response.metadata["candidate"])
+
+    def test_bot_10_uses_75_percent_for_bot_7_and_stays_shadow(self) -> None:
+        request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-10"
+        configured = settings(enable_live_decisions=True, fimath_mode="live", portfolio_risk_state={})
+
+        response = evaluate_decision(request, configured, "portfolio_6_7_75_50")
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.reason, "portfolio_6_7_75_50_shadow_signal")
+        self.assertEqual(response.metadata["portfolio_component"], "bot-7")
+        self.assertEqual(response.metadata["portfolio_weight_pct"], 75)
+        self.assertEqual(response.risk_amount, 75)
+
+    def test_bot_10_uses_50_percent_for_bot_6_in_sell_trend(self) -> None:
+        request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
+        request.bot_id = "bot-10"
+        configured = settings(
+            portfolio_risk_state={},
+            portfolio_regime_snapshot=RegimeSnapshot("trend", "sell", "test", adx=30, atr_percentile=40),
+        )
+
+        response = evaluate_decision(request, configured, "portfolio_6_7_75_50")
+
+        self.assertEqual(response.reason, "portfolio_6_7_75_50_shadow_signal")
+        self.assertEqual(response.metadata["portfolio_component"], "bot-6")
+        self.assertEqual(response.metadata["portfolio_weight_pct"], 50)
+        self.assertEqual(response.risk_amount, 50)
+
+    def test_bot_11_uses_100_and_75_percent_weights(self) -> None:
+        bot_7_request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+        bot_7_request.bot_id = "bot-11"
+        bot_6_request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
+        bot_6_request.bot_id = "bot-11"
+        configured = settings(
+            portfolio_risk_state={},
+            portfolio_regime_snapshot=RegimeSnapshot("trend", "sell", "test", adx=30, atr_percentile=40),
+        )
+
+        bot_7 = evaluate_decision(bot_7_request, configured, "portfolio_6_7_100_75")
+        bot_6 = evaluate_decision(bot_6_request, configured, "portfolio_6_7_100_75")
+
+        self.assertEqual(bot_7.metadata["portfolio_weight_pct"], 100)
+        self.assertEqual(bot_7.risk_amount, 100)
+        self.assertEqual(bot_6.metadata["portfolio_weight_pct"], 75)
+        self.assertEqual(bot_6.risk_amount, 75)
+
+    def test_weighted_portfolio_blocks_bot_6_without_sell_trend(self) -> None:
+        request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
+        request.bot_id = "bot-10"
+        configured = settings(
+            portfolio_risk_state={},
+            portfolio_regime_snapshot=RegimeSnapshot("range", "both", "test", adx=18, atr_percentile=40),
+        )
+
+        response = evaluate_decision(request, configured, "portfolio_6_7_75_50")
+
+        self.assertEqual(response.reason, "weighted_portfolio_bot_6_regime_block")
+        self.assertFalse(response.metadata["candidate"])
+
+    def test_weighted_portfolio_applies_persisted_daily_trade_cap(self) -> None:
+        request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-10"
+        configured = settings(portfolio_risk_state={"trades_started": 2, "daily_outcome_r": 0})
+
+        response = evaluate_decision(request, configured, "portfolio_6_7_75_50")
+
+        self.assertEqual(response.reason, "weighted_portfolio_risk_block")
+        self.assertFalse(response.metadata["candidate"])
+        self.assertIn("daily_trade_cap", response.metadata["portfolio_risk_block_reason"])
+
+    def test_bot_12_reconstructs_fixed_geometry_and_stays_shadow(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+
+        response = evaluate_decision(request, settings(), "happy_gold_zigzag_scalper")
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.reason, "happy_gold_zigzag_scalper_shadow_signal")
+        self.assertTrue(response.metadata["candidate"])
+        self.assertEqual(response.metadata["suggested_action"], "buy")
+        self.assertEqual(response.metadata["suggested_size"], .1)
+        self.assertEqual(response.stop_loss_points, 240)
+        self.assertEqual(response.take_profit_points, 1000)
+        self.assertAlmostEqual(response.entry_price - response.stop_loss_price, 2.4)
+        self.assertAlmostEqual(response.take_profit_price - response.entry_price, 10.0)
+        self.assertEqual(response.risk_amount, 24)
+        self.assertEqual(response.metadata["break_even_trigger_points"], 40)
+        self.assertEqual(response.metadata["break_even_offset_points"], 0)
+        self.assertEqual(response.metadata["trailing_activation_points"], 120)
+        self.assertEqual(response.metadata["trailing_distance_points"], 60)
+        self.assertEqual(response.metadata["max_holding_bars"], 2)
+        self.assertTrue(response.metadata["experimental_shadow_lock"])
+
+    def test_bot_12_blocks_existing_xauusd_position(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+        request.positions = [PositionSnapshot(symbol="XAUUSD", side="buy", volume=.1, entry_price=105)]
+
+        response = evaluate_decision(request, settings(), "happy_gold_zigzag_scalper")
+
+        self.assertEqual(response.reason, "happy_gold_market_or_risk_filter_mismatch")
+        self.assertFalse(response.metadata["candidate"])
+
+    def test_twelve_profiles_keep_independent_bot_scoped_state(self) -> None:
         candle_time = datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc)
+        portfolio_request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+        portfolio_request.bot_id = "bot-8"
+        adaptive_request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+        adaptive_request.bot_id = "bot-9"
+        bot_10_request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+        bot_10_request.bot_id = "bot-10"
+        bot_11_request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+        bot_11_request.bot_id = "bot-11"
+        bot_12_request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
         cases = [
             (bullish_request(candle_time), "fimath_ema20_flow"),
             (momentum_request(candle_time), "momentum_atr_breakout"),
@@ -487,14 +738,19 @@ class DecisionTests(unittest.TestCase):
             (stochastic_pullback_request(candle_time), "stochastic_trend_pullback"),
             (stochastic_sell_request(candle_time), "stochastic_sell_session"),
             (multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc)), "multitimeframe_trend_pullback"),
+            (portfolio_request, "portfolio_6_7"),
+            (adaptive_request, "adaptive_portfolio_3_6_7"),
+            (bot_10_request, "portfolio_6_7_75_50"),
+            (bot_11_request, "portfolio_6_7_100_75"),
+            (bot_12_request, "happy_gold_zigzag_scalper"),
         ]
 
         responses = [evaluate_decision(request, settings(), profile) for request, profile in cases]
 
-        self.assertEqual({request.bot_id for request, _ in cases}, {"bot-1", "bot-2", "bot-3", "bot-4", "bot-5", "bot-6", "bot-7"})
+        self.assertEqual({request.bot_id for request, _ in cases}, {"bot-1", "bot-2", "bot-3", "bot-4", "bot-5", "bot-6", "bot-7", "bot-8", "bot-9", "bot-10", "bot-11", "bot-12"})
         self.assertEqual(
             {response.metadata["strategy_profile"] for response in responses},
-            {"fimath_ema20_flow", "momentum_atr_breakout", "rsi_bollinger_reversion", "macd_trend_crossover", "stochastic_trend_pullback", "stochastic_sell_session", "multitimeframe_trend_pullback"},
+            {"fimath_ema20_flow", "momentum_atr_breakout", "rsi_bollinger_reversion", "macd_trend_crossover", "stochastic_trend_pullback", "stochastic_sell_session", "multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "portfolio_6_7_75_50", "portfolio_6_7_100_75", "happy_gold_zigzag_scalper"},
         )
         self.assertTrue(all(response.action == DecisionAction.HOLD for response in responses))
 

@@ -4,6 +4,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
+from .adaptive import ADAPTIVE_COMPONENTS, ADAPTIVE_WINDOW_DAYS, summarize_outcomes, utc_day_start
 from .config import Settings
 from .results_store import build_results_snapshot
 from .schemas import BotCatalogItem, CandleSnapshot, DecisionRequest, DecisionResponse, HistoricalReplayResponse, MarketChartResponse, ResultsResponse, TradeResult
@@ -15,6 +16,7 @@ class SupabaseStore:
             raise RuntimeError("Supabase results store is not configured")
         self.base_url = (settings.supabase_url or "").rstrip("/")
         self.key = settings.supabase_service_role_key or ""
+        self.settings = settings
 
     def _request(self, path: str, *, method: str = "GET", payload: object | None = None, prefer: str | None = None) -> object:
         headers = {"apikey": self.key, "Authorization": f"Bearer {self.key}"}
@@ -34,8 +36,9 @@ class SupabaseStore:
             raise RuntimeError("Supabase request could not be completed") from error
         return json.loads(response_body) if response_body else None
 
-    def list_bots(self) -> list[BotCatalogItem]:
-        rows = self._request("bots?select=id,name,description,strategy_profile,strategy_description,symbol,timeframe&order=id")
+    def list_bots(self, active: bool | None = True) -> list[BotCatalogItem]:
+        active_filter = "" if active is None else f"active=eq.{str(active).lower()}&"
+        rows = self._request(f"bots?{active_filter}select=id,name,description,strategy_profile,strategy_description,symbol,timeframe,active&order=id")
         return [BotCatalogItem.model_validate(row) for row in rows if isinstance(row, dict)]
 
     def load_results(self, bot_id: str) -> ResultsResponse:
@@ -204,6 +207,19 @@ class SupabaseStore:
             elif trade.get("expires_at_utc") and candle.timestamp_utc + timedelta(minutes=5) >= datetime.fromisoformat(str(trade["expires_at_utc"])):
                 outcome_r = direction * (candle.close - entry) / risk if risk else 0
                 patch = {"status": "closed", "closed_at_utc": candle.timestamp_utc.isoformat(), "outcome_r": outcome_r}
+            elif bot_id == "bot-12" and risk:
+                point_size = risk / 240
+                favorable_price = candle.high if buy else candle.low
+                favorable_points = direction * (favorable_price - entry) / point_size
+                next_stop = stop
+                if favorable_points >= self.settings.happy_gold_break_even_trigger_points:
+                    break_even_stop = entry + direction * self.settings.happy_gold_break_even_offset_points * point_size
+                    next_stop = max(next_stop, break_even_stop) if buy else min(next_stop, break_even_stop)
+                if favorable_points >= self.settings.happy_gold_trailing_activation_points:
+                    trailing_stop = favorable_price - direction * self.settings.happy_gold_trailing_distance_points * point_size
+                    next_stop = max(next_stop, trailing_stop) if buy else min(next_stop, trailing_stop)
+                if next_stop != stop:
+                    patch = {"stop_price": next_stop}
             if patch:
                 filters = urlencode({"signal_key": f"eq.{trade['signal_key']}", "variant": f"eq.{trade['variant']}"})
                 self._request(f"paper_trades?{filters}", method="PATCH", payload=patch, prefer="return=minimal")
@@ -271,6 +287,59 @@ class SupabaseStore:
         query = urlencode({"bot_id": f"eq.{bot_id}", "variant": f"eq.{variant}", "status": "eq.closed", "select": "signal_key"})
         rows = self._request(f"paper_trades?{query}")
         return len(rows) if isinstance(rows, list) else 0
+
+    def load_adaptive_component_health(self, timestamp_utc: datetime) -> dict[str, dict[str, object]]:
+        """Return the frozen UTC-day health snapshot used by Bot 9."""
+        day_start = utc_day_start(timestamp_utc)
+        window_start = day_start - timedelta(days=ADAPTIVE_WINDOW_DAYS)
+        health: dict[str, dict[str, object]] = {}
+        for component in ADAPTIVE_COMPONENTS:
+            query = urlencode(
+                [
+                    ("bot_id", f"eq.{component}"),
+                    ("variant", "eq.technical"),
+                    ("status", "eq.closed"),
+                    ("closed_at_utc", f"gte.{window_start.isoformat()}"),
+                    ("closed_at_utc", f"lt.{day_start.isoformat()}"),
+                    ("select", "outcome_r"),
+                ]
+            )
+            rows = self._request(f"paper_trades?{query}")
+            outcomes = [
+                float(row["outcome_r"])
+                for row in rows if isinstance(row, dict) and row.get("outcome_r") is not None
+            ] if isinstance(rows, list) else []
+            health[component] = summarize_outcomes(outcomes)
+        return health
+
+    def load_portfolio_risk_state(self, bot_id: str, timestamp_utc: datetime) -> dict[str, object]:
+        """Load the Bot 10/11 risk state frozen to the current UTC day."""
+        day_start = utc_day_start(timestamp_utc)
+        next_day = day_start + timedelta(days=1)
+        query = urlencode(
+            [
+                ("bot_id", f"eq.{bot_id}"),
+                ("variant", "eq.technical"),
+                ("opened_at_utc", f"gte.{day_start.isoformat()}"),
+                ("opened_at_utc", f"lt.{next_day.isoformat()}"),
+                ("select", "status,outcome_r,closed_at_utc"),
+            ]
+        )
+        rows = self._request(f"paper_trades?{query}")
+        trades = [row for row in rows if isinstance(row, dict)] if isinstance(rows, list) else []
+        closed = [row for row in trades if row.get("status") == "closed" and row.get("outcome_r") is not None]
+        losses = [
+            datetime.fromisoformat(str(row["closed_at_utc"]))
+            for row in closed
+            if float(row["outcome_r"]) < 0 and row.get("closed_at_utc")
+        ]
+        cooldown_until = max(losses) + timedelta(minutes=15) if losses else None
+        return {
+            "trades_started": len(trades),
+            "daily_outcome_r": round(sum(float(row["outcome_r"]) for row in closed), 6),
+            "cooldown_until_utc": cooldown_until.isoformat() if cooldown_until else None,
+            "as_of_utc": timestamp_utc.isoformat(),
+        }
 
     def load_chart(self, bot: BotCatalogItem, limit: int = 5000, source_bot_id: str | None = None) -> MarketChartResponse:
         candles = self.load_candles(bot, limit, source_bot_id=source_bot_id)

@@ -1,7 +1,7 @@
 [
   {
     "id": "bot-1",
-    "name": "Bot 1 — Fimath",
+    "name": "Fimath",
     "description": "Estratégia Fimath com MME20 e confirmação obrigatória de fluxo.",
     "strategy_profile": "fimath_ema20_flow",
     "strategy_description": "- Mercado e gráfico: XAUUSD no M5.\n- Viés: fechamento e inclinação da MME20 definem compras ou vendas.\n- Gatilhos: pullback/rejeição na MME20 ou padrão fora-dentro após extensão de preço.\n- Fluxo obrigatório: agressão ou absorção inferidas do livro e dos ticks, normalizadas contra os últimos 5 minutos.\n- Stop: estrutura de rejeição com buffer adaptativo de ATR(14).\n- Gestão: risco de 1%, parcial de 50% em 1R, breakeven no saldo e alvo final em 2R.\n- Validação: opera em shadow até registrar 30 paper trades completos.",

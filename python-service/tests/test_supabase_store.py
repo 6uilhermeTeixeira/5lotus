@@ -13,6 +13,8 @@ class RecordingStore(SupabaseStore):
 
     def _request(self, path: str, *, method: str = "GET", payload: object = None, prefer: str | None = None) -> object:
         self.calls.append((path, method, payload, prefer))
+        if path.startswith("bots?"):
+            return []
         if path.startswith("paper_trades?bot_id=") and method == "GET":
             return self.open_rows
         if path.startswith("paper_trades?") and method == "GET":
@@ -49,6 +51,19 @@ class PaperResultsStore(RecordingStore):
 
 
 class SupabaseStoreTests(unittest.TestCase):
+    def test_catalog_only_loads_active_bots(self) -> None:
+        store = RecordingStore()
+
+        self.assertEqual(store.list_bots(), [])
+        self.assertIn("active=eq.true", store.calls[0][0])
+        self.assertIn("active", store.calls[0][0])
+
+    def test_catalog_can_load_archived_bots(self) -> None:
+        store = RecordingStore()
+
+        self.assertEqual(store.list_bots(False), [])
+        self.assertIn("active=eq.false", store.calls[0][0])
+
     def test_backtest_snapshot_is_compact_and_upserted_by_period(self) -> None:
         store = RecordingStore()
         timestamp = datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc)
@@ -119,6 +134,39 @@ class SupabaseStoreTests(unittest.TestCase):
         self.assertTrue(inserted)
         self.assertIn("bot_id=eq.bot-4", store.calls[0][0])
         self.assertEqual(store.calls[-1][2]["bot_id"], "bot-4")
+
+    def test_adaptive_health_uses_only_prior_closed_technical_trades(self) -> None:
+        store = RecordingStore()
+        store.open_rows = [{"outcome_r": 1.0} for _ in range(8)]
+
+        health = store.load_adaptive_component_health(datetime(2026, 8, 3, 10, tzinfo=timezone.utc))
+
+        self.assertTrue(health["bot-3"]["eligible"])
+        self.assertEqual(len(store.calls), 3)
+        for path, method, _, _ in store.calls:
+            self.assertEqual(method, "GET")
+            self.assertIn("variant=eq.technical", path)
+            self.assertIn("status=eq.closed", path)
+            self.assertIn("closed_at_utc=gte.", path)
+            self.assertIn("closed_at_utc=lt.", path)
+            self.assertIn("T00%3A00%3A00%2B00%3A00", path)
+
+    def test_weighted_portfolio_risk_state_is_scoped_to_bot_and_utc_day(self) -> None:
+        store = RecordingStore()
+        store.open_rows = [
+            {"status": "closed", "outcome_r": -1.0, "closed_at_utc": "2026-08-03T10:00:00+00:00"},
+            {"status": "open", "outcome_r": None, "closed_at_utc": None},
+        ]
+
+        state = store.load_portfolio_risk_state("bot-10", datetime(2026, 8, 3, 10, 5, tzinfo=timezone.utc))
+
+        self.assertEqual(state["trades_started"], 2)
+        self.assertEqual(state["daily_outcome_r"], -1)
+        self.assertEqual(state["cooldown_until_utc"], "2026-08-03T10:15:00+00:00")
+        path = store.calls[0][0]
+        self.assertIn("bot_id=eq.bot-10", path)
+        self.assertIn("opened_at_utc=gte.", path)
+        self.assertIn("opened_at_utc=lt.", path)
 
     def test_bot_5_uses_its_own_open_position_scope(self) -> None:
         store = RecordingStore()

@@ -5,21 +5,29 @@ from app.schemas import BotCatalogItem
 
 
 class ComparisonPageTests(unittest.TestCase):
-    def test_catalog_switches_between_symbols_and_renders_equity_chart(self) -> None:
-        bots = [
-            BotCatalogItem(id=f"bot-{symbol.lower()}-{index}", name=f"Bot {index} {symbol}", description="Teste", strategy_profile="fimath_ema20_flow", symbol=symbol, timeframe="M5")
-            for symbol in ("XAUUSD", "EURUSD") for index in range(1, 8)
+    def test_catalog_separates_active_and_archived_strategies(self) -> None:
+        active_bots = [
+            BotCatalogItem(id=f"bot-{index}", name=name, description="Teste", strategy_profile="fimath_ema20_flow", symbol="XAUUSD", timeframe="M5")
+            for index, name in [(6, "Stochastic Sell 18 UTC"), (7, "Tendência Multitemporal"), (11, "Portfólio 7/6 · 100/75"), (12, "Happy Gold ZigZag Scalper")]
+        ]
+        archived_bots = [
+            BotCatalogItem(id="bot-1", name="Fimath", description="Teste", strategy_profile="fimath_ema20_flow", symbol="XAUUSD", timeframe="M5", active=False),
+            BotCatalogItem(id="bot-eur-1", name="Fimath · EUR/USD", description="Teste", strategy_profile="fimath_ema20_flow", symbol="EURUSD", timeframe="M5", active=False),
         ]
 
-        html = bytes(render_catalog_page(bots).body).decode("utf-8")
+        html = bytes(render_catalog_page(active_bots, archived_bots).body).decode("utf-8")
 
-        self.assertIn('data-symbol-toggle="XAUUSD"', html)
-        self.assertIn('data-symbol-toggle="EURUSD"', html)
+        self.assertIn('data-catalog-tab="active"', html)
+        self.assertIn('data-catalog-tab="archived"', html)
+        self.assertIn('data-catalog-panel="archived"', html)
         self.assertIn('id="equity-chart"', html)
-        self.assertIn("/api/equity-comparison?symbol=", html)
-        self.assertEqual(html.count('class="bot card"'), 14)
+        self.assertIn("/api/equity-comparison?symbol=XAUUSD", html)
+        self.assertIn("Happy Gold ZigZag Scalper", html)
+        self.assertIn("Fimath · EUR/USD", html)
+        self.assertIn("Ver histórico", html)
+        self.assertEqual(html.count('class="bot card"'), 6)
 
-    def test_comparison_page_renders_seven_independent_bots(self) -> None:
+    def test_comparison_page_renders_four_active_bots(self) -> None:
         bots = [
             BotCatalogItem(
                 id=f"bot-{index}",
@@ -30,34 +38,28 @@ class ComparisonPageTests(unittest.TestCase):
                 timeframe="M5",
             )
             for index, name, profile in [
-                (1, "Bot 1 — Fimath", "fimath_ema20_flow"),
-                (2, "Bot 2 — Momentum ATR", "momentum_atr_breakout"),
-                (3, "Bot 3 — RSI Bollinger", "rsi_bollinger_reversion"),
-                (4, "Bot 4 — MACD Trend", "macd_trend_crossover"),
-                (5, "Bot 5 — Stochastic Pullback", "stochastic_trend_pullback"),
-                (6, "Bot 6 — Stochastic Sell 18 UTC", "stochastic_sell_session"),
-                (7, "Bot 7 — Tendência Multitemporal", "multitimeframe_trend_pullback"),
+                (6, "Stochastic Sell 18 UTC", "stochastic_sell_session"),
+                (7, "Tendência Multitemporal", "multitimeframe_trend_pullback"),
+                (11, "Portfólio 7/6 · 100/75", "portfolio_6_7_100_75"),
+                (12, "Happy Gold ZigZag Scalper", "happy_gold_zigzag_scalper"),
             ]
         ]
 
         response = render_comparison_page(bots)
         html = bytes(response.body).decode("utf-8")
 
-        self.assertIn("Estratégias simultâneas", html)
-        self.assertIn("Bot 1 — Fimath", html)
-        self.assertIn("Bot 2 — Momentum ATR", html)
-        self.assertIn("Bot 3 — RSI Bollinger", html)
-        self.assertIn("Bot 4 — MACD Trend", html)
-        self.assertIn("Bot 5 — Stochastic Pullback", html)
-        self.assertIn("Bot 6 — Stochastic Sell 18 UTC", html)
-        self.assertIn("Bot 7 — Tendência Multitemporal", html)
-        self.assertIn("<strong>7</strong>", html)
+        self.assertIn("Estratégias ativas", html)
+        self.assertIn("Stochastic Sell 18 UTC", html)
+        self.assertIn("Tendência Multitemporal", html)
+        self.assertIn("Portfólio 7/6 · 100/75", html)
+        self.assertIn("Happy Gold ZigZag Scalper", html)
+        self.assertIn("<strong>4</strong>", html)
         self.assertIn("/api/compare", html)
 
     def test_results_page_defaults_to_long_historical_validation(self) -> None:
         bot = BotCatalogItem(
             id="bot-4",
-            name="Bot 4 — MACD Trend",
+            name="MACD Trend",
             description="Teste",
             strategy_profile="macd_trend_crossover",
             symbol="XAUUSD",

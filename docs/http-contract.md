@@ -107,14 +107,26 @@ Resposta minima:
 }
 ```
 
+## Catálogo de estratégias
+
+- `GET /api/bots` retorna somente estratégias ativas.
+- `GET /api/bots?archived=true` retorna somente estratégias arquivadas.
+- `GET /api/bots/{bot_id}/results`, `/chart` e `/historical-replay` aceitam IDs ativos ou arquivados para preservar a consulta histórica.
+- `POST /decision`, `POST /api/trades` e `POST /api/candles` rejeitam estratégias arquivadas, pois resolvem exclusivamente o catálogo ativo.
+- O campo `active` explicita o estado operacional. O campo `name` contém apenas o título público; o identificador `bot-N` permanece no campo `id`.
+
 ## Decisao atual
 
 O serviço trabalha com estes pressupostos:
 
 - ativos de pesquisa: `XAUUSD` e `EURUSD`
 - timeframe base: `M5`
-- perfis de estratégia: `fimath_ema20_flow` no Bot 1, `momentum_atr_breakout` no Bot 2, `rsi_bollinger_reversion` no Bot 3, `macd_trend_crossover` no Bot 4, `stochastic_trend_pullback` no Bot 5, `stochastic_sell_session` no Bot 6 e `multitimeframe_trend_pullback` no Bot 7
+- perfis ativos: Bot 6 usa `stochastic_sell_session`, Bot 7 usa `multitimeframe_trend_pullback`, Bot 11 usa `portfolio_6_7_100_75` e Bot 12 usa `happy_gold_zigzag_scalper`, todos em XAUUSD/M5
 - no Bot 7, `risk_amount`, `suggested_size` e `effective_risk_pct` já incorporam o multiplicador experimental de risco `0,5`; o alvo é `0,75R` e somente sinais de compra entre 13:00 e 15:59 UTC são candidatos
+- no Bot 8, esses campos incorporam a alocação do componente selecionado: `0,75` para o Bot 7 e `0,25` para o Bot 6; `portfolio_component`, `portfolio_weight_pct` e a prioridade aplicada são retornados em `metadata`
+- no Bot 9, `adaptive_component_health_json` registra a janela causal de 120 dias e `adaptive_active_component` permanece congelado durante o dia UTC; somente o componente selecionado recebe 100% do risco-base do candidato, sempre em shadow
+- nos Bots 10 e 11, `portfolio_risk_state_json` registra operações e resultado do dia, `portfolio_regime*` comprova o filtro vendedor do Bot 6 e `portfolio_weight_pct` retorna respectivamente 75/50 ou 100/75 conforme o componente
+- no Bot 12, `signal_timeframe=M30`, `fixed_stop_points=240`, `fixed_target_points=1000`, `suggested_size=0.10`, `break_even_trigger_points=40`, `trailing_activation_points=120` e `trailing_distance_points=60` documentam a assinatura reconstruída; `experimental_shadow_lock=true` impede execução
 - risco máximo por operação: `1%` da banca
 - gatilho: pullback/rejeição da MME20 ou padrão fora-dentro
 - stop: estrutura da rejeição com buffer de ATR(14)

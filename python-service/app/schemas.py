@@ -172,6 +172,7 @@ class BotCatalogItem(BaseModel):
     symbol: str
     timeframe: str
     results_file: str = ""
+    active: bool = True
 
 
 class TradeIngestRequest(BaseModel):

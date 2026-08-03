@@ -6,10 +6,15 @@ input string HealthcheckUrl = "http://127.0.0.1:8000/health";
 input string TradeResultsUrl = "http://127.0.0.1:8000/api/trades";
 input string CandleCacheUrl = "http://127.0.0.1:8000/api/candles";
 input string LotusIngestApiKey = "";
-input string ResultsBotId = "bot-1";
+input string ResultsBotId = "bot-6";
 input string ShadowBotIds = "bot-2,bot-3,bot-4,bot-5";
 input string ExperimentalBotId = "bot-6";
 input string MultitimeframeResearchBotId = "bot-7";
+input string PortfolioResearchBotId = "bot-8";
+input string AdaptivePortfolioResearchBotId = "bot-9";
+input string BalancedPortfolioResearchBotId = "bot-10";
+input string AggressivePortfolioResearchBotId = "bot-11";
+input string HappyGoldResearchBotId = "bot-12";
 input string StrategySymbol = "XAUUSD";
 input string SecondaryHistorySymbol = "EURUSD";
 input string SecondaryHistoryBotId = "bot-eur-1";
@@ -17,7 +22,7 @@ input string StrategyTimeframe = "M5";
 input int HistoryBars = 60;
 input int HistoryCacheBars = 100000;
 input bool RefreshDeepHistoryOnInit = false;
-input bool RefreshSecondaryHistoryOnInit = true;
+input bool RefreshSecondaryHistoryOnInit = false;
 input int PollIntervalSeconds = 5;
 input int RequestTimeoutMs = 3000;
 input bool EnableOrderExecution = false;
@@ -95,28 +100,17 @@ void OnTimer()
       return;
    }
 
-   PollDecision(tick, ResultsBotId, EnableOrderExecution);
-
-   string shadowIds[];
-   int shadowCount = StringSplit(ShadowBotIds, StringGetCharacter(",", 0), shadowIds);
-   bool experimentalPolled = ExperimentalBotId == ResultsBotId;
-   for(int index = 0; index < shadowCount; index++)
-   {
-      StringTrimLeft(shadowIds[index]);
-      StringTrimRight(shadowIds[index]);
-      if(shadowIds[index] != "" && shadowIds[index] != ResultsBotId)
-      {
-         PollDecision(tick, shadowIds[index], false);
-         if(shadowIds[index] == ExperimentalBotId)
-            experimentalPolled = true;
-      }
-   }
-   // New inputs use their default even when an existing chart retains its old
-   // ShadowBotIds value, so the experiment can be introduced without touching secrets.
-   if(ExperimentalBotId != "" && !experimentalPolled)
+   // The active research portfolio is intentionally restricted to Bots 6, 7,
+   // 11 and 12. Legacy inputs remain declared so existing chart presets load,
+   // but they no longer cause archived strategies to be polled.
+   if(ExperimentalBotId != "")
       PollDecision(tick, ExperimentalBotId, false);
-   if(MultitimeframeResearchBotId != "" && MultitimeframeResearchBotId != ResultsBotId && MultitimeframeResearchBotId != ExperimentalBotId)
+   if(MultitimeframeResearchBotId != "" && MultitimeframeResearchBotId != ExperimentalBotId)
       PollDecision(tick, MultitimeframeResearchBotId, false);
+   if(AggressivePortfolioResearchBotId != "" && AggressivePortfolioResearchBotId != ExperimentalBotId && AggressivePortfolioResearchBotId != MultitimeframeResearchBotId)
+      PollDecision(tick, AggressivePortfolioResearchBotId, false);
+   if(HappyGoldResearchBotId != "" && HappyGoldResearchBotId != ExperimentalBotId && HappyGoldResearchBotId != MultitimeframeResearchBotId && HappyGoldResearchBotId != AggressivePortfolioResearchBotId)
+      PollDecision(tick, HappyGoldResearchBotId, false);
 
    upTicks = downTicks = neutralTicks = 0;
    upVolume = downVolume = 0.0;

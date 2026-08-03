@@ -14,7 +14,7 @@ from .config import get_settings
 from .pages import render_catalog_page, render_comparison_page, render_login_page, render_results_page
 from .results_store import get_bot, load_bots_catalog, load_results_snapshot, resolve_bot_results_file
 from .schemas import BotCatalogItem, CandleIngestRequest, DecisionAction, DecisionRequest, DecisionResponse, EquityComparisonResponse, EquityPoint, EquitySeries, HealthResponse, HistoricalReplayResponse, MarketChartResponse, ResultsResponse, TradeIngestRequest
-from .strategy import evaluate_decision
+from .strategy import WEIGHTED_PORTFOLIO_PROFILES, evaluate_decision
 from .supabase_store import SupabaseStore
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -48,8 +48,8 @@ def _require_api_session(request: Request) -> None:
         raise HTTPException(status_code=401, detail="dashboard authentication required")
 
 
-def _find_bot(bot_id: str) -> BotCatalogItem:
-    bot = next((item for item in _list_bots() if item.id == bot_id), None)
+def _find_bot(bot_id: str, *, include_archived: bool = False) -> BotCatalogItem:
+    bot = next((item for item in _list_bots(None if include_archived else True) if item.id == bot_id), None)
     if bot is None:
         raise HTTPException(status_code=404, detail="bot not found")
     return bot
@@ -59,8 +59,11 @@ def _uses_supabase_results() -> bool:
     return settings.results_store == "SUPABASE"
 
 
-def _list_bots() -> list[BotCatalogItem]:
-    return SupabaseStore(settings).list_bots() if _uses_supabase_results() else load_bots_catalog(settings.bots_catalog_path)
+def _list_bots(active: bool | None = True) -> list[BotCatalogItem]:
+    if _uses_supabase_results():
+        return SupabaseStore(settings).list_bots(active)
+    bots = load_bots_catalog(settings.bots_catalog_path)
+    return bots if active is None else [bot for bot in bots if bot.active is active]
 
 
 def _load_bot_results(bot: BotCatalogItem) -> ResultsResponse:
@@ -128,7 +131,7 @@ def logout() -> RedirectResponse:
 def bots_page(request: Request) -> HTMLResponse | RedirectResponse:
     if redirect := _require_page_session(request):
         return redirect
-    return render_catalog_page(_list_bots())
+    return render_catalog_page(_list_bots(True), _list_bots(False))
 
 
 @app.get("/compare", response_class=HTMLResponse, response_model=None, include_in_schema=False)
@@ -142,7 +145,7 @@ def comparison_page(request: Request) -> HTMLResponse | RedirectResponse:
 def bot_results_page(bot_id: str, request: Request) -> HTMLResponse | RedirectResponse:
     if redirect := _require_page_session(request):
         return redirect
-    return render_results_page(_find_bot(bot_id))
+    return render_results_page(_find_bot(bot_id, include_archived=True))
 
 
 @app.get("/results", include_in_schema=False)
@@ -154,9 +157,9 @@ def legacy_results(request: Request) -> RedirectResponse:
 
 
 @app.get("/api/bots", response_model=list[BotCatalogItem])
-def read_bots(request: Request) -> list[BotCatalogItem]:
+def read_bots(request: Request, archived: bool = False) -> list[BotCatalogItem]:
     _require_api_session(request)
-    return _list_bots()
+    return _list_bots(not archived)
 
 
 @app.get("/api/compare")
@@ -218,13 +221,13 @@ def read_equity_comparison(request: Request, symbol: str = "XAUUSD", days: int =
 @app.get("/api/bots/{bot_id}/results", response_model=ResultsResponse)
 def read_bot_results(bot_id: str, request: Request) -> ResultsResponse:
     _require_api_session(request)
-    return _load_bot_results(_find_bot(bot_id))
+    return _load_bot_results(_find_bot(bot_id, include_archived=True))
 
 
 @app.get("/api/bots/{bot_id}/chart", response_model=MarketChartResponse)
 def read_bot_chart(bot_id: str, request: Request) -> MarketChartResponse:
     _require_api_session(request)
-    bot = _find_bot(bot_id)
+    bot = _find_bot(bot_id, include_archived=True)
     if not _uses_supabase_results():
         raise HTTPException(status_code=503, detail="chart data requires DAYTRADE_RESULTS_STORE=SUPABASE")
     return SupabaseStore(settings).load_chart(bot, settings.chart_cache_limit, source_bot_id=_market_data_source_bot_id(bot))
@@ -235,7 +238,7 @@ def read_historical_replay(bot_id: str, request: Request, days: int = 120) -> Hi
     _require_api_session(request)
     if days < 1 or days > 365:
         raise HTTPException(status_code=422, detail="replay days must be between 1 and 365")
-    bot = _find_bot(bot_id)
+    bot = _find_bot(bot_id, include_archived=True)
     if not _uses_supabase_results():
         raise HTTPException(status_code=503, detail="historical replay requires DAYTRADE_RESULTS_STORE=SUPABASE")
     store = SupabaseStore(settings)
@@ -314,6 +317,11 @@ def read_config() -> dict[str, str | int | float | bool]:
         "backtest_session_start_utc": settings.backtest_session_start_utc,
         "backtest_session_end_utc": settings.backtest_session_end_utc,
         "backtest_regime_enabled": settings.backtest_regime_enabled,
+        "happy_gold_break_even_trigger_points": settings.happy_gold_break_even_trigger_points,
+        "happy_gold_break_even_offset_points": settings.happy_gold_break_even_offset_points,
+        "happy_gold_trailing_activation_points": settings.happy_gold_trailing_activation_points,
+        "happy_gold_trailing_distance_points": settings.happy_gold_trailing_distance_points,
+        "happy_gold_max_holding_bars": settings.happy_gold_max_holding_bars,
         "enable_live_decisions": settings.enable_live_decisions,
         "dashboard_auth_configured": settings.dashboard_auth_configured,
         "results_store": settings.results_store,
@@ -334,10 +342,10 @@ def decision(payload: DecisionRequest, x_2lotus_ingest_key: str | None = Header(
         store = SupabaseStore(settings)
         store.upsert_candles(payload.bot_id, payload.symbol, payload.timeframe, payload.candles)
         store.advance_paper_trades(payload.bot_id, payload.candles)
-        if strategy_profile == "multitimeframe_trend_pullback":
+        if strategy_profile in {"multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "happy_gold_zigzag_scalper", *WEIGHTED_PORTFOLIO_PROFILES}:
             payload.candles = store.load_candles(
                 bot,
-                1000,
+                4000 if strategy_profile == "adaptive_portfolio_3_6_7" or strategy_profile in WEIGHTED_PORTFOLIO_PROFILES else 1000,
                 source_bot_id=_market_data_source_bot_id(bot),
             )
     strategy_settings = settings
@@ -345,6 +353,10 @@ def decision(payload: DecisionRequest, x_2lotus_ingest_key: str | None = Header(
         strategy_settings = copy(settings)
         strategy_settings.default_symbol = payload.symbol
         strategy_settings.default_timeframe = payload.timeframe
+        if strategy_profile == "adaptive_portfolio_3_6_7" and store:
+            strategy_settings.adaptive_component_health = store.load_adaptive_component_health(payload.timestamp_utc)
+        if strategy_profile in WEIGHTED_PORTFOLIO_PROFILES and store:
+            strategy_settings.portfolio_risk_state = store.load_portfolio_risk_state(payload.bot_id, payload.timestamp_utc)
     response = evaluate_decision(payload, strategy_settings, strategy_profile)
     if payload.bot_id and store and response.metadata.get("candidate"):
         signal_key = store.record_strategy_candidate(payload, response)

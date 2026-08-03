@@ -88,6 +88,56 @@ class HistoricalReplayTests(unittest.TestCase):
         self.assertEqual(result.exit_price, 100)
         self.assertEqual(result.net_pnl, 50)
 
+    def test_happy_gold_break_even_and_trailing_raise_stop_for_next_candle(self) -> None:
+        opened_at = datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc)
+        trade = _OpenTrade(
+            trade_id="happy-gold-1",
+            setup="happy_gold_zigzag_breakout",
+            symbol="XAUUSD",
+            timeframe="M5",
+            side="buy",
+            opened_at_utc=opened_at,
+            volume_lots=1,
+            entry_price=100,
+            initial_stop_price=97.6,
+            stop_price=97.6,
+            partial_price=110,
+            target_price=110,
+            risk_amount=240,
+            point_size=.01,
+            partial_close_pct=100,
+            max_holding_bars=2,
+            break_even_trigger_points=40,
+            break_even_offset_points=0,
+            trailing_activation_points=120,
+            trailing_distance_points=60,
+        )
+        favorable = CandleSnapshot(
+            timestamp_utc=opened_at + timedelta(minutes=5),
+            open=100,
+            high=101.3,
+            low=99.9,
+            close=101.1,
+            volume=100,
+        )
+
+        self.assertIsNone(_advance_trade(trade, favorable, replay_settings()))
+        self.assertAlmostEqual(trade.stop_price, 100.7)
+
+        retracement = CandleSnapshot(
+            timestamp_utc=opened_at + timedelta(minutes=10),
+            open=101,
+            high=101.1,
+            low=100.6,
+            close=100.8,
+            volume=100,
+        )
+        result = _advance_trade(trade, retracement, replay_settings())
+
+        self.assertIsNotNone(result)
+        self.assertAlmostEqual(result.exit_price, 100.7)
+        self.assertEqual(result.net_pnl, 70)
+
     def test_sell_stop_is_checked_against_historical_ask(self) -> None:
         configured = replay_settings()
         configured.backtest_spread_points = 10

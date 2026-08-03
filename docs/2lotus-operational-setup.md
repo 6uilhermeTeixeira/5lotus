@@ -45,15 +45,18 @@ Preencha os inputs:
 
 - `StrategyServiceUrl`: `http://127.0.0.1:8000/decision`
 - `TradeResultsUrl`: `http://127.0.0.1:8000/api/trades`
-- `ResultsBotId`: `bot-1`
+- `ResultsBotId`: `bot-6`
 - `ShadowBotIds`: `bot-2,bot-3,bot-4,bot-5` (aceita uma lista separada por vírgulas)
 - `ExperimentalBotId`: `bot-6` (força o polling do experimento mesmo em gráficos que preservam a lista shadow antiga)
 - `MultitimeframeResearchBotId`: `bot-7` (força o polling do experimento multitemporal sempre sem execução)
+- `PortfolioResearchBotId`, `AdaptivePortfolioResearchBotId` e `BalancedPortfolioResearchBotId`: legados, ignorados pelo polling
+- `AggressivePortfolioResearchBotId`: `bot-11` (força o polling da variante 100/75 sempre sem execução)
+- `HappyGoldResearchBotId`: `bot-12` (força o polling da reconstrução ZigZag M30 sempre sem execução)
 - `HistoryCacheBars`: `100000` somente no bot canônico, visando aproximadamente um ano de M5 quando a corretora disponibilizar essa profundidade
 - `RefreshDeepHistoryOnInit`: `false` por padrão; ative somente para um bootstrap explícito dos 100 mil candles
 - `SecondaryHistorySymbol`: `EURUSD`
 - `SecondaryHistoryBotId`: `bot-eur-1`
-- `RefreshSecondaryHistoryOnInit`: `true` durante o primeiro bootstrap; depois pode ser desativado
+- `RefreshSecondaryHistoryOnInit`: `false`; estratégias EURUSD estão arquivadas
 - `LotusIngestApiKey`: valor de `DAYTRADE_INGEST_API_KEY`
 - `EnableOrderExecution`: `false`
 
@@ -87,7 +90,7 @@ O resultado deve indicar `"status":"ok"`. Após o fechamento de um trade demo, o
 `POST /api/trades` com a chave no header `X-2Lotus-Ingest-Key`; o painel 2Lotus passa a mostrar a
 operação gravada no Supabase.
 
-Durante shadow, confirme também nos logs que os sete `bot_id` recebem HTTP 200. `strategy_signals`
+Durante shadow, confirme também nos logs que `bot-6`, `bot-7`, `bot-11` e `bot-12` recebem HTTP 200. `strategy_signals`
 recebe os candidatos quando cada setup ocorre e `paper_trades` mantém o variant `technical`;
 o Bot 1 também acompanha `flow_confirmed`. As chaves de sinal e as consultas de posição são
 segmentadas por bot. A execução real só pode ser avaliada depois da
@@ -103,6 +106,11 @@ ficam limitadas a compras entre 13:00–15:59 UTC, exigem força mínima de 0,7 
 único de 0,75R, stop técnico de 1,2 ATR e apenas 50% do risco padrão por operação. A duração
 máxima continua em 60 minutos. Mesmo que o backtest supere 70%, o EA sempre consulta esse bot
 com execução falsa.
+
+O Bot 8 combina os componentes dos Bots 7 e 6 sem misturar seus gatilhos. O serviço avalia os
+dois, dá prioridade ao Bot 7 quando houver conflito, aplica 75% do risco-base ao componente 7 e
+25% ao componente 6, e mantém uma única posição. O replay limita o conjunto a duas entradas e
+2R de perda por dia. O EA consulta o Bot 8 sempre com execução falsa durante o forward test.
 
 O catálogo EUR/USD replica os sete perfis e parâmetros do catálogo XAU/USD. O propósito é medir
 generalização; os resultados não devem ser interpretados como parâmetros otimizados para forex.

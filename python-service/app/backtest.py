@@ -3,15 +3,18 @@ from dataclasses import dataclass
 from datetime import datetime, time, timedelta
 from types import SimpleNamespace
 
+from .adaptive import build_adaptive_schedule
 from .config import Settings
 from .regime import RegimeSnapshot, build_regime_timeline, regime_allows, regime_at
 from .results_store import build_results_snapshot
 from .schemas import AccountSnapshot, BotCatalogItem, CandleSnapshot, DecisionRequest, HistoricalReplayResponse, ReplayValidationFold, TradeResult
-from .strategy import evaluate_decision
+from .strategy import WEIGHTED_PORTFOLIO_PROFILES, evaluate_decision
 
 
 HISTORY_BARS = 60
 MULTITIMEFRAME_HISTORY_BARS = 1000
+ADAPTIVE_HISTORY_BARS = 4000
+DEEP_HISTORY_PROFILES = {"multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", *WEIGHTED_PORTFOLIO_PROFILES}
 
 
 def _instrument_point_size(bot: BotCatalogItem, settings: Settings) -> float:
@@ -42,6 +45,11 @@ class _OpenTrade:
     regime: str = "unknown"
     bars_held: int = 0
     max_holding_bars: int | None = None
+    break_even_trigger_points: float | None = None
+    break_even_offset_points: float = 0.0
+    trailing_activation_points: float | None = None
+    trailing_distance_points: float | None = None
+    best_favorable_price: float | None = None
 
 
 def _timeframe_delta(timeframe: str) -> timedelta:
@@ -71,7 +79,63 @@ def _replay_settings(settings: Settings, bot: BotCatalogItem) -> SimpleNamespace
         fimath_mode="shadow",
         enable_live_decisions=False,
         fimath_partial_pct=settings.fimath_partial_pct,
+        backtest_regime_trend_adx=getattr(settings, "backtest_regime_trend_adx", 25),
+        backtest_regime_range_adx=getattr(settings, "backtest_regime_range_adx", 20),
+        backtest_regime_high_volatility_percentile=getattr(settings, "backtest_regime_high_volatility_percentile", 90),
+        adaptive_active_component=None,
+        adaptive_component_health={},
+        portfolio_regime_snapshot=None,
+        portfolio_risk_state={},
+        happy_gold_break_even_trigger_points=getattr(settings, "happy_gold_break_even_trigger_points", 40),
+        happy_gold_break_even_offset_points=getattr(settings, "happy_gold_break_even_offset_points", 0),
+        happy_gold_trailing_activation_points=getattr(settings, "happy_gold_trailing_activation_points", 120),
+        happy_gold_trailing_distance_points=getattr(settings, "happy_gold_trailing_distance_points", 60),
+        happy_gold_max_holding_bars=getattr(settings, "happy_gold_max_holding_bars", 2),
     )
+
+
+def _adaptive_bot_3_trade_allowed(trade: TradeResult) -> bool:
+    marker = "atr_pct="
+    if marker not in trade.note:
+        return False
+    raw = trade.note.split(marker, 1)[1].split(";", 1)[0].split(":", 1)[0]
+    try:
+        return float(raw) >= 25
+    except ValueError:
+        return False
+
+
+def _adaptive_replay_schedule(
+    bot: BotCatalogItem,
+    candles: list[CandleSnapshot],
+    settings: Settings,
+    period_start: datetime,
+    period_end: datetime,
+    days: int,
+) -> dict[object, dict[str, object]]:
+    if bot.strategy_profile != "adaptive_portfolio_3_6_7":
+        return {}
+    component_profiles = {
+        "bot-3": "rsi_bollinger_reversion",
+        "bot-6": "stochastic_sell_session",
+        "bot-7": "multitimeframe_trend_pullback",
+    }
+    component_trades: dict[str, list[TradeResult]] = {}
+    for component, profile in component_profiles.items():
+        component_bot = BotCatalogItem(
+            id=f"adaptive-source-{component}",
+            name=f"Adaptive source {component}",
+            description="Independent causal health source for Bot 9",
+            strategy_profile=profile,
+            symbol=bot.symbol,
+            timeframe=bot.timeframe,
+        )
+        replay = run_historical_replay(component_bot, candles, settings, days=days + 120)
+        rows = replay.trades
+        if component == "bot-3":
+            rows = [trade for trade in rows if _adaptive_bot_3_trade_allowed(trade)]
+        component_trades[component] = rows
+    return build_adaptive_schedule(component_trades, period_start.date(), period_end.date())
 
 
 def _pnl_for_fill(trade: _OpenTrade, exit_price: float, fraction: float) -> float:
@@ -141,6 +205,28 @@ def _advance_trade(trade: _OpenTrade, candle: CandleSnapshot, settings: Settings
     target_reached = quote_high >= trade.target_price if buy else quote_low <= trade.target_price
     if trade.partial_hit and target_reached:
         return _finish_trade(trade, candle.timestamp_utc, _exit_fill(trade.target_price, trade.side, slippage_price), settings, "target")
+    if trade.break_even_trigger_points is not None or trade.trailing_activation_points is not None:
+        favorable_price = quote_high if buy else quote_low
+        if trade.best_favorable_price is None:
+            trade.best_favorable_price = favorable_price
+        elif buy:
+            trade.best_favorable_price = max(trade.best_favorable_price, favorable_price)
+        else:
+            trade.best_favorable_price = min(trade.best_favorable_price, favorable_price)
+        direction = 1 if buy else -1
+        favorable_points = direction * (trade.best_favorable_price - trade.entry_price) / trade.point_size
+        next_stop = trade.stop_price
+        if trade.break_even_trigger_points is not None and favorable_points >= trade.break_even_trigger_points:
+            break_even_stop = trade.entry_price + direction * trade.break_even_offset_points * trade.point_size
+            next_stop = max(next_stop, break_even_stop) if buy else min(next_stop, break_even_stop)
+        if (
+            trade.trailing_activation_points is not None
+            and trade.trailing_distance_points is not None
+            and favorable_points >= trade.trailing_activation_points
+        ):
+            trailing_stop = trade.best_favorable_price - direction * trade.trailing_distance_points * trade.point_size
+            next_stop = max(next_stop, trailing_stop) if buy else min(next_stop, trailing_stop)
+        trade.stop_price = next_stop
     if trade.max_holding_bars is not None and trade.bars_held >= trade.max_holding_bars:
         return _force_close(trade, candle, settings, "max_holding_bars")
     return None
@@ -206,12 +292,19 @@ def run_historical_replay(
     period_end = ordered[-1].timestamp_utc + interval
     requested_start = period_end - timedelta(days=days)
     first_visible = next((index for index, candle in enumerate(ordered) if candle.timestamp_utc >= requested_start), len(ordered) - 1)
-    history_bars = MULTITIMEFRAME_HISTORY_BARS if bot.strategy_profile == "multitimeframe_trend_pullback" else HISTORY_BARS
+    history_bars = (
+        ADAPTIVE_HISTORY_BARS if bot.strategy_profile == "adaptive_portfolio_3_6_7" or bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES
+        else MULTITIMEFRAME_HISTORY_BARS if bot.strategy_profile in DEEP_HISTORY_PROFILES
+        else HISTORY_BARS
+    )
     evaluation_start = max(history_bars - 1, first_visible)
     replay_settings = _replay_settings(settings, bot)
     regime_timeline = build_regime_timeline(ordered, settings) if settings.backtest_regime_enabled else ([], [])
+    adaptive_schedule = _adaptive_replay_schedule(bot, ordered, settings, ordered[first_visible].timestamp_utc, period_end, days)
     session_start = _parse_time(settings.backtest_session_start_utc)
     session_end = _parse_time(settings.backtest_session_end_utc)
+    if bot.strategy_profile == "happy_gold_zigzag_scalper":
+        session_start, session_end = time(3, 0), time(19, 0)
     point_size = _instrument_point_size(bot, settings)
     balance = settings.backtest_balance
     open_trade: _OpenTrade | None = None
@@ -273,6 +366,12 @@ def run_historical_replay(
             positions=[],
             account=AccountSnapshot(balance=balance, equity=balance, margin_free=balance),
         )
+        if bot.strategy_profile == "adaptive_portfolio_3_6_7":
+            adaptive_day = adaptive_schedule.get(candle_end.date(), {})
+            replay_settings.adaptive_active_component = adaptive_day.get("active_component")
+            replay_settings.adaptive_component_health = adaptive_day.get("health", {})
+        if bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES and settings.backtest_regime_enabled:
+            replay_settings.portfolio_regime_snapshot = regime_at(regime_timeline, candle_end)
         response = evaluate_decision(request, replay_settings, bot.strategy_profile)
         if not response.metadata.get("candidate"):
             previous_candle = candle
@@ -281,8 +380,15 @@ def run_historical_replay(
         side = str(response.metadata["suggested_action"])
         regime: RegimeSnapshot = regime_at(regime_timeline, candle_end) if settings.backtest_regime_enabled else RegimeSnapshot("disabled", side, "regime_filter_disabled")
         regime_counts[regime.name] += 1
-        if bot.strategy_profile == "multitimeframe_trend_pullback":
+        portfolio_component = str(response.metadata.get("portfolio_component", ""))
+        if bot.strategy_profile == "adaptive_portfolio_3_6_7" or bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES:
+            regime_allowed, regime_reason = True, "strategy_uses_internal_adaptive_component_regime"
+        elif bot.strategy_profile == "happy_gold_zigzag_scalper":
+            regime_allowed, regime_reason = True, "strategy_uses_internal_m30_breakout_regime"
+        elif bot.strategy_profile == "multitimeframe_trend_pullback" or portfolio_component == "bot-7":
             regime_allowed, regime_reason = True, "strategy_uses_internal_h1_m15_regime"
+        elif bot.strategy_profile == "portfolio_6_7" and portfolio_component == "bot-6":
+            regime_allowed, regime_reason = regime_allows("stochastic_sell_session", side, regime) if settings.backtest_regime_enabled else (True, "regime_filter_disabled")
         else:
             regime_allowed, regime_reason = regime_allows(bot.strategy_profile, side, regime) if settings.backtest_regime_enabled else (True, "regime_filter_disabled")
         if not regime_allowed:
@@ -291,7 +397,7 @@ def run_historical_replay(
             continue
         day = candle_end.date()
         session_allowed = session_start <= candle_end.time() < session_end
-        daily_trade_cap = min(settings.backtest_max_trades_per_day, 2) if bot.strategy_profile == "multitimeframe_trend_pullback" else settings.backtest_max_trades_per_day
+        daily_trade_cap = min(settings.backtest_max_trades_per_day, 2) if bot.strategy_profile in DEEP_HISTORY_PROFILES else settings.backtest_max_trades_per_day
         risk_allowed = trades_per_day[day] < daily_trade_cap and daily_outcome_r[day] > -settings.backtest_daily_loss_limit_r
         cooldown_allowed = index > cooldown_until_index
         if not session_allowed:
@@ -327,6 +433,10 @@ def run_historical_replay(
                 value_per_point_per_lot=settings.backtest_value_per_point_per_lot,
                 partial_close_pct=settings.fimath_partial_pct,
                 max_holding_bars=int(response.metadata["max_holding_bars"]) if "max_holding_bars" in response.metadata else None,
+                break_even_trigger_points=float(response.metadata["break_even_trigger_points"]) if "break_even_trigger_points" in response.metadata else None,
+                break_even_offset_points=float(response.metadata.get("break_even_offset_points", 0)),
+                trailing_activation_points=float(response.metadata["trailing_activation_points"]) if "trailing_activation_points" in response.metadata else None,
+                trailing_distance_points=float(response.metadata["trailing_distance_points"]) if "trailing_distance_points" in response.metadata else None,
                 regime=(f"{regime.name}:{regime.direction}:adx={regime.adx:.2f}:atr_pct={regime.atr_percentile:.1f}" if regime.adx is not None and regime.atr_percentile is not None else f"{regime.name}:{regime.direction}"),
             )
             open_trade.partial_close_pct = response.partial_close_pct
@@ -366,6 +476,17 @@ def run_historical_replay(
     ]
     if bot.strategy_profile == "fimath_ema20_flow":
         assumptions.append("O replay do Fimath valida somente o gatilho técnico; livro de ofertas e ticks históricos não estão disponíveis.")
+    if bot.strategy_profile == "adaptive_portfolio_3_6_7":
+        assumptions.append("O Bot 9 reconstrói os Bots 3, 6 e 7 independentemente; a seleção de cada dia usa somente operações encerradas antes de 00:00 UTC.")
+        assumptions.append("A saúde adaptativa usa uma janela de 120 dias, mínimo de 8 operações, expectativa positiva e profit factor mínimo de 1,10; sem elegível, o portfólio fica sem operar.")
+    if bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES:
+        weights = WEIGHTED_PORTFOLIO_PROFILES[bot.strategy_profile]
+        assumptions.append(f"A variante mantém posição única e usa {weights['bot-7']:.0%} do risco-base no Bot 7 e {weights['bot-6']:.0%} no Bot 6; os pesos não representam posições simultâneas.")
+        assumptions.append("O Bot 6 somente é admitido quando o regime H1 causal confirma tendência de baixa; o mesmo bloqueio existe no runtime shadow.")
+    if bot.strategy_profile == "happy_gold_zigzag_scalper":
+        assumptions.append("O Bot 12 agrega M5 em M30 completo e usa pivôs fractais confirmados como aproximação causal do ZigZag proprietário; não há repaint nem antecipação do pivô.")
+        assumptions.append("SL de 240 pontos, TP de 1.000 pontos e lote 0,10 reproduzem a assinatura observada; o replay ativa break-even em +40 pontos no preço de entrada e trailing após +120 pontos, distante 60 pontos.")
+        assumptions.append("O trailing OHLC é atualizado pelo extremo favorável de um candle e só pode encerrar a partir do candle seguinte; isso evita presumir uma sequência intrabar favorável. Ticks continuam necessários para reproduzir saídas em segundos.")
     if period_start > requested_start + interval:
         assumptions.append(f"A base não cobre os {days} dias completos; o replay começa em {period_start.isoformat()}.")
     chart_start = period_end - timedelta(days=min(days, 30))
