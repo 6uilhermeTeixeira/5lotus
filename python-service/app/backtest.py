@@ -94,6 +94,7 @@ def _replay_settings(settings: Settings, bot: BotCatalogItem) -> SimpleNamespace
         happy_gold_trailing_activation_points=getattr(settings, "happy_gold_trailing_activation_points", 120),
         happy_gold_trailing_distance_points=getattr(settings, "happy_gold_trailing_distance_points", 60),
         happy_gold_max_holding_bars=getattr(settings, "happy_gold_max_holding_bars", 2),
+        happy_gold_market_calibrations=getattr(settings, "happy_gold_market_calibrations", {}),
         happy_gold_micro_min_directional_ticks=getattr(settings, "happy_gold_micro_min_directional_ticks", 4),
         happy_gold_micro_min_tick_imbalance=getattr(settings, "happy_gold_micro_min_tick_imbalance", .25),
         happy_gold_micro_min_m1_body_ratio=getattr(settings, "happy_gold_micro_min_m1_body_ratio", .55),
@@ -324,7 +325,9 @@ def run_historical_replay(
     session_start = _parse_time(settings.backtest_session_start_utc)
     session_end = _parse_time(settings.backtest_session_end_utc)
     if bot.strategy_profile in HAPPY_GOLD_PROFILES:
-        session_start, session_end = time(3, 0), time(19, 0)
+        market_calibration = getattr(settings, "happy_gold_market_calibrations", {}).get(bot.symbol.upper(), {})
+        session_start = _parse_time(str(market_calibration.get("session_start_utc", "03:00")))
+        session_end = _parse_time(str(market_calibration.get("session_end_utc", "19:00")))
     point_size = _instrument_point_size(bot, settings)
     balance = settings.backtest_balance
     open_trade: _OpenTrade | None = None
@@ -504,9 +507,15 @@ def run_historical_replay(
         "Quando stop e alvo aparecem no mesmo candle, o stop tem precedência; M1/ticks continuam sendo preferíveis para resolver a sequência intrabar.",
     ]
     if bot.symbol.upper() != "XAUUSD" and bot.strategy_profile == "happy_gold_zigzag_regime_confirmed":
+        calibration = getattr(settings, "happy_gold_market_calibrations", {}).get(bot.symbol.upper(), {})
         assumptions.append(
-            "A geometria original do Happy Gold foi preservada sem recalibração para este mercado; "
-            "os resultados são um benchmark de transferência e não autorizam execução real."
+            "A geometria cross-market usa stop normalizado por "
+            f"{calibration.get('atr_stop_multiplier', 1)} ATR(M30), alvo de {calibration.get('target_r', 2)}R, "
+            f"pivô span {calibration.get('pivot_span', 2)} e sessão "
+            f"{calibration.get('session_start_utc', '03:00')}–{calibration.get('session_end_utc', '19:00')} UTC."
+        )
+        assumptions.append(
+            "A configuração foi escolhida por grade limitada seguida de confirmação anual; permanece rejeitada e não autoriza execução real."
         )
     if bot.symbol.upper() == "BTCUSD":
         assumptions.append(

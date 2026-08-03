@@ -50,6 +50,32 @@ class Settings:
         self.happy_gold_trailing_activation_points = float(getenv("DAYTRADE_HAPPY_GOLD_TRAILING_ACTIVATION_POINTS", "120"))
         self.happy_gold_trailing_distance_points = float(getenv("DAYTRADE_HAPPY_GOLD_TRAILING_DISTANCE_POINTS", "60"))
         self.happy_gold_max_holding_bars = int(getenv("DAYTRADE_HAPPY_GOLD_MAX_HOLDING_BARS", "2"))
+        self.happy_gold_market_calibrations: dict[str, dict[str, float | int | str | bool]] = {
+            "EURUSD": {
+                "use_atr_geometry": True,
+                "atr_stop_multiplier": 1.5,
+                "target_r": 2.5,
+                "break_even_r": 1.0,
+                "trailing_activation_r": 1.2,
+                "trailing_distance_atr": 1.0,
+                "max_holding_bars": 12,
+                "pivot_span": 2,
+                "session_start_utc": "07:00",
+                "session_end_utc": "17:00",
+            },
+            "BTCUSD": {
+                "use_atr_geometry": True,
+                "atr_stop_multiplier": 1.5,
+                "target_r": 2.5,
+                "break_even_r": 1.0,
+                "trailing_activation_r": 1.2,
+                "trailing_distance_atr": 1.0,
+                "max_holding_bars": 8,
+                "pivot_span": 3,
+                "session_start_utc": "12:00",
+                "session_end_utc": "23:59",
+            },
+        }
         self.happy_gold_micro_min_directional_ticks = int(getenv("DAYTRADE_HAPPY_GOLD_MICRO_MIN_DIRECTIONAL_TICKS", "4"))
         self.happy_gold_micro_min_tick_imbalance = float(getenv("DAYTRADE_HAPPY_GOLD_MICRO_MIN_TICK_IMBALANCE", "0.25"))
         self.happy_gold_micro_min_m1_body_ratio = float(getenv("DAYTRADE_HAPPY_GOLD_MICRO_MIN_M1_BODY_RATIO", "0.55"))

@@ -47,7 +47,7 @@ Ja existe implementacao para:
 - filtrar sinais por regime H1, sessão e limites diários, com custos de execução e validação temporal explícitos
 - manter seis estratégias ativas em XAUUSD e dois benchmarks cross-market da confirmação de regime em EURUSD e BTCUSD, todos permanentemente em shadow
 - comparar as curvas de XAU/USD, EUR/USD e BTC/USD no painel; Bitcoin usa candles spot BTC-USD da Coinbase porque a conta MetaQuotes Demo não oferece esse símbolo
-- registrar os benchmarks cross-market como rejeitados na configuração original: PF 0,36 no EUR/USD e PF 0,32 no BTC/USD em 365 dias
+- recalibrar os benchmarks cross-market com ATR/R e sessões específicas: PF 0,73 no EUR/USD e PF 1,04 no BTC/USD em 365 dias; ambos continuam rejeitados e em shadow
 - preservar as estratégias arquivadas e seus candles, sinais, trades e snapshots em uma aba própria, sem polling pelo EA
 - apresentar títulos de estratégia sem o identificador técnico `Bot N`, que continua existindo apenas nos IDs internos
 

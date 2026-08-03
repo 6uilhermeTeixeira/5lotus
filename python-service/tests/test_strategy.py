@@ -780,6 +780,37 @@ class DecisionTests(unittest.TestCase):
         self.assertTrue(response.metadata["candidate"])
         self.assertEqual(response.risk_checks[0].detail, "expected=EURUSD")
 
+    def test_cross_market_calibration_uses_atr_geometry(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-eur-13"
+        request.symbol = "EURUSD"
+        request.point_size = .00001
+        configured = settings(
+            default_symbol="EURUSD",
+            happy_gold_market_calibrations={
+                "EURUSD": {
+                    "use_atr_geometry": True,
+                    "atr_stop_multiplier": 1.5,
+                    "target_r": 2.5,
+                    "break_even_r": 1.0,
+                    "trailing_activation_r": 1.2,
+                    "trailing_distance_atr": 1.0,
+                    "max_holding_bars": 12,
+                    "pivot_span": 2,
+                    "session_start_utc": "07:00",
+                    "session_end_utc": "17:00",
+                }
+            },
+            happy_gold_regime_snapshot=RegimeSnapshot("range", "both", "test", adx=18, atr_percentile=40),
+        )
+
+        response = evaluate_decision(request, configured, "happy_gold_zigzag_regime_confirmed")
+
+        self.assertEqual(response.metadata["geometry_mode"], "atr_normalized")
+        self.assertEqual(response.metadata["atr_stop_multiplier"], 1.5)
+        self.assertAlmostEqual(response.take_profit_points / response.stop_loss_points, 2.5)
+        self.assertEqual(response.metadata["max_holding_bars"], 12)
+
     def test_bot_13_requires_close_and_direction_in_ambiguous_regime(self) -> None:
         request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
         request.bot_id = "bot-13"

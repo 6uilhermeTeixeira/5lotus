@@ -38,7 +38,8 @@ Expert Advisor MQL5
 
 - O catálogo separa estratégias `active=true` e `active=false` nas abas `Estratégias ativas` e `Arquivadas`. Os títulos públicos não exibem o identificador técnico `Bot N`.
 - O catálogo operacional contém `stochastic_sell_session` (Bot 6), `multitimeframe_trend_pullback` (Bot 7), `portfolio_6_7_100_75` (Bot 11), `happy_gold_zigzag_scalper` (Bot 12), `happy_gold_zigzag_regime_confirmed` (Bot 13) e `happy_gold_zigzag_microstructure` (Bot 14), todos em XAUUSD/M5 e bloqueados em shadow.
-- `bot-eur-13` e `bot-btc-13` transferem `happy_gold_zigzag_regime_confirmed` sem recalibração para EURUSD/M5 e BTCUSD/M5. São benchmarks de robustez, não estratégias aprovadas para execução.
+- `bot-eur-13` e `bot-btc-13` começaram como transferências diretas de `happy_gold_zigzag_regime_confirmed` para EURUSD/M5 e BTCUSD/M5. São benchmarks de robustez, não estratégias aprovadas para execução.
+- A segunda rodada substitui a geometria fixa somente nesses dois bots por stop de 1,5 ATR(M30), alvo de 2,5R, break-even em 1R e trailing após 1,2R. EURUSD usa pivô span 2, sessão 07:00–17:00 e timeout de 12 M5; BTCUSD usa span 3, sessão 12:00–23:59 e timeout de 8 M5.
 - Um único EA consulta apenas esses seis bots a cada ciclo. Estratégias anteriores permanecem consultáveis no painel e no banco para preservar histórico, mas não recebem polling, decisões ou novas operações.
 - O Bot 6 replica o setup do Bot 5, mas admite somente vendas antes das 18h UTC; ele permanece isolado em shadow para forward test.
 - O Bot 7 deriva candles H1 e M15 completos do histórico canônico M5, exige alinhamento comprador e força mínima de 0,7 ATR(H1), opera somente entre 13h e 16h UTC com metade do risco padrão e permanece bloqueado em shadow.

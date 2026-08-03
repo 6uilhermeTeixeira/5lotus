@@ -218,13 +218,20 @@ def _latest_confirmed_zigzag_levels(candles: list[CandleSnapshot], span: int = 2
     return pivot_high, pivot_low
 
 
-def _happy_gold_zigzag_setup(request: DecisionRequest) -> Setup | None:
+def _happy_gold_market_calibration(settings: Settings, symbol: str) -> dict[str, float | int | str | bool]:
+    calibrations = getattr(settings, "happy_gold_market_calibrations", {})
+    return dict(calibrations.get(symbol.upper(), {})) if isinstance(calibrations, dict) else {}
+
+
+def _happy_gold_zigzag_setup(request: DecisionRequest, settings: Settings) -> Setup | None:
     if len(request.candles) < 43:
         return None
     m30 = _aggregate_completed_candles(request.candles, 30, request.timestamp_utc)
     if len(m30) < 7:
         return None
-    pivot_high, pivot_low = _latest_confirmed_zigzag_levels(m30)
+    calibration = _happy_gold_market_calibration(settings, request.symbol)
+    pivot_span = int(calibration.get("pivot_span", 2))
+    pivot_high, pivot_low = _latest_confirmed_zigzag_levels(m30, span=pivot_span)
     previous_close = request.candles[-2].close
     buy_breakout = pivot_high is not None and previous_close <= pivot_high < request.ask
     sell_breakout = pivot_low is not None and previous_close >= pivot_low > request.bid
@@ -237,11 +244,15 @@ def _happy_gold_zigzag_setup(request: DecisionRequest) -> Setup | None:
         sell_breakout = not buy_breakout
     action = DecisionAction.BUY if buy_breakout else DecisionAction.SELL
     entry = request.ask if buy_breakout else request.bid
-    stop_points = 240.0
-    target_points = 1000.0
+    m30_atr = _atr(m30, min(14, len(m30)))
+    if bool(calibration.get("use_atr_geometry", False)):
+        stop_points = max(1.0, (m30_atr / request.point_size) * float(calibration.get("atr_stop_multiplier", 1.0)))
+        target_points = stop_points * float(calibration.get("target_r", 2.0))
+    else:
+        stop_points = 240.0
+        target_points = 1000.0
     stop = entry - stop_points * request.point_size if buy_breakout else entry + stop_points * request.point_size
     target = entry + target_points * request.point_size if buy_breakout else entry - target_points * request.point_size
-    m30_atr = _atr(m30, min(14, len(m30)))
     return Setup(
         action=action,
         setup_type="happy_gold_zigzag_breakout",
@@ -256,7 +267,7 @@ def _happy_gold_zigzag_setup(request: DecisionRequest) -> Setup | None:
         breakout_level=float(pivot_high if buy_breakout else pivot_low),
         partial_close_pct=100.0,
         move_stop_to_breakeven=False,
-        max_holding_bars=2,
+        max_holding_bars=int(calibration.get("max_holding_bars", 2)),
     )
 
 
@@ -944,9 +955,12 @@ def _evaluate_multitimeframe_trend_pullback(request: DecisionRequest, settings: 
 
 
 def _evaluate_happy_gold_zigzag_scalper(request: DecisionRequest, settings: Settings, strategy_profile: str) -> DecisionResponse:
-    setup = _happy_gold_zigzag_setup(request)
+    setup = _happy_gold_zigzag_setup(request, settings)
+    calibration = _happy_gold_market_calibration(settings, request.symbol)
     session_time = request.timestamp_utc.astimezone(timezone.utc).time()
-    in_research_session = time(3, 0) <= session_time < time(19, 0)
+    session_start = time.fromisoformat(str(calibration.get("session_start_utc", "03:00")))
+    session_end = time.fromisoformat(str(calibration.get("session_end_utc", "19:00")))
+    in_research_session = session_start <= session_time < session_end
     same_symbol_positions = [position for position in request.positions if position.symbol.upper() == request.symbol.upper()]
     checks = [
         RiskCheck(
@@ -956,7 +970,7 @@ def _evaluate_happy_gold_zigzag_scalper(request: DecisionRequest, settings: Sett
         ),
         RiskCheck(name="timeframe_match", passed=request.timeframe.upper() == "M5", detail="expected=M5; signal=M30"),
         RiskCheck(name="spread_limit", passed=request.spread_points <= settings.max_spread_points, detail=f"max={settings.max_spread_points}"),
-        RiskCheck(name="research_session", passed=in_research_session, detail="03:00-19:00_UTC_proxy"),
+        RiskCheck(name="research_session", passed=in_research_session, detail=f"{session_start.strftime('%H:%M')}-{session_end.strftime('%H:%M')}_UTC"),
         RiskCheck(name="single_position", passed=not same_symbol_positions, detail="max_positions_for_symbol=1"),
         RiskCheck(name="zigzag_breakout", passed=setup is not None, detail="confirmed_M30_fractal_breakout"),
     ]
@@ -986,18 +1000,24 @@ def _evaluate_happy_gold_zigzag_scalper(request: DecisionRequest, settings: Sett
     )
     fixed_lot = .10
     response.risk_amount = round(setup.stop_points * request.value_per_point_per_lot * fixed_lot, 2)
-    break_even_trigger = float(getattr(settings, "happy_gold_break_even_trigger_points", 40))
+    atr_points = setup.atr14 / request.point_size if request.point_size > 0 else 0
+    calibrated = bool(calibration.get("use_atr_geometry", False))
+    break_even_trigger = setup.stop_points * float(calibration.get("break_even_r", .75)) if calibrated else float(getattr(settings, "happy_gold_break_even_trigger_points", 40))
     break_even_offset = float(getattr(settings, "happy_gold_break_even_offset_points", 0))
-    trailing_activation = float(getattr(settings, "happy_gold_trailing_activation_points", 120))
-    trailing_distance = float(getattr(settings, "happy_gold_trailing_distance_points", 60))
-    max_holding_bars = int(getattr(settings, "happy_gold_max_holding_bars", 2))
+    trailing_activation = setup.stop_points * float(calibration.get("trailing_activation_r", 1.0)) if calibrated else float(getattr(settings, "happy_gold_trailing_activation_points", 120))
+    trailing_distance = atr_points * float(calibration.get("trailing_distance_atr", .8)) if calibrated else float(getattr(settings, "happy_gold_trailing_distance_points", 60))
+    max_holding_bars = int(calibration.get("max_holding_bars", getattr(settings, "happy_gold_max_holding_bars", 2)))
     response.metadata.update(
         {
             "suggested_size": fixed_lot,
             "signal_timeframe": "M30",
             "execution_timeframe": "M5",
-            "fixed_stop_points": 240,
-            "fixed_target_points": 1000,
+            "fixed_stop_points": None if calibrated else 240,
+            "fixed_target_points": None if calibrated else 1000,
+            "geometry_mode": "atr_normalized" if calibrated else "fixed_points",
+            "atr_stop_multiplier": calibration.get("atr_stop_multiplier") if calibrated else None,
+            "target_r": calibration.get("target_r") if calibrated else None,
+            "pivot_span": calibration.get("pivot_span", 2),
             "break_even_trigger_points": break_even_trigger,
             "break_even_offset_points": break_even_offset,
             "trailing_activation_points": trailing_activation,
