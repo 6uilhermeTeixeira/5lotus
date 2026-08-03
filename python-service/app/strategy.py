@@ -1276,8 +1276,10 @@ def _evaluate_portfolio_6_7(request: DecisionRequest, settings: Settings) -> Dec
 
 WEIGHTED_PORTFOLIO_PROFILES = {
     "portfolio_6_7_75_50": {"bot-7": .75, "bot-6": .50},
-    "portfolio_6_7_100_75": {"bot-7": 1.00, "bot-6": .75},
+    "portfolio_6_7_100_100": {"bot-7": 1.00, "bot-6": 1.00},
 }
+
+HAPPY_GOLD_COMBINED_PROFILE = "happy_gold_portfolio_100_100"
 
 
 def _portfolio_regime(request: DecisionRequest, settings: Settings) -> RegimeSnapshot:
@@ -1426,6 +1428,81 @@ def _evaluate_weighted_portfolio_6_7(request: DecisionRequest, settings: Setting
     )
 
 
+def _evaluate_happy_gold_combined_portfolio(request: DecisionRequest, settings: Settings) -> DecisionResponse:
+    """Coordinate Bot 13 and the 100/100 portfolio under one shared risk budget."""
+    profile = HAPPY_GOLD_COMBINED_PROFILE
+    weighted = _evaluate_weighted_portfolio_6_7(request, settings, "portfolio_6_7_100_100")
+    zigzag = _evaluate_happy_gold_zigzag_regime_confirmed(request, settings, profile)
+    if zigzag.metadata.get("candidate"):
+        zigzag = _apply_weighted_portfolio_allocation(
+            zigzag,
+            request,
+            settings,
+            profile="portfolio_6_7_100_100",
+            component="bot-13",
+            weight=1.0,
+        )
+
+    weighted_candidate = bool(weighted.metadata.get("candidate"))
+    zigzag_candidate = bool(zigzag.metadata.get("candidate"))
+    weighted_side = str(weighted.metadata.get("suggested_action", ""))
+    zigzag_side = str(zigzag.metadata.get("suggested_action", ""))
+    if weighted_candidate and zigzag_candidate and weighted_side != zigzag_side:
+        return DecisionResponse(
+            action=DecisionAction.HOLD,
+            reason="happy_gold_portfolio_signal_conflict",
+            risk_checks=[
+                RiskCheck(name="combined_signal_agreement", passed=False, detail=f"portfolio={weighted_side};zigzag={zigzag_side}"),
+                RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled"),
+            ],
+            metadata={
+                "strategy_profile": profile,
+                "candidate": False,
+                "combined_portfolio_candidate": True,
+                "combined_zigzag_candidate": True,
+                "combined_priority": "zigzag_confirmed_then_portfolio_7_6",
+                "experimental_shadow_lock": True,
+            },
+        )
+
+    selected = zigzag if zigzag_candidate else weighted if weighted_candidate else None
+    if selected is None:
+        return DecisionResponse(
+            action=DecisionAction.HOLD,
+            reason="happy_gold_portfolio_components_not_confirmed",
+            risk_checks=[
+                RiskCheck(name="portfolio_7_6_component", passed=False, detail=weighted.reason),
+                RiskCheck(name="zigzag_regime_component", passed=False, detail=zigzag.reason),
+                RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled"),
+            ],
+            metadata={
+                "strategy_profile": profile,
+                "candidate": False,
+                "combined_priority": "zigzag_confirmed_then_portfolio_7_6",
+                "combined_portfolio_reason": weighted.reason,
+                "combined_zigzag_reason": zigzag.reason,
+                "experimental_shadow_lock": True,
+            },
+        )
+
+    component = "bot-13" if zigzag_candidate else str(weighted.metadata.get("portfolio_component", "portfolio-7-6"))
+    selected.reason = "happy_gold_portfolio_100_100_shadow_signal"
+    selected.metadata.update(
+        {
+            "strategy_profile": profile,
+            "combined_component": component,
+            "combined_priority": "zigzag_confirmed_then_portfolio_7_6",
+            "combined_portfolio_candidate": weighted_candidate,
+            "combined_zigzag_candidate": zigzag_candidate,
+            "combined_shared_risk_pct": settings.risk_per_trade_pct,
+            "combined_shared_position_limit": 1,
+            "experimental_shadow_lock": True,
+            "research_status": "combined_portfolio_requires_independent_walk_forward_validation",
+        }
+    )
+    return selected
+
+
 def _adaptive_regime(request: DecisionRequest, settings: Settings) -> RegimeSnapshot:
     override = getattr(settings, "adaptive_regime_snapshot", None)
     if isinstance(override, RegimeSnapshot):
@@ -1567,6 +1644,8 @@ def evaluate_decision(request: DecisionRequest, settings: Settings, strategy_pro
         return _evaluate_adaptive_portfolio_3_6_7(request, settings)
     if profile in WEIGHTED_PORTFOLIO_PROFILES:
         return _evaluate_weighted_portfolio_6_7(request, settings, profile)
+    if profile == HAPPY_GOLD_COMBINED_PROFILE:
+        return _evaluate_happy_gold_combined_portfolio(request, settings)
     if profile == "fimath_ema20_flow":
         return _evaluate_fimath(request, settings, profile)
     return DecisionResponse(

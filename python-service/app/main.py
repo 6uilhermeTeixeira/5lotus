@@ -14,7 +14,7 @@ from .config import get_settings
 from .pages import render_catalog_page, render_comparison_page, render_login_page, render_results_page
 from .results_store import get_bot, load_bots_catalog, load_results_snapshot, resolve_bot_results_file
 from .schemas import BotCatalogItem, CandleIngestRequest, DecisionAction, DecisionRequest, DecisionResponse, EquityComparisonResponse, EquityPoint, EquitySeries, HealthResponse, HistoricalReplayResponse, MarketChartResponse, ResultsResponse, TradeIngestRequest
-from .strategy import WEIGHTED_PORTFOLIO_PROFILES, evaluate_decision
+from .strategy import HAPPY_GOLD_COMBINED_PROFILE, WEIGHTED_PORTFOLIO_PROFILES, evaluate_decision
 from .supabase_store import SupabaseStore
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
@@ -345,10 +345,10 @@ def decision(payload: DecisionRequest, x_2lotus_ingest_key: str | None = Header(
         store = SupabaseStore(settings)
         store.upsert_candles(payload.bot_id, payload.symbol, payload.timeframe, payload.candles)
         store.advance_paper_trades(payload.bot_id, payload.candles)
-        if strategy_profile in {"multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed", "happy_gold_zigzag_retest_atr", *WEIGHTED_PORTFOLIO_PROFILES}:
+        if strategy_profile in {"multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed", "happy_gold_zigzag_retest_atr", HAPPY_GOLD_COMBINED_PROFILE, *WEIGHTED_PORTFOLIO_PROFILES}:
             payload.candles = store.load_candles(
                 bot,
-                4000 if strategy_profile in {"adaptive_portfolio_3_6_7", "happy_gold_zigzag_regime_confirmed", "happy_gold_zigzag_retest_atr"} or strategy_profile in WEIGHTED_PORTFOLIO_PROFILES else 1000,
+                4000 if strategy_profile in {"adaptive_portfolio_3_6_7", "happy_gold_zigzag_regime_confirmed", "happy_gold_zigzag_retest_atr", HAPPY_GOLD_COMBINED_PROFILE} or strategy_profile in WEIGHTED_PORTFOLIO_PROFILES else 1000,
                 source_bot_id=_market_data_source_bot_id(bot),
             )
     strategy_settings = settings
@@ -358,7 +358,7 @@ def decision(payload: DecisionRequest, x_2lotus_ingest_key: str | None = Header(
         strategy_settings.default_timeframe = payload.timeframe
         if strategy_profile == "adaptive_portfolio_3_6_7" and store:
             strategy_settings.adaptive_component_health = store.load_adaptive_component_health(payload.timestamp_utc)
-        if strategy_profile in WEIGHTED_PORTFOLIO_PROFILES and store:
+        if (strategy_profile in WEIGHTED_PORTFOLIO_PROFILES or strategy_profile == HAPPY_GOLD_COMBINED_PROFILE) and store:
             strategy_settings.portfolio_risk_state = store.load_portfolio_risk_state(payload.bot_id, payload.timestamp_utc)
     response = evaluate_decision(payload, strategy_settings, strategy_profile)
     if payload.bot_id and store and response.metadata.get("candidate"):

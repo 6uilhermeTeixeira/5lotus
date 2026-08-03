@@ -666,7 +666,7 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.metadata["portfolio_weight_pct"], 50)
         self.assertEqual(response.risk_amount, 50)
 
-    def test_bot_11_uses_100_and_75_percent_weights(self) -> None:
+    def test_bot_11_uses_100_and_100_percent_weights(self) -> None:
         bot_7_request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
         bot_7_request.bot_id = "bot-11"
         bot_6_request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
@@ -676,13 +676,30 @@ class DecisionTests(unittest.TestCase):
             portfolio_regime_snapshot=RegimeSnapshot("trend", "sell", "test", adx=30, atr_percentile=40),
         )
 
-        bot_7 = evaluate_decision(bot_7_request, configured, "portfolio_6_7_100_75")
-        bot_6 = evaluate_decision(bot_6_request, configured, "portfolio_6_7_100_75")
+        bot_7 = evaluate_decision(bot_7_request, configured, "portfolio_6_7_100_100")
+        bot_6 = evaluate_decision(bot_6_request, configured, "portfolio_6_7_100_100")
 
         self.assertEqual(bot_7.metadata["portfolio_weight_pct"], 100)
         self.assertEqual(bot_7.risk_amount, 100)
-        self.assertEqual(bot_6.metadata["portfolio_weight_pct"], 75)
-        self.assertEqual(bot_6.risk_amount, 75)
+        self.assertEqual(bot_6.metadata["portfolio_weight_pct"], 100)
+        self.assertEqual(bot_6.risk_amount, 100)
+
+    def test_bot_16_can_select_zigzag_without_adding_portfolio_risk(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-16"
+        configured = settings(
+            portfolio_risk_state={},
+            portfolio_regime_snapshot=RegimeSnapshot("range", "both", "test", adx=18, atr_percentile=40),
+            happy_gold_regime_snapshot=RegimeSnapshot("range", "both", "test", adx=18, atr_percentile=40),
+        )
+
+        response = evaluate_decision(request, configured, "happy_gold_portfolio_100_100")
+
+        self.assertEqual(response.reason, "happy_gold_portfolio_100_100_shadow_signal")
+        self.assertEqual(response.metadata["combined_component"], "bot-13")
+        self.assertEqual(response.metadata["combined_shared_risk_pct"], 1)
+        self.assertEqual(response.metadata["portfolio_weight_pct"], 100)
+        self.assertEqual(response.risk_amount, 100)
 
     def test_weighted_portfolio_blocks_bot_6_without_sell_trend(self) -> None:
         request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
@@ -822,7 +839,7 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.reason, "happy_gold_v2_filter_or_retest_block")
         self.assertFalse(response.metadata["candidate"])
 
-    def test_fourteen_profiles_keep_independent_bot_scoped_state(self) -> None:
+    def test_fifteen_profiles_keep_independent_bot_scoped_state(self) -> None:
         candle_time = datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc)
         portfolio_request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
         portfolio_request.bot_id = "bot-8"
@@ -836,6 +853,8 @@ class DecisionTests(unittest.TestCase):
         bot_13_request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
         bot_13_request.bot_id = "bot-13"
         bot_15_request = happy_gold_retest_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+        bot_16_request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+        bot_16_request.bot_id = "bot-16"
         cases = [
             (bullish_request(candle_time), "fimath_ema20_flow"),
             (momentum_request(candle_time), "momentum_atr_breakout"),
@@ -847,10 +866,11 @@ class DecisionTests(unittest.TestCase):
             (portfolio_request, "portfolio_6_7"),
             (adaptive_request, "adaptive_portfolio_3_6_7"),
             (bot_10_request, "portfolio_6_7_75_50"),
-            (bot_11_request, "portfolio_6_7_100_75"),
+            (bot_11_request, "portfolio_6_7_100_100"),
             (bot_12_request, "happy_gold_zigzag_scalper"),
             (bot_13_request, "happy_gold_zigzag_regime_confirmed"),
             (bot_15_request, "happy_gold_zigzag_retest_atr"),
+            (bot_16_request, "happy_gold_portfolio_100_100"),
         ]
 
         responses = [
@@ -862,10 +882,10 @@ class DecisionTests(unittest.TestCase):
             for request, profile in cases
         ]
 
-        self.assertEqual({request.bot_id for request, _ in cases}, {"bot-1", "bot-2", "bot-3", "bot-4", "bot-5", "bot-6", "bot-7", "bot-8", "bot-9", "bot-10", "bot-11", "bot-12", "bot-13", "bot-15"})
+        self.assertEqual({request.bot_id for request, _ in cases}, {"bot-1", "bot-2", "bot-3", "bot-4", "bot-5", "bot-6", "bot-7", "bot-8", "bot-9", "bot-10", "bot-11", "bot-12", "bot-13", "bot-15", "bot-16"})
         self.assertEqual(
             {response.metadata["strategy_profile"] for response in responses},
-            {"fimath_ema20_flow", "momentum_atr_breakout", "rsi_bollinger_reversion", "macd_trend_crossover", "stochastic_trend_pullback", "stochastic_sell_session", "multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "portfolio_6_7_75_50", "portfolio_6_7_100_75", "happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed", "happy_gold_zigzag_retest_atr"},
+            {"fimath_ema20_flow", "momentum_atr_breakout", "rsi_bollinger_reversion", "macd_trend_crossover", "stochastic_trend_pullback", "stochastic_sell_session", "multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "portfolio_6_7_75_50", "portfolio_6_7_100_100", "happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed", "happy_gold_zigzag_retest_atr", "happy_gold_portfolio_100_100"},
         )
         self.assertTrue(all(response.action == DecisionAction.HOLD for response in responses))
 

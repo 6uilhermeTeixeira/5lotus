@@ -8,13 +8,13 @@ from .config import Settings
 from .regime import RegimeSnapshot, build_regime_timeline, regime_allows, regime_at
 from .results_store import build_results_snapshot
 from .schemas import AccountSnapshot, BotCatalogItem, CandleSnapshot, DecisionRequest, HistoricalReplayResponse, ReplayValidationFold, TradeResult
-from .strategy import WEIGHTED_PORTFOLIO_PROFILES, evaluate_decision
+from .strategy import HAPPY_GOLD_COMBINED_PROFILE, WEIGHTED_PORTFOLIO_PROFILES, evaluate_decision
 
 
 HISTORY_BARS = 60
 MULTITIMEFRAME_HISTORY_BARS = 1000
 ADAPTIVE_HISTORY_BARS = 4000
-DEEP_HISTORY_PROFILES = {"multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "happy_gold_zigzag_retest_atr", *WEIGHTED_PORTFOLIO_PROFILES}
+DEEP_HISTORY_PROFILES = {"multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "happy_gold_zigzag_retest_atr", HAPPY_GOLD_COMBINED_PROFILE, *WEIGHTED_PORTFOLIO_PROFILES}
 HAPPY_GOLD_PROFILES = {"happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed", "happy_gold_zigzag_retest_atr"}
 
 
@@ -303,7 +303,7 @@ def run_historical_replay(
     requested_start = period_end - timedelta(days=days)
     first_visible = next((index for index, candle in enumerate(ordered) if candle.timestamp_utc >= requested_start), len(ordered) - 1)
     history_bars = (
-        ADAPTIVE_HISTORY_BARS if bot.strategy_profile == "adaptive_portfolio_3_6_7" or bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES
+        ADAPTIVE_HISTORY_BARS if bot.strategy_profile in {"adaptive_portfolio_3_6_7", HAPPY_GOLD_COMBINED_PROFILE} or bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES
         else MULTITIMEFRAME_HISTORY_BARS if bot.strategy_profile in DEEP_HISTORY_PROFILES
         else HISTORY_BARS
     )
@@ -382,9 +382,9 @@ def run_historical_replay(
             adaptive_day = adaptive_schedule.get(candle_end.date(), {})
             replay_settings.adaptive_active_component = adaptive_day.get("active_component")
             replay_settings.adaptive_component_health = adaptive_day.get("health", {})
-        if bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES and settings.backtest_regime_enabled:
+        if (bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES or bot.strategy_profile == HAPPY_GOLD_COMBINED_PROFILE) and settings.backtest_regime_enabled:
             replay_settings.portfolio_regime_snapshot = regime_at(regime_timeline, candle_end)
-        if bot.strategy_profile in {"happy_gold_zigzag_regime_confirmed", "happy_gold_zigzag_retest_atr"} and settings.backtest_regime_enabled:
+        if bot.strategy_profile in {"happy_gold_zigzag_regime_confirmed", "happy_gold_zigzag_retest_atr", HAPPY_GOLD_COMBINED_PROFILE} and settings.backtest_regime_enabled:
             replay_settings.happy_gold_regime_snapshot = regime_at(regime_timeline, candle_end)
         response = evaluate_decision(request, replay_settings, bot.strategy_profile)
         if not response.metadata.get("candidate"):
@@ -395,7 +395,7 @@ def run_historical_replay(
         regime: RegimeSnapshot = regime_at(regime_timeline, candle_end) if settings.backtest_regime_enabled else RegimeSnapshot("disabled", side, "regime_filter_disabled")
         regime_counts[regime.name] += 1
         portfolio_component = str(response.metadata.get("portfolio_component", ""))
-        if bot.strategy_profile == "adaptive_portfolio_3_6_7" or bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES:
+        if bot.strategy_profile in {"adaptive_portfolio_3_6_7", HAPPY_GOLD_COMBINED_PROFILE} or bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES:
             regime_allowed, regime_reason = True, "strategy_uses_internal_adaptive_component_regime"
         elif bot.strategy_profile in HAPPY_GOLD_PROFILES:
             regime_allowed, regime_reason = True, "strategy_uses_internal_m30_breakout_regime"
@@ -497,6 +497,9 @@ def run_historical_replay(
         weights = WEIGHTED_PORTFOLIO_PROFILES[bot.strategy_profile]
         assumptions.append(f"A variante mantém posição única e usa {weights['bot-7']:.0%} do risco-base no Bot 7 e {weights['bot-6']:.0%} no Bot 6; os pesos não representam posições simultâneas.")
         assumptions.append("O Bot 6 somente é admitido quando o regime H1 causal confirma tendência de baixa; o mesmo bloqueio existe no runtime shadow.")
+    if bot.strategy_profile == HAPPY_GOLD_COMBINED_PROFILE:
+        assumptions.append("O meta-portfólio mantém Bot 13 e Portfólio 7/6 100/100 independentes, usa risco-base integral para qualquer componente e nunca soma posições.")
+        assumptions.append("Sinais conflitantes são bloqueados; quando há concordância, o ZigZag confirmado tem prioridade. Limite de duas entradas, perda diária de 2R e cooldown são compartilhados.")
     if bot.strategy_profile in HAPPY_GOLD_PROFILES:
         assumptions.append("A estratégia agrega M5 em M30 completo e usa pivôs fractais confirmados como aproximação causal do ZigZag proprietário; não há repaint nem antecipação do pivô.")
     if bot.strategy_profile in {"happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed"}:

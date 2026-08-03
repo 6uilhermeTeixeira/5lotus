@@ -28,10 +28,11 @@ Perfis ativos, executados em paralelo:
 - timeframe base: `M5`
 - Bot 6: `stochastic_sell_session` — variante shadow somente vendida, com entradas antes das 18h UTC
 - Bot 7: `multitimeframe_trend_pullback` — tendência H1/M15, pullback M5 somente comprado entre 13h e 16h UTC, alvo de 0,75R e 50% do risco padrão, bloqueado em shadow
-- Bot 11: `portfolio_6_7_100_75` — variante agressiva com Bot 7 em 100% e Bot 6 em 75%, sob as mesmas travas persistidas e sempre sem execução
+- Bot 11: `portfolio_6_7_100_100` — variante com Bot 7 e Bot 6 em 100% do risco-base, sob posição e travas diárias compartilhadas. Replay anual: 171 trades, US$ 1.112,20, PF 1,80, expectativa +0,2477R, drawdown 6,10R e 12/12 janelas positivas; promising_not_live e sempre sem execução.
 - Bot 12: `happy_gold_zigzag_scalper` — reconstrução shadow da assinatura de 773 operações XAUUSD: pivô M30 confirmado, rompimento M5, lote 0,10, stop de 240 pontos, alvo de 1.000 pontos, break-even em +40, trailing em +120/60, expiração em dois M5 e uma posição
 - Bot 13: `happy_gold_zigzag_regime_confirmed` — preserva integralmente a geometria do Bot 12; em transição/alta volatilidade exige fechamento M5 além do pivô e direção H1 alinhada. O replay de 365 dias registrou US$ 2.655,40, PF 1,39, expectativa 0,181R e drawdown 15,66R, permanecendo em shadow paralelo.
 - Bot 15: `happy_gold_zigzag_retest_atr` — v2 em shadow que exige rompimento fechado do pivô M30, reteste/rejeição M5 e tendência H1 alinhada entre 07:00–16:00 UTC. Usa stop estrutural com piso de 1,5 ATR, alvo 2R, break-even 0,8R, trailing 1,2R/0,8 ATR e timeout de 12 M5. Na grade anual definida previamente, marcou 22 trades, PF 1,32, expectativa +0,1285R e drawdown 3,63R, mas falhou estabilidade (5/10 janelas positivas) e permanece rejeitada para seleção.
+- Bot 16: `happy_gold_portfolio_100_100` — meta-portfólio que mantém a confirmação de regime do ZigZag e o Portfólio 7/6 independentes, bloqueia conflitos e compartilha uma posição e o risco-base integral. Replay anual: 427 trades, US$ 2.118,89, PF 1,38, expectativa +0,1822R, drawdown 14,75R e 11/13 janelas positivas; promising_not_live e sempre em shadow.
 - Estratégias anteriores e variantes EURUSD aparecem na aba `Arquivadas` para consulta histórica, mas não recebem polling, decisões ou novas operações. Os títulos públicos omitem o identificador técnico `Bot N`.
 - risco por operacao: `1%` da banca
 - risco/retorno final: `2R`, com parcial de `50%` em `1R`

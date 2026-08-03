@@ -17,6 +17,7 @@ input string AggressivePortfolioResearchBotId = "bot-11";
 input string HappyGoldResearchBotId = "bot-12";
 input string HappyGoldConfirmedResearchBotId = "bot-13";
 input string HappyGoldRetestResearchBotId = "bot-15";
+input string HappyGoldCombinedPortfolioBotId = "bot-16";
 input string StrategySymbol = "XAUUSD";
 input string SecondaryHistorySymbol = "EURUSD";
 input string SecondaryHistoryBotId = "bot-eur-1";
@@ -103,7 +104,7 @@ void OnTimer()
    }
 
    // The active research portfolio is intentionally restricted to Bots 6, 7,
-   // 11, 12, 13 and 15. Legacy inputs remain declared so existing chart presets load,
+   // 11, 12, 13, 15 and 16. Legacy inputs remain declared so existing chart presets load,
    // but they no longer cause archived strategies to be polled.
    if(ExperimentalBotId != "")
       PollDecision(tick, ExperimentalBotId, false);
@@ -117,6 +118,8 @@ void OnTimer()
       PollDecision(tick, HappyGoldConfirmedResearchBotId, false);
    if(HappyGoldRetestResearchBotId != "" && HappyGoldRetestResearchBotId != ExperimentalBotId && HappyGoldRetestResearchBotId != MultitimeframeResearchBotId && HappyGoldRetestResearchBotId != AggressivePortfolioResearchBotId && HappyGoldRetestResearchBotId != HappyGoldResearchBotId && HappyGoldRetestResearchBotId != HappyGoldConfirmedResearchBotId)
       PollDecision(tick, HappyGoldRetestResearchBotId, false);
+   if(HappyGoldCombinedPortfolioBotId != "" && HappyGoldCombinedPortfolioBotId != ExperimentalBotId && HappyGoldCombinedPortfolioBotId != MultitimeframeResearchBotId && HappyGoldCombinedPortfolioBotId != AggressivePortfolioResearchBotId && HappyGoldCombinedPortfolioBotId != HappyGoldResearchBotId && HappyGoldCombinedPortfolioBotId != HappyGoldConfirmedResearchBotId && HappyGoldCombinedPortfolioBotId != HappyGoldRetestResearchBotId)
+      PollDecision(tick, HappyGoldCombinedPortfolioBotId, false);
 
    upTicks = downTicks = neutralTicks = 0;
    upVolume = downVolume = 0.0;
