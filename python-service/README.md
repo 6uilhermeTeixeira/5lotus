@@ -31,6 +31,9 @@ Perfis ativos, executados em paralelo:
 - Bot 11: `portfolio_6_7_100_75` — variante agressiva com Bot 7 em 100% e Bot 6 em 75%, sob as mesmas travas persistidas e sempre sem execução
 - Bot 12: `happy_gold_zigzag_scalper` — reconstrução shadow da assinatura de 773 operações XAUUSD: pivô M30 confirmado, rompimento M5, lote 0,10, stop de 240 pontos, alvo de 1.000 pontos, break-even em +40, trailing em +120/60, expiração em dois M5 e uma posição
 - Bot 13: `happy_gold_zigzag_regime_confirmed` — preserva integralmente a geometria do Bot 12; em transição/alta volatilidade exige fechamento M5 além do pivô e direção H1 alinhada. O replay de 365 dias registrou US$ 2.655,40, PF 1,39, expectativa 0,181R e drawdown 15,66R, permanecendo em shadow paralelo.
+- Bot 14: `happy_gold_zigzag_microstructure` — confirma o rompimento M30 com candle M1 e fluxo direcional de ticks no forward. Usa saída defensiva de 40 pontos, break-even +30/+5, trailing +60/30, timeout de 60 segundos e janelas de reentrada de 15 segundos. A proxy M5 de 365 dias ficou em 108 operações, 16,67% de acerto, PF 1,04 e PnL US$ 15,10, sendo rejeitada como backtest de seleção; ela não substitui validação por ticks.
+- `bot-eur-13`: transfere a confirmação seletiva de regime para EURUSD/M5 com ponto `0,00001`, sem recalibração e em shadow. O replay inicial de 365 dias teve 669 operações, 26,91% de acerto, PnL -US$ 972,90 e PF 0,36; transferência rejeitada.
+- `bot-btc-13`: transfere a mesma regra para BTCUSD/M5 com ponto `0,01`; usa candles spot BTC-USD da Coinbase Exchange porque o MetaQuotes Demo não oferece o símbolo. O replay inicial de 365 dias teve 606 operações, 7,43% de acerto, PnL -US$ 9.365,40 e PF 0,32; transferência rejeitada.
 - Estratégias anteriores e variantes EURUSD aparecem na aba `Arquivadas` para consulta histórica, mas não recebem polling, decisões ou novas operações. Os títulos públicos omitem o identificador técnico `Bot N`.
 - risco por operacao: `1%` da banca
 - risco/retorno final: `2R`, com parcial de `50%` em `1R`
@@ -117,7 +120,7 @@ DAYTRADE_BACKTEST_BALANCE=10000
 DAYTRADE_BACKTEST_SPREAD_POINTS=10
 DAYTRADE_BACKTEST_POINT_SIZE=0.01
 DAYTRADE_BACKTEST_VALUE_PER_POINT_PER_LOT=1
-DAYTRADE_BACKTEST_CANDLE_LIMIT=100000
+DAYTRADE_BACKTEST_CANDLE_LIMIT=120000
 DAYTRADE_BACKTEST_MARKET_DATA_BOT_ID=bot-1
 DAYTRADE_BACKTEST_RISK_PER_TRADE_PCT=0.25
 DAYTRADE_BACKTEST_SLIPPAGE_POINTS=2
@@ -169,10 +172,16 @@ testes disponiveis e cada bot possui uma pagina individual em `/bots/<id>`. A ro
 `/results` redireciona para o primeiro bot do catalogo. A página `/compare` apresenta os 14
 testes (sete perfis em dois ativos) e atualiza seus indicadores pela API autenticada `/api/compare`.
 
-A tela `/bots` alterna entre XAU/USD e EUR/USD e carrega `/api/equity-comparison?symbol=<ativo>&days=365`.
+A tela `/bots` alterna entre XAU/USD, EUR/USD e BTC/USD e carrega `/api/equity-comparison?symbol=<ativo>&days=365`.
 As curvas vêm de snapshots compactos em `backtest_snapshots`, gerados por
 `python-service/scripts/cache_backtests.py`; candles permanecem canônicos em `market_candles`
-(`bot-1` para XAUUSD e `bot-eur-1` para EURUSD).
+(`bot-1` para XAUUSD, `bot-eur-1` para EURUSD e `bot-btc-13` para BTCUSD).
+
+O histórico público do Bitcoin pode ser atualizado de forma reproduzível com:
+
+```bash
+PYTHONPATH=. .venv/bin/python scripts/import_coinbase_candles.py --days 365
+```
 
 O catálogo fica em `data/bots.json`. Para adicionar outro bot, inclua um novo item com `id`
 único e um `results_file` dentro de `data/`; em seguida, crie esse JSON com a lista de trades.

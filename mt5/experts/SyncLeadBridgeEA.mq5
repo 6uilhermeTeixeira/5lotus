@@ -16,15 +16,22 @@ input string BalancedPortfolioResearchBotId = "bot-10";
 input string AggressivePortfolioResearchBotId = "bot-11";
 input string HappyGoldResearchBotId = "bot-12";
 input string HappyGoldConfirmedResearchBotId = "bot-13";
+input string HappyGoldMicrostructureResearchBotId = "bot-14";
+input string EurUsdRegimeConfirmedBotId = "bot-eur-13";
+input string BitcoinRegimeConfirmedBotId = "";
 input string StrategySymbol = "XAUUSD";
 input string SecondaryHistorySymbol = "EURUSD";
 input string SecondaryHistoryBotId = "bot-eur-1";
+input string BitcoinHistorySymbol = "BTCUSD";
+input string BitcoinHistoryBotId = "bot-btc-13";
 input string StrategyTimeframe = "M5";
 input int HistoryBars = 60;
 input int HistoryCacheBars = 100000;
 input bool RefreshDeepHistoryOnInit = false;
 input bool RefreshSecondaryHistoryOnInit = false;
+input bool RefreshBitcoinHistoryOnInit = false;
 input int PollIntervalSeconds = 5;
+input int MicrostructurePollIntervalSeconds = 1;
 input int RequestTimeoutMs = 3000;
 input bool EnableOrderExecution = false;
 input bool EnableResultReporting = true;
@@ -37,6 +44,11 @@ double upVolume = 0.0, downVolume = 0.0;
 bool secondaryHistoryReady = false;
 int secondaryHistoryAttempts = 0;
 string secondaryHistoryCacheKey = "";
+bool bitcoinHistoryReady = false;
+int bitcoinHistoryAttempts = 0;
+string bitcoinHistoryCacheKey = "";
+datetime lastStandardPollAt = 0;
+datetime lastMicrostructurePollAt = 0;
 
 int OnInit()
 {
@@ -51,7 +63,7 @@ int OnInit()
       }
       return(INIT_SUCCEEDED);
    }
-   EventSetTimer(PollIntervalSeconds);
+   EventSetTimer(MathMax(1, MathMin(PollIntervalSeconds, MicrostructurePollIntervalSeconds)));
    MarketBookAdd(_Symbol);
    trade.SetExpertMagicNumber(StrategyMagicNumber);
    CacheConfiguredBots();
@@ -93,6 +105,13 @@ void OnTimer()
       if(secondaryHistoryReady && secondaryHistoryCacheKey != "")
          GlobalVariableSet(secondaryHistoryCacheKey, (double)TimeGMT());
    }
+   if(RefreshBitcoinHistoryOnInit && !bitcoinHistoryReady && bitcoinHistoryAttempts < 12)
+   {
+      bitcoinHistoryAttempts++;
+      bitcoinHistoryReady = CacheHistory(BitcoinHistorySymbol, BitcoinHistoryBotId);
+      if(bitcoinHistoryReady && bitcoinHistoryCacheKey != "")
+         GlobalVariableSet(bitcoinHistoryCacheKey, (double)TimeGMT());
+   }
 
    MqlTick tick;
    if(!SymbolInfoTick(_Symbol, tick))
@@ -101,22 +120,38 @@ void OnTimer()
       return;
    }
 
-   // The active research portfolio is intentionally restricted to Bots 6, 7,
-   // 11, 12 and 13. Legacy inputs remain declared so existing chart presets load,
-   // but they no longer cause archived strategies to be polled.
-   if(ExperimentalBotId != "")
-      PollDecision(tick, ExperimentalBotId, false);
-   if(MultitimeframeResearchBotId != "" && MultitimeframeResearchBotId != ExperimentalBotId)
-      PollDecision(tick, MultitimeframeResearchBotId, false);
-   if(AggressivePortfolioResearchBotId != "" && AggressivePortfolioResearchBotId != ExperimentalBotId && AggressivePortfolioResearchBotId != MultitimeframeResearchBotId)
-      PollDecision(tick, AggressivePortfolioResearchBotId, false);
-   if(HappyGoldResearchBotId != "" && HappyGoldResearchBotId != ExperimentalBotId && HappyGoldResearchBotId != MultitimeframeResearchBotId && HappyGoldResearchBotId != AggressivePortfolioResearchBotId)
-      PollDecision(tick, HappyGoldResearchBotId, false);
-   if(HappyGoldConfirmedResearchBotId != "" && HappyGoldConfirmedResearchBotId != ExperimentalBotId && HappyGoldConfirmedResearchBotId != MultitimeframeResearchBotId && HappyGoldConfirmedResearchBotId != AggressivePortfolioResearchBotId && HappyGoldConfirmedResearchBotId != HappyGoldResearchBotId)
-      PollDecision(tick, HappyGoldConfirmedResearchBotId, false);
+   datetime nowUtc = TimeGMT();
+   bool pollStandard = lastStandardPollAt == 0 || nowUtc - lastStandardPollAt >= PollIntervalSeconds;
+   bool pollMicrostructure = lastMicrostructurePollAt == 0 || nowUtc - lastMicrostructurePollAt >= MicrostructurePollIntervalSeconds;
 
-   upTicks = downTicks = neutralTicks = 0;
-   upVolume = downVolume = 0.0;
+   // The active research portfolio is intentionally restricted to Bots 6, 7,
+   // 11, 12, 13 and 14. Legacy inputs remain declared so existing chart presets load,
+   // but they no longer cause archived strategies to be polled.
+   if(pollStandard && ExperimentalBotId != "")
+      PollDecision(tick, ExperimentalBotId, false);
+   if(pollStandard && MultitimeframeResearchBotId != "" && MultitimeframeResearchBotId != ExperimentalBotId)
+      PollDecision(tick, MultitimeframeResearchBotId, false);
+   if(pollStandard && AggressivePortfolioResearchBotId != "" && AggressivePortfolioResearchBotId != ExperimentalBotId && AggressivePortfolioResearchBotId != MultitimeframeResearchBotId)
+      PollDecision(tick, AggressivePortfolioResearchBotId, false);
+   if(pollStandard && HappyGoldResearchBotId != "" && HappyGoldResearchBotId != ExperimentalBotId && HappyGoldResearchBotId != MultitimeframeResearchBotId && HappyGoldResearchBotId != AggressivePortfolioResearchBotId)
+      PollDecision(tick, HappyGoldResearchBotId, false);
+   if(pollStandard && HappyGoldConfirmedResearchBotId != "" && HappyGoldConfirmedResearchBotId != ExperimentalBotId && HappyGoldConfirmedResearchBotId != MultitimeframeResearchBotId && HappyGoldConfirmedResearchBotId != AggressivePortfolioResearchBotId && HappyGoldConfirmedResearchBotId != HappyGoldResearchBotId)
+      PollDecision(tick, HappyGoldConfirmedResearchBotId, false);
+   if(pollStandard && EurUsdRegimeConfirmedBotId != "")
+      PollDecisionForSymbol(SecondaryHistorySymbol, EurUsdRegimeConfirmedBotId);
+   if(pollStandard && BitcoinRegimeConfirmedBotId != "")
+      PollDecisionForSymbol(BitcoinHistorySymbol, BitcoinRegimeConfirmedBotId);
+   if(pollMicrostructure && HappyGoldMicrostructureResearchBotId != "" && HappyGoldMicrostructureResearchBotId != ExperimentalBotId && HappyGoldMicrostructureResearchBotId != MultitimeframeResearchBotId && HappyGoldMicrostructureResearchBotId != AggressivePortfolioResearchBotId && HappyGoldMicrostructureResearchBotId != HappyGoldResearchBotId && HappyGoldMicrostructureResearchBotId != HappyGoldConfirmedResearchBotId)
+      PollDecision(tick, HappyGoldMicrostructureResearchBotId, false);
+
+   if(pollStandard)
+      lastStandardPollAt = nowUtc;
+   if(pollMicrostructure)
+   {
+      lastMicrostructurePollAt = nowUtc;
+      upTicks = downTicks = neutralTicks = 0;
+      upVolume = downVolume = 0.0;
+   }
 }
 
 void PollDecision(const MqlTick &tick, const string botId, const bool allowExecution)
@@ -134,6 +169,7 @@ void PollDecision(const MqlTick &tick, const string botId, const bool allowExecu
 string BuildDecisionPayload(const MqlTick &tick, const string botId)
 {
    MqlRates rates[];
+   MqlRates microRates[];
    string request_id = StringFormat("%s-%s-%u", botId, _Symbol, GetTickCount());
    string timestamp_utc = ToIsoUtc(TimeGMT());
    double spread_points = (tick.ask - tick.bid) / _Point;
@@ -146,6 +182,7 @@ string BuildDecisionPayload(const MqlTick &tick, const string botId)
    double value_per_point_per_lot = 0.0;
    ENUM_TIMEFRAMES timeframe = ResolveTimeframe(StrategyTimeframe);
    int copied = CopyRates(_Symbol, timeframe, 1, HistoryBars, rates);
+   int microCopied = CopyRates(_Symbol, PERIOD_M1, 1, 20, microRates);
 
    if(tick_size > 0.0)
       value_per_point_per_lot = tick_value * (_Point / tick_size);
@@ -166,6 +203,7 @@ string BuildDecisionPayload(const MqlTick &tick, const string botId)
       "\"point_size\":" + DoubleToString(_Point, _Digits) + ","
       "\"value_per_point_per_lot\":" + DoubleToString(value_per_point_per_lot, 6) + ","
       "\"candles\":" + SerializeRates(rates, copied) + ","
+      "\"micro_candles\":" + SerializeRates(microRates, microCopied) + ","
       "\"positions\":[],"
       "\"account\":{"
          "\"balance\":" + DoubleToString(balance, 2) + ","
@@ -185,6 +223,65 @@ string BuildDecisionPayload(const MqlTick &tick, const string botId)
       "}";
 
    return json;
+}
+
+void PollDecisionForSymbol(const string symbol, const string botId)
+{
+   if(symbol == "" || botId == "") return;
+   if(!SymbolSelect(symbol, true))
+   {
+      PrintFormat("Decision poll skipped bot_id=%s symbol=%s reason=symbol_unavailable error=%d", botId, symbol, GetLastError());
+      return;
+   }
+   MqlTick tick;
+   if(!SymbolInfoTick(symbol, tick))
+   {
+      PrintFormat("Decision poll skipped bot_id=%s symbol=%s reason=tick_unavailable error=%d", botId, symbol, GetLastError());
+      return;
+   }
+   string response = "";
+   int status = PostJson(StrategyServiceUrl, BuildDecisionPayloadForSymbol(symbol, tick, botId), response);
+   PrintFormat("Decision poll bot_id=%s symbol=%s status=%d response=%s", botId, symbol, status, response);
+}
+
+string BuildDecisionPayloadForSymbol(const string symbol, const MqlTick &tick, const string botId)
+{
+   MqlRates rates[];
+   ENUM_TIMEFRAMES timeframe = ResolveTimeframe(StrategyTimeframe);
+   int copied = CopyRates(symbol, timeframe, 1, HistoryBars, rates);
+   int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+   double point = SymbolInfoDouble(symbol, SYMBOL_POINT);
+   double tickValue = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+   double tickSize = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+   double valuePerPointPerLot = tickSize > 0.0 ? tickValue * (point / tickSize) : 0.0;
+   double spreadPoints = point > 0.0 ? (tick.ask - tick.bid) / point : 0.0;
+   string requestId = StringFormat("%s-%s-%u", botId, symbol, GetTickCount());
+   if(copied <= 0)
+      PrintFormat("Failed to copy rates bot_id=%s symbol=%s error=%d", botId, symbol, GetLastError());
+   return
+      "{"
+      "\"bot_id\":\"" + botId + "\","
+      "\"request_id\":\"" + requestId + "\","
+      "\"timestamp_utc\":\"" + ToIsoUtc(TimeGMT()) + "\","
+      "\"symbol\":\"" + symbol + "\","
+      "\"timeframe\":\"" + StrategyTimeframe + "\","
+      "\"bid\":" + DoubleToString(tick.bid, digits) + ","
+      "\"ask\":" + DoubleToString(tick.ask, digits) + ","
+      "\"spread_points\":" + DoubleToString(spreadPoints, 2) + ","
+      "\"point_size\":" + DoubleToString(point, digits) + ","
+      "\"value_per_point_per_lot\":" + DoubleToString(valuePerPointPerLot, 6) + ","
+      "\"candles\":" + SerializeRatesRangeWithDigits(rates, 0, copied, digits) + ","
+      "\"micro_candles\":[],"
+      "\"positions\":[],"
+      "\"account\":{" +
+         "\"balance\":" + DoubleToString(AccountInfoDouble(ACCOUNT_BALANCE), 2) + ","
+         "\"equity\":" + DoubleToString(AccountInfoDouble(ACCOUNT_EQUITY), 2) + ","
+         "\"margin_free\":" + DoubleToString(AccountInfoDouble(ACCOUNT_MARGIN_FREE), 2) + ","
+         "\"leverage\":" + IntegerToString((int)AccountInfoInteger(ACCOUNT_LEVERAGE)) +
+      "},"
+      "\"indicators\":{},"
+      "\"flow\":{\"book\":[],\"up_ticks\":0,\"down_ticks\":0,\"neutral_ticks\":0,\"up_volume\":0,\"down_volume\":0}"
+      "}";
 }
 
 void CacheConfiguredBots()
@@ -207,6 +304,20 @@ void CacheConfiguredBots()
       {
          SymbolSelect(SecondaryHistorySymbol, true);
          PrintFormat("Secondary history refresh scheduled symbol=%s bot_id=%s", SecondaryHistorySymbol, SecondaryHistoryBotId);
+      }
+   }
+   if(RefreshBitcoinHistoryOnInit)
+   {
+      bitcoinHistoryCacheKey = "2LotusHistory_" + BitcoinHistorySymbol + "_" + StrategyTimeframe;
+      if(GlobalVariableCheck(bitcoinHistoryCacheKey))
+      {
+         bitcoinHistoryReady = true;
+         PrintFormat("Bitcoin history already bootstrapped symbol=%s at=%s", BitcoinHistorySymbol, TimeToString((datetime)GlobalVariableGet(bitcoinHistoryCacheKey), TIME_DATE|TIME_SECONDS));
+      }
+      else
+      {
+         SymbolSelect(BitcoinHistorySymbol, true);
+         PrintFormat("Bitcoin history refresh scheduled symbol=%s bot_id=%s", BitcoinHistorySymbol, BitcoinHistoryBotId);
       }
    }
 }

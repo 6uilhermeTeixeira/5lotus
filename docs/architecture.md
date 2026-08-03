@@ -22,7 +22,8 @@ Essa separacao respeita melhor as restricoes do ambiente:
 MT5 terminal
   -> Expert Advisor MQL5
     -> coleta estado do mercado / conta / posicoes
-    -> envia o mesmo contexto somente para bot-6, bot-7, bot-11, bot-12 e bot-13
+    -> envia o contexto XAUUSD para bot-6, bot-7, bot-11, bot-12, bot-13 e bot-14
+    -> envia contexto EURUSD separado para bot-eur-13
 Python strategy service
   -> seleciona a estratégia pelo perfil cadastrado do bot
   -> aplica risco
@@ -36,20 +37,23 @@ Expert Advisor MQL5
 ## Estado atual
 
 - O catálogo separa estratégias `active=true` e `active=false` nas abas `Estratégias ativas` e `Arquivadas`. Os títulos públicos não exibem o identificador técnico `Bot N`.
-- O catálogo operacional contém `stochastic_sell_session` (Bot 6), `multitimeframe_trend_pullback` (Bot 7), `portfolio_6_7_100_75` (Bot 11), `happy_gold_zigzag_scalper` (Bot 12) e `happy_gold_zigzag_regime_confirmed` (Bot 13), todos em XAUUSD/M5 e bloqueados em shadow.
-- Um único EA consulta apenas esses cinco bots a cada ciclo. Estratégias anteriores permanecem consultáveis no painel e no banco para preservar histórico, mas não recebem polling, decisões ou novas operações.
+- O catálogo operacional contém `stochastic_sell_session` (Bot 6), `multitimeframe_trend_pullback` (Bot 7), `portfolio_6_7_100_75` (Bot 11), `happy_gold_zigzag_scalper` (Bot 12), `happy_gold_zigzag_regime_confirmed` (Bot 13) e `happy_gold_zigzag_microstructure` (Bot 14), todos em XAUUSD/M5 e bloqueados em shadow.
+- `bot-eur-13` e `bot-btc-13` transferem `happy_gold_zigzag_regime_confirmed` sem recalibração para EURUSD/M5 e BTCUSD/M5. São benchmarks de robustez, não estratégias aprovadas para execução.
+- Um único EA consulta apenas esses seis bots a cada ciclo. Estratégias anteriores permanecem consultáveis no painel e no banco para preservar histórico, mas não recebem polling, decisões ou novas operações.
 - O Bot 6 replica o setup do Bot 5, mas admite somente vendas antes das 18h UTC; ele permanece isolado em shadow para forward test.
 - O Bot 7 deriva candles H1 e M15 completos do histórico canônico M5, exige alinhamento comprador e força mínima de 0,7 ATR(H1), opera somente entre 13h e 16h UTC com metade do risco padrão e permanece bloqueado em shadow.
 - O Bot 11 preserva a prioridade 7/6 e a posição única, usando pesos 100/75. O filtro H1 vendedor do Bot 6 é aplicado no motor online, enquanto operações iniciadas, resultado diário e cooldown são lidos dos paper trades persistidos.
 - O Bot 12 agrega somente candles M30 completos, identifica pivôs fractais já confirmados como proxy causal do ZigZag e sinaliza seu rompimento no contexto M5. Reproduz lote 0,10, stop de 240 pontos, alvo de 1.000 pontos, posição única e sessão proxy 03:00–19:00 UTC. O break-even entra em +40 pontos, o trailing em +120 com distância de 60 e a posição expira após dois M5; continua travado em shadow porque saídas em segundos ainda dependem de ticks do broker original.
 - O Bot 13 mantém a geometria do Bot 12. Range e tendência usam o rompimento-base; transição e alta volatilidade exigem fechamento M5 além do pivô e direção H1 alinhada. O regime é calculado com H1 completo, enquanto o sinal conserva a janela curta do replay-base.
-- Setup técnico calculado uma vez por candle fechado e resposta consultada pelo EA a cada cinco segundos.
+- O Bot 14 mantém o nível M30, mas no forward exige um candle M1 direcional e desequilíbrio de ticks a favor. O EA envia os 20 candles M1 completos e o fluxo acumulado desde o último polling. A gestão dos paper trades usa bid/ask atuais para soft stop, break-even, trailing e timeout em segundos; a série histórica M5 usa uma proxy declarada e não reproduz reentradas intrabar.
+- Os setups base continuam consultados no intervalo padrão de cinco segundos. O Bot 14 possui polling separado de um segundo para observar a microestrutura e atualizar sua gestão shadow; nenhuma ordem real é liberada.
 - Fluxo amostrado continuamente em janela temporal, com z-scores do livro e dos ticks.
 - Política padrão `veto`: somente forte contradição simultânea bloqueia um setup.
 - Cada candidato é deduplicado por bot, timeframe, candle, lado e setup; chaves e consultas incluem `bot_id` para impedir colisão entre estratégias.
 - Supabase mantém telemetria em `strategy_signals` e paper tracks `technical` e `flow_confirmed`.
 - O replay histórico lê `market_candles`, reaplica o motor sem look-ahead e produz resultados efêmeros para o portal, isolados das tabelas operacionais.
-- O histórico profundo é canônico por símbolo/timeframe (`bot-1` para XAUUSD/M5); estratégias não duplicam a mesma série para fins de replay.
+- O histórico profundo é canônico por símbolo/timeframe (`bot-1` para XAUUSD/M5, `bot-eur-1` para EURUSD/M5 e `bot-btc-13` para BTCUSD/M5); estratégias não duplicam a mesma série para fins de replay.
+- BTCUSD usa o produto spot público BTC-USD da Coinbase Exchange. A origem é exibida nas premissas do replay, pois o servidor MetaQuotes Demo não disponibiliza Bitcoin.
 - EURUSD/M5 usa `bot-eur-1` como fonte canônica. `backtest_snapshots` guarda somente o replay compacto, sem duplicar candles, e alimenta o gráfico agregado da tela inicial.
 - Um classificador de regime H1 usa ADX, EMA50/EMA200 e percentil de ATR antes de autorizar candidatos no replay.
 - Controles de sessão, limite diário, cooldown, spread, slippage e comissão pertencem ao harness e não alteram a geração original dos sinais.

@@ -53,6 +53,11 @@ Preencha os inputs:
 - `AggressivePortfolioResearchBotId`: `bot-11` (força o polling da variante 100/75 sempre sem execução)
 - `HappyGoldResearchBotId`: `bot-12` (força o polling da reconstrução ZigZag M30 sempre sem execução)
 - `HappyGoldConfirmedResearchBotId`: `bot-13` (variante ZigZag com confirmação seletiva de regime, sempre sem execução)
+- `HappyGoldMicrostructureResearchBotId`: `bot-14` (variante ZigZag com confirmação M1/ticks e gestão rápida, sempre sem execução)
+- `MicrostructurePollIntervalSeconds`: `1` (Bot 14 consulta e atualiza o paper trade a cada segundo; os demais mantêm `PollIntervalSeconds`)
+- `EurUsdRegimeConfirmedBotId`: `bot-eur-13` (benchmark EURUSD consultado no polling padrão, sempre sem execução)
+- `BitcoinRegimeConfirmedBotId`: vazio enquanto o MT5 não oferecer BTCUSD; o replay usa candles públicos da Coinbase
+- `BitcoinHistorySymbol`: `BTCUSD` e `RefreshBitcoinHistoryOnInit=false` no servidor MetaQuotes Demo atual
 - `HistoryCacheBars`: `100000` somente no bot canônico, visando aproximadamente um ano de M5 quando a corretora disponibilizar essa profundidade
 - `RefreshDeepHistoryOnInit`: `false` por padrão; ative somente para um bootstrap explícito dos 100 mil candles
 - `SecondaryHistorySymbol`: `EURUSD`
@@ -91,7 +96,7 @@ O resultado deve indicar `"status":"ok"`. Após o fechamento de um trade demo, o
 `POST /api/trades` com a chave no header `X-2Lotus-Ingest-Key`; o painel 2Lotus passa a mostrar a
 operação gravada no Supabase.
 
-Durante shadow, confirme também nos logs que `bot-6`, `bot-7`, `bot-11`, `bot-12` e `bot-13` recebem HTTP 200. `strategy_signals`
+Durante shadow, confirme também nos logs que `bot-6`, `bot-7`, `bot-11`, `bot-12`, `bot-13`, `bot-14` e `bot-eur-13` recebem HTTP 200. `strategy_signals`
 recebe os candidatos quando cada setup ocorre e `paper_trades` mantém o variant `technical`;
 o Bot 1 também acompanha `flow_confirmed`. As chaves de sinal e as consultas de posição são
 segmentadas por bot. A execução real só pode ser avaliada depois da

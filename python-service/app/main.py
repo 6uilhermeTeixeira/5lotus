@@ -77,6 +77,8 @@ def _market_data_source_bot_id(bot: BotCatalogItem) -> str:
         return settings.backtest_market_data_bot_id
     if bot.symbol.upper() == "EURUSD" and bot.timeframe.upper() == "M5":
         return "bot-eur-1"
+    if bot.symbol.upper() == "BTCUSD" and bot.timeframe.upper() == "M5":
+        return "bot-btc-13"
     return bot.id
 
 
@@ -322,6 +324,17 @@ def read_config() -> dict[str, str | int | float | bool]:
         "happy_gold_trailing_activation_points": settings.happy_gold_trailing_activation_points,
         "happy_gold_trailing_distance_points": settings.happy_gold_trailing_distance_points,
         "happy_gold_max_holding_bars": settings.happy_gold_max_holding_bars,
+        "happy_gold_micro_min_directional_ticks": settings.happy_gold_micro_min_directional_ticks,
+        "happy_gold_micro_min_tick_imbalance": settings.happy_gold_micro_min_tick_imbalance,
+        "happy_gold_micro_min_m1_body_ratio": settings.happy_gold_micro_min_m1_body_ratio,
+        "happy_gold_micro_max_extension_points": settings.happy_gold_micro_max_extension_points,
+        "happy_gold_micro_soft_stop_points": settings.happy_gold_micro_soft_stop_points,
+        "happy_gold_micro_break_even_trigger_points": settings.happy_gold_micro_break_even_trigger_points,
+        "happy_gold_micro_break_even_offset_points": settings.happy_gold_micro_break_even_offset_points,
+        "happy_gold_micro_trailing_activation_points": settings.happy_gold_micro_trailing_activation_points,
+        "happy_gold_micro_trailing_distance_points": settings.happy_gold_micro_trailing_distance_points,
+        "happy_gold_micro_max_holding_seconds": settings.happy_gold_micro_max_holding_seconds,
+        "happy_gold_micro_reentry_bucket_seconds": settings.happy_gold_micro_reentry_bucket_seconds,
         "enable_live_decisions": settings.enable_live_decisions,
         "dashboard_auth_configured": settings.dashboard_auth_configured,
         "results_store": settings.results_store,
@@ -341,8 +354,14 @@ def decision(payload: DecisionRequest, x_2lotus_ingest_key: str | None = Header(
             raise HTTPException(status_code=422, detail="decision symbol or timeframe does not match bot configuration")
         store = SupabaseStore(settings)
         store.upsert_candles(payload.bot_id, payload.symbol, payload.timeframe, payload.candles)
-        store.advance_paper_trades(payload.bot_id, payload.candles)
-        if strategy_profile in {"multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed", *WEIGHTED_PORTFOLIO_PROFILES}:
+        store.advance_paper_trades(
+            payload.bot_id,
+            payload.candles,
+            bid=payload.bid,
+            ask=payload.ask,
+            timestamp_utc=payload.timestamp_utc,
+        )
+        if strategy_profile in {"multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed", "happy_gold_zigzag_microstructure", *WEIGHTED_PORTFOLIO_PROFILES}:
             payload.candles = store.load_candles(
                 bot,
                 4000 if strategy_profile in {"adaptive_portfolio_3_6_7", "happy_gold_zigzag_regime_confirmed"} or strategy_profile in WEIGHTED_PORTFOLIO_PROFILES else 1000,
