@@ -8,7 +8,7 @@ class ComparisonPageTests(unittest.TestCase):
     def test_catalog_separates_active_and_archived_strategies(self) -> None:
         active_bots = [
             BotCatalogItem(id=f"bot-{index}", name=name, description="Teste", strategy_profile="fimath_ema20_flow", symbol="XAUUSD", timeframe="M5")
-            for index, name in [(6, "Stochastic Sell 18 UTC"), (7, "Tendência Multitemporal"), (11, "Portfólio 7/6 · 100/75"), (12, "Happy Gold ZigZag Scalper"), (13, "Happy Gold ZigZag · Confirmação de Regime")]
+            for index, name in [(6, "Stochastic Sell 18 UTC"), (7, "Tendência Multitemporal"), (11, "Portfólio 7/6 · 100/75"), (12, "Happy Gold ZigZag Scalper"), (13, "Happy Gold ZigZag · Confirmação de Regime"), (15, "Happy Gold ZigZag · Reteste ATR")]
         ]
         archived_bots = [
             BotCatalogItem(id="bot-1", name="Fimath", description="Teste", strategy_profile="fimath_ema20_flow", symbol="XAUUSD", timeframe="M5", active=False),
@@ -25,9 +25,9 @@ class ComparisonPageTests(unittest.TestCase):
         self.assertIn("Happy Gold ZigZag Scalper", html)
         self.assertIn("Fimath · EUR/USD", html)
         self.assertIn("Ver histórico", html)
-        self.assertEqual(html.count('class="bot card"'), 7)
+        self.assertEqual(html.count('class="bot card"'), 8)
 
-    def test_comparison_page_renders_five_active_bots(self) -> None:
+    def test_comparison_page_renders_six_active_bots(self) -> None:
         bots = [
             BotCatalogItem(
                 id=f"bot-{index}",
@@ -43,6 +43,7 @@ class ComparisonPageTests(unittest.TestCase):
                 (11, "Portfólio 7/6 · 100/75", "portfolio_6_7_100_75"),
                 (12, "Happy Gold ZigZag Scalper", "happy_gold_zigzag_scalper"),
                 (13, "Happy Gold ZigZag · Confirmação de Regime", "happy_gold_zigzag_regime_confirmed"),
+                (15, "Happy Gold ZigZag · Reteste ATR", "happy_gold_zigzag_retest_atr"),
             ]
         ]
 
@@ -55,7 +56,8 @@ class ComparisonPageTests(unittest.TestCase):
         self.assertIn("Portfólio 7/6 · 100/75", html)
         self.assertIn("Happy Gold ZigZag Scalper", html)
         self.assertIn("Happy Gold ZigZag · Confirmação de Regime", html)
-        self.assertIn("<strong>5</strong>", html)
+        self.assertIn("Happy Gold ZigZag · Reteste ATR", html)
+        self.assertIn("<strong>6</strong>", html)
         self.assertIn("/api/compare", html)
 
     def test_results_page_defaults_to_long_historical_validation(self) -> None:

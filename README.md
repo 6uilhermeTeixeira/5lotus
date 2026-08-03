@@ -45,7 +45,7 @@ Ja existe implementacao para:
 - expor uma pagina separada de acompanhamento de resultados em `python-service` via `GET /results`
 - validar as estratégias candle a candle nos últimos 120 dias disponíveis e apresentar entradas, saídas e métricas simuladas sem depender do mercado aberto
 - filtrar sinais por regime H1, sessão e limites diários, com custos de execução e validação temporal explícitos
-- manter cinco estratégias ativas em XAUUSD: Stochastic Sell 18 UTC, Tendência Multitemporal, Portfólio 7/6 100/75, Happy Gold ZigZag Scalper e sua variante com confirmação seletiva de regime
+- manter seis estratégias ativas em XAUUSD, incluindo a Happy Gold ZigZag v2 com reteste M5 e gestão por ATR/R, todas permanentemente em shadow
 - preservar as estratégias arquivadas e seus candles, sinais, trades e snapshots em uma aba própria, sem polling pelo EA
 - apresentar títulos de estratégia sem o identificador técnico `Bot N`, que continua existindo apenas nos IDs internos
 

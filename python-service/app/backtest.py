@@ -14,8 +14,8 @@ from .strategy import WEIGHTED_PORTFOLIO_PROFILES, evaluate_decision
 HISTORY_BARS = 60
 MULTITIMEFRAME_HISTORY_BARS = 1000
 ADAPTIVE_HISTORY_BARS = 4000
-DEEP_HISTORY_PROFILES = {"multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", *WEIGHTED_PORTFOLIO_PROFILES}
-HAPPY_GOLD_PROFILES = {"happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed"}
+DEEP_HISTORY_PROFILES = {"multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "happy_gold_zigzag_retest_atr", *WEIGHTED_PORTFOLIO_PROFILES}
+HAPPY_GOLD_PROFILES = {"happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed", "happy_gold_zigzag_retest_atr"}
 
 
 def _instrument_point_size(bot: BotCatalogItem, settings: Settings) -> float:
@@ -93,6 +93,14 @@ def _replay_settings(settings: Settings, bot: BotCatalogItem) -> SimpleNamespace
         happy_gold_trailing_activation_points=getattr(settings, "happy_gold_trailing_activation_points", 120),
         happy_gold_trailing_distance_points=getattr(settings, "happy_gold_trailing_distance_points", 60),
         happy_gold_max_holding_bars=getattr(settings, "happy_gold_max_holding_bars", 2),
+        happy_gold_v2_stop_atr=getattr(settings, "happy_gold_v2_stop_atr", 1.5),
+        happy_gold_v2_target_r=getattr(settings, "happy_gold_v2_target_r", 2.0),
+        happy_gold_v2_break_even_r=getattr(settings, "happy_gold_v2_break_even_r", .8),
+        happy_gold_v2_trailing_activation_r=getattr(settings, "happy_gold_v2_trailing_activation_r", 1.2),
+        happy_gold_v2_trailing_atr=getattr(settings, "happy_gold_v2_trailing_atr", .8),
+        happy_gold_v2_max_extension_atr=getattr(settings, "happy_gold_v2_max_extension_atr", .35),
+        happy_gold_v2_retest_tolerance_atr=getattr(settings, "happy_gold_v2_retest_tolerance_atr", .15),
+        happy_gold_v2_max_holding_bars=getattr(settings, "happy_gold_v2_max_holding_bars", 12),
     )
 
 
@@ -307,6 +315,8 @@ def run_historical_replay(
     session_end = _parse_time(settings.backtest_session_end_utc)
     if bot.strategy_profile in HAPPY_GOLD_PROFILES:
         session_start, session_end = time(3, 0), time(19, 0)
+    if bot.strategy_profile == "happy_gold_zigzag_retest_atr":
+        session_start, session_end = time(7, 0), time(16, 0)
     point_size = _instrument_point_size(bot, settings)
     balance = settings.backtest_balance
     open_trade: _OpenTrade | None = None
@@ -374,7 +384,7 @@ def run_historical_replay(
             replay_settings.adaptive_component_health = adaptive_day.get("health", {})
         if bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES and settings.backtest_regime_enabled:
             replay_settings.portfolio_regime_snapshot = regime_at(regime_timeline, candle_end)
-        if bot.strategy_profile == "happy_gold_zigzag_regime_confirmed" and settings.backtest_regime_enabled:
+        if bot.strategy_profile in {"happy_gold_zigzag_regime_confirmed", "happy_gold_zigzag_retest_atr"} and settings.backtest_regime_enabled:
             replay_settings.happy_gold_regime_snapshot = regime_at(regime_timeline, candle_end)
         response = evaluate_decision(request, replay_settings, bot.strategy_profile)
         if not response.metadata.get("candidate"):
@@ -489,10 +499,14 @@ def run_historical_replay(
         assumptions.append("O Bot 6 somente é admitido quando o regime H1 causal confirma tendência de baixa; o mesmo bloqueio existe no runtime shadow.")
     if bot.strategy_profile in HAPPY_GOLD_PROFILES:
         assumptions.append("A estratégia agrega M5 em M30 completo e usa pivôs fractais confirmados como aproximação causal do ZigZag proprietário; não há repaint nem antecipação do pivô.")
+    if bot.strategy_profile in {"happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed"}:
         assumptions.append("SL de 240 pontos, TP de 1.000 pontos e lote 0,10 reproduzem a assinatura observada; o replay ativa break-even em +40 pontos no preço de entrada e trailing após +120 pontos, distante 60 pontos.")
         assumptions.append("O trailing OHLC é atualizado pelo extremo favorável de um candle e só pode encerrar a partir do candle seguinte; isso evita presumir uma sequência intrabar favorável. Ticks continuam necessários para reproduzir saídas em segundos.")
     if bot.strategy_profile == "happy_gold_zigzag_regime_confirmed":
         assumptions.append("O Bot 13 mantém o rompimento-base em range/tendência; transição e alta volatilidade exigem fechamento M5 além do pivô e direção H1 alinhada ao sinal.")
+    if bot.strategy_profile == "happy_gold_zigzag_retest_atr":
+        assumptions.append("A V2 exige rompimento fechado e reteste/rejeição M5 do pivô M30, em tendência H1 alinhada e entre 07:00–16:00 UTC.")
+        assumptions.append("Stop usa o maior entre 1,5 ATR(M5) e a estrutura do reteste; alvo 2R, break-even 0,8R, trailing após 1,2R com distância de 0,8 ATR e timeout de 12 candles M5.")
     if period_start > requested_start + interval:
         assumptions.append(f"A base não cobre os {days} dias completos; o replay começa em {period_start.isoformat()}.")
     chart_start = period_end - timedelta(days=min(days, 30))

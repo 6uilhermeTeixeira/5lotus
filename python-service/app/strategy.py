@@ -260,6 +260,57 @@ def _happy_gold_zigzag_setup(request: DecisionRequest) -> Setup | None:
     )
 
 
+def _happy_gold_retest_setup(request: DecisionRequest, settings: Settings) -> Setup | None:
+    """Confirm an M30 pivot breakout with a causal M5 retest and rejection."""
+    if len(request.candles) < 43:
+        return None
+    candles = request.candles[-60:]
+    m30 = _aggregate_completed_candles(candles, 30, request.timestamp_utc)
+    if len(m30) < 7:
+        return None
+    pivot_high, pivot_low = _latest_confirmed_zigzag_levels(m30)
+    atr_m5 = _atr(candles[:-1])
+    if atr_m5 <= 0:
+        return None
+    latest = candles[-1]
+    tolerance = atr_m5 * float(getattr(settings, "happy_gold_v2_retest_tolerance_atr", .15))
+    recent_breakouts = range(max(1, len(candles) - 5), len(candles) - 1)
+    buy_broken = pivot_high is not None and any(candles[index - 1].close <= pivot_high < candles[index].close for index in recent_breakouts)
+    sell_broken = pivot_low is not None and any(candles[index - 1].close >= pivot_low > candles[index].close for index in recent_breakouts)
+    buy_retest = bool(buy_broken and latest.low <= float(pivot_high) + tolerance and latest.close > float(pivot_high) and latest.close > latest.open)
+    sell_retest = bool(sell_broken and latest.high >= float(pivot_low) - tolerance and latest.close < float(pivot_low) and latest.close < latest.open)
+    if not buy_retest and not sell_retest:
+        return None
+    action = DecisionAction.BUY if buy_retest else DecisionAction.SELL
+    entry = request.ask if buy_retest else request.bid
+    breakout_level = float(pivot_high if buy_retest else pivot_low)
+    extension = abs(entry - breakout_level)
+    if extension > atr_m5 * float(getattr(settings, "happy_gold_v2_max_extension_atr", .35)):
+        return None
+    structural_stop = latest.low - .2 * atr_m5 if buy_retest else latest.high + .2 * atr_m5
+    minimum_stop = atr_m5 * float(getattr(settings, "happy_gold_v2_stop_atr", 1.5))
+    stop_distance = max(minimum_stop, entry - structural_stop if buy_retest else structural_stop - entry)
+    stop = entry - stop_distance if buy_retest else entry + stop_distance
+    target_distance = stop_distance * float(getattr(settings, "happy_gold_v2_target_r", 2.0))
+    target = entry + target_distance if buy_retest else entry - target_distance
+    return Setup(
+        action=action,
+        setup_type="happy_gold_zigzag_retest_atr",
+        entry=entry,
+        stop=stop,
+        partial=target,
+        target=target,
+        stop_points=stop_distance / request.point_size,
+        flow_mode="not_applicable",
+        ema20=m30[-1].close,
+        atr14=atr_m5,
+        breakout_level=breakout_level,
+        partial_close_pct=100.0,
+        move_stop_to_breakeven=False,
+        max_holding_bars=int(getattr(settings, "happy_gold_v2_max_holding_bars", 12)),
+    )
+
+
 def _setup(request: DecisionRequest) -> Setup | None:
     candles = request.candles
     if len(candles) < 23:
@@ -1067,6 +1118,77 @@ def _evaluate_happy_gold_zigzag_regime_confirmed(request: DecisionRequest, setti
     return response
 
 
+def _evaluate_happy_gold_zigzag_retest_atr(request: DecisionRequest, settings: Settings, strategy_profile: str) -> DecisionResponse:
+    """V2: trade only trend-aligned M30 breakouts that survive an M5 retest."""
+    setup = _happy_gold_retest_setup(request, settings)
+    session_time = request.timestamp_utc.astimezone(timezone.utc).time()
+    in_session = time(7, 0) <= session_time < time(16, 0)
+    same_symbol_positions = [position for position in request.positions if position.symbol.upper() == request.symbol.upper()]
+    override = getattr(settings, "happy_gold_regime_snapshot", None)
+    regime = override if isinstance(override, RegimeSnapshot) else classify_regime(request.candles, settings)
+    side = setup.action.value if setup is not None else "none"
+    trend_aligned = setup is not None and regime.name == "trend" and regime.direction == side
+    volatility_allowed = regime.atr_percentile is None or 10 <= regime.atr_percentile <= 90
+    checks = [
+        RiskCheck(name="symbol_match", passed=request.symbol.upper() == "XAUUSD", detail="expected=XAUUSD"),
+        RiskCheck(name="timeframe_match", passed=request.timeframe.upper() == "M5", detail="expected=M5; signal=M30; confirmation=M5"),
+        RiskCheck(name="spread_limit", passed=request.spread_points <= settings.max_spread_points, detail=f"max={settings.max_spread_points}"),
+        RiskCheck(name="research_session", passed=in_session, detail="07:00-16:00_UTC"),
+        RiskCheck(name="single_position", passed=not same_symbol_positions, detail="max_positions_for_symbol=1"),
+        RiskCheck(name="zigzag_breakout_retest", passed=setup is not None, detail="M30_confirmed_pivot + M5_close_breakout + M5_retest_rejection"),
+        RiskCheck(name="trend_alignment", passed=trend_aligned, detail=f"regime={regime.name};direction={regime.direction};side={side}"),
+        RiskCheck(name="volatility_band", passed=volatility_allowed, detail=f"atr_percentile={regime.atr_percentile};allowed=10-90"),
+    ]
+    if not all(check.passed for check in checks):
+        return DecisionResponse(
+            action=DecisionAction.HOLD,
+            reason="happy_gold_v2_filter_or_retest_block",
+            risk_checks=checks,
+            metadata={
+                "strategy_profile": strategy_profile,
+                "candidate": False,
+                "experimental_shadow_lock": True,
+                "zigzag_regime": regime.name,
+                "zigzag_regime_direction": regime.direction,
+            },
+        )
+    assert setup is not None
+    response = _candidate_response(
+        request,
+        settings,
+        setup,
+        checks,
+        FlowAnalysis(True, False, False, "not_applicable"),
+        executable=False,
+        reason="happy_gold_zigzag_retest_atr_shadow_signal",
+        strategy_profile=strategy_profile,
+    )
+    break_even_points = setup.stop_points * float(getattr(settings, "happy_gold_v2_break_even_r", .8))
+    trailing_activation_points = setup.stop_points * float(getattr(settings, "happy_gold_v2_trailing_activation_r", 1.2))
+    trailing_distance_points = setup.atr14 * float(getattr(settings, "happy_gold_v2_trailing_atr", .8)) / request.point_size
+    response.metadata.update(
+        {
+            "signal_timeframe": "M30",
+            "confirmation_timeframe": "M5",
+            "entry_model": "breakout_retest_rejection",
+            "stop_model": "max_1.5_atr_or_retest_structure",
+            "target_r": float(getattr(settings, "happy_gold_v2_target_r", 2.0)),
+            "break_even_trigger_points": break_even_points,
+            "break_even_offset_points": 0.0,
+            "trailing_activation_points": trailing_activation_points,
+            "trailing_distance_points": trailing_distance_points,
+            "max_holding_bars": int(getattr(settings, "happy_gold_v2_max_holding_bars", 12)),
+            "zigzag_regime": regime.name,
+            "zigzag_regime_direction": regime.direction,
+            "zigzag_regime_atr_percentile": regime.atr_percentile if regime.atr_percentile is not None else -1,
+            "experimental_shadow_lock": True,
+            "research_status": "v2_candidate_requires_walk_forward_and_tick_forward_validation",
+        }
+    )
+    response.risk_checks.append(RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled"))
+    return response
+
+
 def _apply_portfolio_allocation(
     response: DecisionResponse,
     request: DecisionRequest,
@@ -1437,6 +1559,8 @@ def evaluate_decision(request: DecisionRequest, settings: Settings, strategy_pro
         return _evaluate_happy_gold_zigzag_scalper(request, settings, profile)
     if profile == "happy_gold_zigzag_regime_confirmed":
         return _evaluate_happy_gold_zigzag_regime_confirmed(request, settings, profile)
+    if profile == "happy_gold_zigzag_retest_atr":
+        return _evaluate_happy_gold_zigzag_retest_atr(request, settings, profile)
     if profile == "portfolio_6_7":
         return _evaluate_portfolio_6_7(request, settings)
     if profile == "adaptive_portfolio_3_6_7":

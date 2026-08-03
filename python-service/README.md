@@ -31,6 +31,7 @@ Perfis ativos, executados em paralelo:
 - Bot 11: `portfolio_6_7_100_75` — variante agressiva com Bot 7 em 100% e Bot 6 em 75%, sob as mesmas travas persistidas e sempre sem execução
 - Bot 12: `happy_gold_zigzag_scalper` — reconstrução shadow da assinatura de 773 operações XAUUSD: pivô M30 confirmado, rompimento M5, lote 0,10, stop de 240 pontos, alvo de 1.000 pontos, break-even em +40, trailing em +120/60, expiração em dois M5 e uma posição
 - Bot 13: `happy_gold_zigzag_regime_confirmed` — preserva integralmente a geometria do Bot 12; em transição/alta volatilidade exige fechamento M5 além do pivô e direção H1 alinhada. O replay de 365 dias registrou US$ 2.655,40, PF 1,39, expectativa 0,181R e drawdown 15,66R, permanecendo em shadow paralelo.
+- Bot 15: `happy_gold_zigzag_retest_atr` — v2 em shadow que exige rompimento fechado do pivô M30, reteste/rejeição M5 e tendência H1 alinhada entre 07:00–16:00 UTC. Usa stop estrutural com piso de 1,5 ATR, alvo 2R, break-even 0,8R, trailing 1,2R/0,8 ATR e timeout de 12 M5. Na grade anual definida previamente, marcou 22 trades, PF 1,32, expectativa +0,1285R e drawdown 3,63R, mas falhou estabilidade (5/10 janelas positivas) e permanece rejeitada para seleção.
 - Estratégias anteriores e variantes EURUSD aparecem na aba `Arquivadas` para consulta histórica, mas não recebem polling, decisões ou novas operações. Os títulos públicos omitem o identificador técnico `Bot N`.
 - risco por operacao: `1%` da banca
 - risco/retorno final: `2R`, com parcial de `50%` em `1R`

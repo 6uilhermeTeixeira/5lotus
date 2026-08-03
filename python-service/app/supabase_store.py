@@ -207,16 +207,22 @@ class SupabaseStore:
             elif trade.get("expires_at_utc") and candle.timestamp_utc + timedelta(minutes=5) >= datetime.fromisoformat(str(trade["expires_at_utc"])):
                 outcome_r = direction * (candle.close - entry) / risk if risk else 0
                 patch = {"status": "closed", "closed_at_utc": candle.timestamp_utc.isoformat(), "outcome_r": outcome_r}
-            elif bot_id in {"bot-12", "bot-13"} and risk:
-                point_size = risk / 240
+            elif risk and trade.get("point_size") and (
+                trade.get("break_even_trigger_points") is not None or trade.get("trailing_activation_points") is not None
+            ):
+                point_size = float(trade["point_size"])
                 favorable_price = candle.high if buy else candle.low
                 favorable_points = direction * (favorable_price - entry) / point_size
                 next_stop = stop
-                if favorable_points >= self.settings.happy_gold_break_even_trigger_points:
-                    break_even_stop = entry + direction * self.settings.happy_gold_break_even_offset_points * point_size
+                break_even_trigger = trade.get("break_even_trigger_points")
+                break_even_offset = float(trade.get("break_even_offset_points") or 0)
+                trailing_activation = trade.get("trailing_activation_points")
+                trailing_distance = trade.get("trailing_distance_points")
+                if break_even_trigger is not None and favorable_points >= float(break_even_trigger):
+                    break_even_stop = entry + direction * break_even_offset * point_size
                     next_stop = max(next_stop, break_even_stop) if buy else min(next_stop, break_even_stop)
-                if favorable_points >= self.settings.happy_gold_trailing_activation_points:
-                    trailing_stop = favorable_price - direction * self.settings.happy_gold_trailing_distance_points * point_size
+                if trailing_activation is not None and trailing_distance is not None and favorable_points >= float(trailing_activation):
+                    trailing_stop = favorable_price - direction * float(trailing_distance) * point_size
                     next_stop = max(next_stop, trailing_stop) if buy else min(next_stop, trailing_stop)
                 if next_stop != stop:
                     patch = {"stop_price": next_stop}
@@ -276,6 +282,11 @@ class SupabaseStore:
             "entry_price": response.entry_price, "initial_stop_price": response.stop_loss_price, "stop_price": response.stop_loss_price,
             "partial_price": response.partial_take_profit_price, "target_price": response.final_take_profit_price,
             "partial_close_pct": response.partial_close_pct,
+            "point_size": payload.point_size,
+            "break_even_trigger_points": response.metadata.get("break_even_trigger_points"),
+            "break_even_offset_points": response.metadata.get("break_even_offset_points"),
+            "trailing_activation_points": response.metadata.get("trailing_activation_points"),
+            "trailing_distance_points": response.metadata.get("trailing_distance_points"),
             "expires_at_utc": (
                 payload.timestamp_utc + timedelta(minutes=5 * int(response.metadata["max_holding_bars"]))
             ).isoformat() if "max_holding_bars" in response.metadata else None,
