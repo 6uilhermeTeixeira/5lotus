@@ -32,7 +32,7 @@ Perfis ativos, executados em paralelo:
 - Bot 12: `happy_gold_zigzag_scalper` — reconstrução shadow da assinatura de 773 operações XAUUSD: pivô M30 confirmado, rompimento M5, lote 0,10, stop de 240 pontos, alvo de 1.000 pontos, break-even em +40, trailing em +120/60, expiração em dois M5 e uma posição
 - Bot 13: `happy_gold_zigzag_regime_confirmed` — preserva integralmente a geometria do Bot 12; em transição/alta volatilidade exige fechamento M5 além do pivô e direção H1 alinhada. O replay de 365 dias registrou US$ 2.655,40, PF 1,39, expectativa 0,181R e drawdown 15,66R, permanecendo em shadow paralelo.
 - Bot 15: `happy_gold_zigzag_retest_atr` — v2 em shadow que exige rompimento fechado do pivô M30, reteste/rejeição M5 e tendência H1 alinhada entre 07:00–16:00 UTC. Usa stop estrutural com piso de 1,5 ATR, alvo 2R, break-even 0,8R, trailing 1,2R/0,8 ATR e timeout de 12 M5. Na grade anual definida previamente, marcou 22 trades, PF 1,32, expectativa +0,1285R e drawdown 3,63R, mas falhou estabilidade (5/10 janelas positivas) e permanece rejeitada para seleção.
-- Bot 16: `happy_gold_portfolio_100_100` — meta-portfólio que mantém a confirmação de regime do ZigZag e o Portfólio 7/6 independentes, bloqueia conflitos e compartilha uma posição e o risco-base integral. Replay anual: 427 trades, US$ 2.118,89, PF 1,38, expectativa +0,1822R, drawdown 14,75R e 11/13 janelas positivas; promising_not_live e sempre em shadow.
+- Bot 16: `happy_gold_portfolio_100_100` — meta-portfólio que mantém a confirmação de regime do ZigZag e o Portfólio 7/6 independentes, bloqueia conflitos e compartilha uma posição. Não limita a quantidade de entradas, mas mantém cooldown e perda diária de 2R. Com sessão 06:00–19:00 UTC e risco composto de 2%, o replay anual marcou 795 trades, PF 1,21, expectativa +0,1656R, drawdown 13,84R e 9/13 janelas positivas; o PnL de US$ 98.002,76 não é projeção de retorno. Permanece promising_not_live e em shadow.
 - Estratégias anteriores e variantes EURUSD aparecem na aba `Arquivadas` para consulta histórica, mas não recebem polling, decisões ou novas operações. Os títulos públicos omitem o identificador técnico `Bot N`.
 - risco por operacao: `1%` da banca
 - risco/retorno final: `2R`, com parcial de `50%` em `1R`
@@ -121,7 +121,7 @@ DAYTRADE_BACKTEST_POINT_SIZE=0.01
 DAYTRADE_BACKTEST_VALUE_PER_POINT_PER_LOT=1
 DAYTRADE_BACKTEST_CANDLE_LIMIT=100000
 DAYTRADE_BACKTEST_MARKET_DATA_BOT_ID=bot-1
-DAYTRADE_BACKTEST_RISK_PER_TRADE_PCT=0.25
+DAYTRADE_BACKTEST_RISK_PER_TRADE_PCT=2.0
 DAYTRADE_BACKTEST_SLIPPAGE_POINTS=2
 DAYTRADE_BACKTEST_COMMISSION_PER_LOT=0
 DAYTRADE_BACKTEST_SESSION_START_UTC=06:00

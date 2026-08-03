@@ -129,7 +129,7 @@ O serviço trabalha com estes pressupostos:
 - no Bot 12, `signal_timeframe=M30`, `fixed_stop_points=240`, `fixed_target_points=1000`, `suggested_size=0.10`, `break_even_trigger_points=40`, `trailing_activation_points=120` e `trailing_distance_points=60` documentam a assinatura reconstruída; `experimental_shadow_lock=true` impede execução
 - no Bot 13, `selective_regime_confirmation=true` preserva o Bot 12 em `range/trend`; `zigzag_close_confirmed` e `zigzag_direction_aligned` precisam ser verdadeiros em `transition/high_volatility`
 - no Bot 15, `entry_model=breakout_retest_rejection`, `target_r=2`, gestão dinâmica em pontos e `max_holding_bars=12` descrevem a v2; `experimental_shadow_lock=true` impede execução
-- no Bot 16, `combined_component`, `combined_priority` e os flags de candidato identificam a fonte selecionada; conflitos ficam em `hold` e o risco total nunca ultrapassa 100% do risco-base
+- no Bot 16, `combined_component`, `combined_priority` e os flags de candidato identificam a fonte selecionada; conflitos ficam em `hold`, `combined_daily_trade_cap=unlimited`, a sessão é 06:00–19:00 UTC e o risco total nunca ultrapassa 100% do risco-base
 - risco máximo por operação: `1%` da banca
 - gatilho: pullback/rejeição da MME20 ou padrão fora-dentro
 - stop: estrutura da rejeição com buffer de ATR(14)

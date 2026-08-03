@@ -325,6 +325,8 @@ def read_config() -> dict[str, str | int | float | bool]:
         "happy_gold_v2_stop_atr": settings.happy_gold_v2_stop_atr,
         "happy_gold_v2_target_r": settings.happy_gold_v2_target_r,
         "happy_gold_v2_max_holding_bars": settings.happy_gold_v2_max_holding_bars,
+        "happy_gold_combined_session_start_utc": settings.happy_gold_combined_session_start_utc,
+        "happy_gold_combined_session_end_utc": settings.happy_gold_combined_session_end_utc,
         "enable_live_decisions": settings.enable_live_decisions,
         "dashboard_auth_configured": settings.dashboard_auth_configured,
         "results_store": settings.results_store,

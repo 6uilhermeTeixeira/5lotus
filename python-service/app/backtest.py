@@ -101,6 +101,8 @@ def _replay_settings(settings: Settings, bot: BotCatalogItem) -> SimpleNamespace
         happy_gold_v2_max_extension_atr=getattr(settings, "happy_gold_v2_max_extension_atr", .35),
         happy_gold_v2_retest_tolerance_atr=getattr(settings, "happy_gold_v2_retest_tolerance_atr", .15),
         happy_gold_v2_max_holding_bars=getattr(settings, "happy_gold_v2_max_holding_bars", 12),
+        happy_gold_combined_session_start_utc=getattr(settings, "happy_gold_combined_session_start_utc", "06:00"),
+        happy_gold_combined_session_end_utc=getattr(settings, "happy_gold_combined_session_end_utc", "19:00"),
     )
 
 
@@ -317,6 +319,9 @@ def run_historical_replay(
         session_start, session_end = time(3, 0), time(19, 0)
     if bot.strategy_profile == "happy_gold_zigzag_retest_atr":
         session_start, session_end = time(7, 0), time(16, 0)
+    if bot.strategy_profile == HAPPY_GOLD_COMBINED_PROFILE:
+        session_start = _parse_time(replay_settings.happy_gold_combined_session_start_utc)
+        session_end = _parse_time(replay_settings.happy_gold_combined_session_end_utc)
     point_size = _instrument_point_size(bot, settings)
     balance = settings.backtest_balance
     open_trade: _OpenTrade | None = None
@@ -412,7 +417,8 @@ def run_historical_replay(
         day = candle_end.date()
         session_allowed = session_start <= candle_end.time() < session_end
         daily_trade_cap = min(settings.backtest_max_trades_per_day, 2) if bot.strategy_profile in DEEP_HISTORY_PROFILES else settings.backtest_max_trades_per_day
-        risk_allowed = trades_per_day[day] < daily_trade_cap and daily_outcome_r[day] > -settings.backtest_daily_loss_limit_r
+        trade_cap_allowed = True if bot.strategy_profile == HAPPY_GOLD_COMBINED_PROFILE else trades_per_day[day] < daily_trade_cap
+        risk_allowed = trade_cap_allowed and daily_outcome_r[day] > -settings.backtest_daily_loss_limit_r
         cooldown_allowed = index > cooldown_until_index
         if not session_allowed:
             blocked_reasons["outside_liquid_session"] += 1
@@ -499,7 +505,7 @@ def run_historical_replay(
         assumptions.append("O Bot 6 somente é admitido quando o regime H1 causal confirma tendência de baixa; o mesmo bloqueio existe no runtime shadow.")
     if bot.strategy_profile == HAPPY_GOLD_COMBINED_PROFILE:
         assumptions.append("O meta-portfólio mantém Bot 13 e Portfólio 7/6 100/100 independentes, usa risco-base integral para qualquer componente e nunca soma posições.")
-        assumptions.append("Sinais conflitantes são bloqueados; quando há concordância, o ZigZag confirmado tem prioridade. Limite de duas entradas, perda diária de 2R e cooldown são compartilhados.")
+        assumptions.append("Sinais conflitantes são bloqueados; quando há concordância, o ZigZag confirmado tem prioridade. Não há limite de quantidade de entradas; perda diária de 2R, posição única e cooldown continuam compartilhados.")
     if bot.strategy_profile in HAPPY_GOLD_PROFILES:
         assumptions.append("A estratégia agrega M5 em M30 completo e usa pivôs fractais confirmados como aproximação causal do ZigZag proprietário; não há repaint nem antecipação do pivô.")
     if bot.strategy_profile in {"happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed"}:

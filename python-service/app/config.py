@@ -32,7 +32,7 @@ class Settings:
         self.backtest_value_per_point_per_lot = float(getenv("DAYTRADE_BACKTEST_VALUE_PER_POINT_PER_LOT", "1"))
         self.backtest_candle_limit = int(getenv("DAYTRADE_BACKTEST_CANDLE_LIMIT", "100000"))
         self.backtest_market_data_bot_id = getenv("DAYTRADE_BACKTEST_MARKET_DATA_BOT_ID", "bot-1")
-        self.backtest_risk_per_trade_pct = float(getenv("DAYTRADE_BACKTEST_RISK_PER_TRADE_PCT", "0.25"))
+        self.backtest_risk_per_trade_pct = float(getenv("DAYTRADE_BACKTEST_RISK_PER_TRADE_PCT", "2.0"))
         self.backtest_slippage_points = float(getenv("DAYTRADE_BACKTEST_SLIPPAGE_POINTS", "2"))
         self.backtest_commission_per_lot = float(getenv("DAYTRADE_BACKTEST_COMMISSION_PER_LOT", "0"))
         self.backtest_session_start_utc = getenv("DAYTRADE_BACKTEST_SESSION_START_UTC", "06:00")
@@ -58,6 +58,8 @@ class Settings:
         self.happy_gold_v2_max_extension_atr = float(getenv("DAYTRADE_HAPPY_GOLD_V2_MAX_EXTENSION_ATR", "0.35"))
         self.happy_gold_v2_retest_tolerance_atr = float(getenv("DAYTRADE_HAPPY_GOLD_V2_RETEST_TOLERANCE_ATR", "0.15"))
         self.happy_gold_v2_max_holding_bars = int(getenv("DAYTRADE_HAPPY_GOLD_V2_MAX_HOLDING_BARS", "12"))
+        self.happy_gold_combined_session_start_utc = getenv("DAYTRADE_HAPPY_GOLD_COMBINED_SESSION_START_UTC", "06:00")
+        self.happy_gold_combined_session_end_utc = getenv("DAYTRADE_HAPPY_GOLD_COMBINED_SESSION_END_UTC", "19:00")
         self.results_store_path = Path(
             getenv("DAYTRADE_RESULTS_STORE_PATH", str(service_root / "data" / "trade-results.json"))
         )

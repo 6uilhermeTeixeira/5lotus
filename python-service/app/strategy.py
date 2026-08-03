@@ -1,4 +1,5 @@
 from collections import defaultdict, deque
+from copy import copy
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
 import json
@@ -1295,7 +1296,8 @@ def _portfolio_runtime_risk_check(request: DecisionRequest, settings: Settings) 
     daily_outcome_r = float(state.get("daily_outcome_r", 0))
     cooldown_until_raw = state.get("cooldown_until_utc")
     cooldown_until = datetime.fromisoformat(str(cooldown_until_raw)) if cooldown_until_raw else None
-    if trades_started >= 2:
+    daily_trade_cap = getattr(settings, "portfolio_daily_trade_cap", 2)
+    if daily_trade_cap is not None and trades_started >= int(daily_trade_cap):
         return False, f"daily_trade_cap:{trades_started}"
     if daily_outcome_r <= -2:
         return False, f"daily_loss_limit:{daily_outcome_r:.4f}"
@@ -1431,13 +1433,15 @@ def _evaluate_weighted_portfolio_6_7(request: DecisionRequest, settings: Setting
 def _evaluate_happy_gold_combined_portfolio(request: DecisionRequest, settings: Settings) -> DecisionResponse:
     """Coordinate Bot 13 and the 100/100 portfolio under one shared risk budget."""
     profile = HAPPY_GOLD_COMBINED_PROFILE
-    weighted = _evaluate_weighted_portfolio_6_7(request, settings, "portfolio_6_7_100_100")
-    zigzag = _evaluate_happy_gold_zigzag_regime_confirmed(request, settings, profile)
+    combined_settings = copy(settings)
+    combined_settings.portfolio_daily_trade_cap = None
+    weighted = _evaluate_weighted_portfolio_6_7(request, combined_settings, "portfolio_6_7_100_100")
+    zigzag = _evaluate_happy_gold_zigzag_regime_confirmed(request, combined_settings, profile)
     if zigzag.metadata.get("candidate"):
         zigzag = _apply_weighted_portfolio_allocation(
             zigzag,
             request,
-            settings,
+            combined_settings,
             profile="portfolio_6_7_100_100",
             component="bot-13",
             weight=1.0,
@@ -1486,6 +1490,14 @@ def _evaluate_happy_gold_combined_portfolio(request: DecisionRequest, settings: 
         )
 
     component = "bot-13" if zigzag_candidate else str(weighted.metadata.get("portfolio_component", "portfolio-7-6"))
+    session_start = time.fromisoformat(str(getattr(settings, "happy_gold_combined_session_start_utc", "06:00")))
+    session_end = time.fromisoformat(str(getattr(settings, "happy_gold_combined_session_end_utc", "19:00")))
+    session_time = request.timestamp_utc.astimezone(timezone.utc).time()
+    if not session_start <= session_time < session_end:
+        selected.reason = "happy_gold_portfolio_session_block"
+        selected.metadata.update({"strategy_profile": profile, "base_candidate": True, "candidate": False})
+        selected.risk_checks.append(RiskCheck(name="combined_session", passed=False, detail=f"{session_start.isoformat(timespec='minutes')}-{session_end.isoformat(timespec='minutes')}_UTC"))
+        return selected
     selected.reason = "happy_gold_portfolio_100_100_shadow_signal"
     selected.metadata.update(
         {
@@ -1496,6 +1508,8 @@ def _evaluate_happy_gold_combined_portfolio(request: DecisionRequest, settings: 
             "combined_zigzag_candidate": zigzag_candidate,
             "combined_shared_risk_pct": settings.risk_per_trade_pct,
             "combined_shared_position_limit": 1,
+            "combined_daily_trade_cap": "unlimited",
+            "combined_session_utc": f"{session_start.isoformat(timespec='minutes')}-{session_end.isoformat(timespec='minutes')}",
             "experimental_shadow_lock": True,
             "research_status": "combined_portfolio_requires_independent_walk_forward_validation",
         }

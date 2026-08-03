@@ -115,6 +115,11 @@ dois, dá prioridade ao Bot 7 quando houver conflito, aplica 75% do risco-base a
 25% ao componente 6, e mantém uma única posição. O replay limita o conjunto a duas entradas e
 2R de perda por dia. O EA consulta o Bot 8 sempre com execução falsa durante o forward test.
 
+O Bot 16 combina o portfólio 6/7 com risco 100/100 e o Happy Gold ZigZag. Seu replay usa 2% do
+saldo por risco-base, aceita entradas entre 06:00–18:59 UTC e não possui limite diário de
+operações. Permanecem ativos o limite de uma posição simultânea, o cooldown de 15 minutos e o
+bloqueio ao atingir -2R no dia. O status `promising_not_live` mantém o bot somente em shadow.
+
 O catálogo EUR/USD replica os sete perfis e parâmetros do catálogo XAU/USD. O propósito é medir
 generalização; os resultados não devem ser interpretados como parâmetros otimizados para forex.
 O EA envia o histórico profundo EURUSD/M5 uma única vez para `bot-eur-1`, e os demais bots EUR

@@ -688,7 +688,7 @@ class DecisionTests(unittest.TestCase):
         request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
         request.bot_id = "bot-16"
         configured = settings(
-            portfolio_risk_state={},
+            portfolio_risk_state={"trades_started": 99, "daily_outcome_r": 0},
             portfolio_regime_snapshot=RegimeSnapshot("range", "both", "test", adx=18, atr_percentile=40),
             happy_gold_regime_snapshot=RegimeSnapshot("range", "both", "test", adx=18, atr_percentile=40),
         )
@@ -700,6 +700,7 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.metadata["combined_shared_risk_pct"], 1)
         self.assertEqual(response.metadata["portfolio_weight_pct"], 100)
         self.assertEqual(response.risk_amount, 100)
+        self.assertEqual(response.metadata["combined_daily_trade_cap"], "unlimited")
 
     def test_weighted_portfolio_blocks_bot_6_without_sell_trend(self) -> None:
         request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
