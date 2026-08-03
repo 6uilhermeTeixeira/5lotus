@@ -342,10 +342,10 @@ def decision(payload: DecisionRequest, x_2lotus_ingest_key: str | None = Header(
         store = SupabaseStore(settings)
         store.upsert_candles(payload.bot_id, payload.symbol, payload.timeframe, payload.candles)
         store.advance_paper_trades(payload.bot_id, payload.candles)
-        if strategy_profile in {"multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "happy_gold_zigzag_scalper", *WEIGHTED_PORTFOLIO_PROFILES}:
+        if strategy_profile in {"multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed", *WEIGHTED_PORTFOLIO_PROFILES}:
             payload.candles = store.load_candles(
                 bot,
-                4000 if strategy_profile == "adaptive_portfolio_3_6_7" or strategy_profile in WEIGHTED_PORTFOLIO_PROFILES else 1000,
+                4000 if strategy_profile in {"adaptive_portfolio_3_6_7", "happy_gold_zigzag_regime_confirmed"} or strategy_profile in WEIGHTED_PORTFOLIO_PROFILES else 1000,
                 source_bot_id=_market_data_source_bot_id(bot),
             )
     strategy_settings = settings

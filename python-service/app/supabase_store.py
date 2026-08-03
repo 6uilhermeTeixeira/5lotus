@@ -207,7 +207,7 @@ class SupabaseStore:
             elif trade.get("expires_at_utc") and candle.timestamp_utc + timedelta(minutes=5) >= datetime.fromisoformat(str(trade["expires_at_utc"])):
                 outcome_r = direction * (candle.close - entry) / risk if risk else 0
                 patch = {"status": "closed", "closed_at_utc": candle.timestamp_utc.isoformat(), "outcome_r": outcome_r}
-            elif bot_id == "bot-12" and risk:
+            elif bot_id in {"bot-12", "bot-13"} and risk:
                 point_size = risk / 240
                 favorable_price = candle.high if buy else candle.low
                 favorable_points = direction * (favorable_price - entry) / point_size

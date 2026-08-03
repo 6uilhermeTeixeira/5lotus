@@ -15,6 +15,7 @@ HISTORY_BARS = 60
 MULTITIMEFRAME_HISTORY_BARS = 1000
 ADAPTIVE_HISTORY_BARS = 4000
 DEEP_HISTORY_PROFILES = {"multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", *WEIGHTED_PORTFOLIO_PROFILES}
+HAPPY_GOLD_PROFILES = {"happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed"}
 
 
 def _instrument_point_size(bot: BotCatalogItem, settings: Settings) -> float:
@@ -86,6 +87,7 @@ def _replay_settings(settings: Settings, bot: BotCatalogItem) -> SimpleNamespace
         adaptive_component_health={},
         portfolio_regime_snapshot=None,
         portfolio_risk_state={},
+        happy_gold_regime_snapshot=None,
         happy_gold_break_even_trigger_points=getattr(settings, "happy_gold_break_even_trigger_points", 40),
         happy_gold_break_even_offset_points=getattr(settings, "happy_gold_break_even_offset_points", 0),
         happy_gold_trailing_activation_points=getattr(settings, "happy_gold_trailing_activation_points", 120),
@@ -303,7 +305,7 @@ def run_historical_replay(
     adaptive_schedule = _adaptive_replay_schedule(bot, ordered, settings, ordered[first_visible].timestamp_utc, period_end, days)
     session_start = _parse_time(settings.backtest_session_start_utc)
     session_end = _parse_time(settings.backtest_session_end_utc)
-    if bot.strategy_profile == "happy_gold_zigzag_scalper":
+    if bot.strategy_profile in HAPPY_GOLD_PROFILES:
         session_start, session_end = time(3, 0), time(19, 0)
     point_size = _instrument_point_size(bot, settings)
     balance = settings.backtest_balance
@@ -372,6 +374,8 @@ def run_historical_replay(
             replay_settings.adaptive_component_health = adaptive_day.get("health", {})
         if bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES and settings.backtest_regime_enabled:
             replay_settings.portfolio_regime_snapshot = regime_at(regime_timeline, candle_end)
+        if bot.strategy_profile == "happy_gold_zigzag_regime_confirmed" and settings.backtest_regime_enabled:
+            replay_settings.happy_gold_regime_snapshot = regime_at(regime_timeline, candle_end)
         response = evaluate_decision(request, replay_settings, bot.strategy_profile)
         if not response.metadata.get("candidate"):
             previous_candle = candle
@@ -383,7 +387,7 @@ def run_historical_replay(
         portfolio_component = str(response.metadata.get("portfolio_component", ""))
         if bot.strategy_profile == "adaptive_portfolio_3_6_7" or bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES:
             regime_allowed, regime_reason = True, "strategy_uses_internal_adaptive_component_regime"
-        elif bot.strategy_profile == "happy_gold_zigzag_scalper":
+        elif bot.strategy_profile in HAPPY_GOLD_PROFILES:
             regime_allowed, regime_reason = True, "strategy_uses_internal_m30_breakout_regime"
         elif bot.strategy_profile == "multitimeframe_trend_pullback" or portfolio_component == "bot-7":
             regime_allowed, regime_reason = True, "strategy_uses_internal_h1_m15_regime"
@@ -483,10 +487,12 @@ def run_historical_replay(
         weights = WEIGHTED_PORTFOLIO_PROFILES[bot.strategy_profile]
         assumptions.append(f"A variante mantém posição única e usa {weights['bot-7']:.0%} do risco-base no Bot 7 e {weights['bot-6']:.0%} no Bot 6; os pesos não representam posições simultâneas.")
         assumptions.append("O Bot 6 somente é admitido quando o regime H1 causal confirma tendência de baixa; o mesmo bloqueio existe no runtime shadow.")
-    if bot.strategy_profile == "happy_gold_zigzag_scalper":
-        assumptions.append("O Bot 12 agrega M5 em M30 completo e usa pivôs fractais confirmados como aproximação causal do ZigZag proprietário; não há repaint nem antecipação do pivô.")
+    if bot.strategy_profile in HAPPY_GOLD_PROFILES:
+        assumptions.append("A estratégia agrega M5 em M30 completo e usa pivôs fractais confirmados como aproximação causal do ZigZag proprietário; não há repaint nem antecipação do pivô.")
         assumptions.append("SL de 240 pontos, TP de 1.000 pontos e lote 0,10 reproduzem a assinatura observada; o replay ativa break-even em +40 pontos no preço de entrada e trailing após +120 pontos, distante 60 pontos.")
         assumptions.append("O trailing OHLC é atualizado pelo extremo favorável de um candle e só pode encerrar a partir do candle seguinte; isso evita presumir uma sequência intrabar favorável. Ticks continuam necessários para reproduzir saídas em segundos.")
+    if bot.strategy_profile == "happy_gold_zigzag_regime_confirmed":
+        assumptions.append("O Bot 13 mantém o rompimento-base em range/tendência; transição e alta volatilidade exigem fechamento M5 além do pivô e direção H1 alinhada ao sinal.")
     if period_start > requested_start + interval:
         assumptions.append(f"A base não cobre os {days} dias completos; o replay começa em {period_start.isoformat()}.")
     chart_start = period_end - timedelta(days=min(days, 30))

@@ -1009,6 +1009,64 @@ def _evaluate_happy_gold_zigzag_scalper(request: DecisionRequest, settings: Sett
     return response
 
 
+def _evaluate_happy_gold_zigzag_regime_confirmed(request: DecisionRequest, settings: Settings, strategy_profile: str) -> DecisionResponse:
+    """Preserve Bot 12 geometry while confirming ambiguous regimes causally."""
+    # The H1 classifier needs deep history, while the reconstructed ZigZag uses
+    # the same 60-bar signal window as the Bot 12 replay. Keeping the windows
+    # separate avoids changing the base pivots and prevents quadratic work.
+    signal_request = request.model_copy(update={"candles": request.candles[-60:]})
+    response = _evaluate_happy_gold_zigzag_scalper(signal_request, settings, strategy_profile)
+    response.metadata["selective_regime_confirmation"] = True
+    if not response.metadata.get("candidate"):
+        return response
+
+    override = getattr(settings, "happy_gold_regime_snapshot", None)
+    regime = override if isinstance(override, RegimeSnapshot) else classify_regime(request.candles, settings)
+    side = str(response.metadata.get("suggested_action", ""))
+    breakout_level = float(response.metadata.get("breakout_level", 0))
+    last_closed_price = request.candles[-1].close
+    close_confirmed = last_closed_price > breakout_level if side == "buy" else last_closed_price < breakout_level
+    directional_alignment = regime.direction == side
+
+    if regime.name in {"range", "trend"}:
+        allowed = True
+        confirmation_reason = f"base_breakout_allowed:{regime.name}"
+    elif regime.name in {"transition", "high_volatility"}:
+        allowed = close_confirmed and directional_alignment
+        confirmation_reason = (
+            f"selective_confirmation:{regime.name}:close={str(close_confirmed).lower()}:"
+            f"direction={regime.direction}:side={side}"
+        )
+    else:
+        allowed = False
+        confirmation_reason = f"unsupported_or_unready_regime:{regime.name}"
+
+    response.metadata.update(
+        {
+            "strategy_profile": strategy_profile,
+            "zigzag_regime": regime.name,
+            "zigzag_regime_direction": regime.direction,
+            "zigzag_regime_adx": regime.adx,
+            "zigzag_regime_atr_percentile": regime.atr_percentile,
+            "zigzag_close_confirmed": close_confirmed,
+            "zigzag_direction_aligned": directional_alignment,
+            "zigzag_confirmation_reason": confirmation_reason,
+            "research_status": "parallel_selective_confirmation_forward_validation_required",
+        }
+    )
+    response.risk_checks.append(RiskCheck(name="zigzag_selective_regime_confirmation", passed=allowed, detail=confirmation_reason))
+    if not allowed:
+        response.action = DecisionAction.HOLD
+        response.reason = "happy_gold_selective_confirmation_block"
+        response.size = 0.0
+        response.metadata["base_candidate"] = True
+        response.metadata["candidate"] = False
+        return response
+
+    response.reason = "happy_gold_zigzag_regime_confirmed_shadow_signal"
+    return response
+
+
 def _apply_portfolio_allocation(
     response: DecisionResponse,
     request: DecisionRequest,
@@ -1377,6 +1435,8 @@ def evaluate_decision(request: DecisionRequest, settings: Settings, strategy_pro
         return _evaluate_multitimeframe_trend_pullback(request, settings, profile)
     if profile == "happy_gold_zigzag_scalper":
         return _evaluate_happy_gold_zigzag_scalper(request, settings, profile)
+    if profile == "happy_gold_zigzag_regime_confirmed":
+        return _evaluate_happy_gold_zigzag_regime_confirmed(request, settings, profile)
     if profile == "portfolio_6_7":
         return _evaluate_portfolio_6_7(request, settings)
     if profile == "adaptive_portfolio_3_6_7":

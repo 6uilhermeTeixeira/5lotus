@@ -30,6 +30,7 @@ Perfis ativos, executados em paralelo:
 - Bot 7: `multitimeframe_trend_pullback` — tendência H1/M15, pullback M5 somente comprado entre 13h e 16h UTC, alvo de 0,75R e 50% do risco padrão, bloqueado em shadow
 - Bot 11: `portfolio_6_7_100_75` — variante agressiva com Bot 7 em 100% e Bot 6 em 75%, sob as mesmas travas persistidas e sempre sem execução
 - Bot 12: `happy_gold_zigzag_scalper` — reconstrução shadow da assinatura de 773 operações XAUUSD: pivô M30 confirmado, rompimento M5, lote 0,10, stop de 240 pontos, alvo de 1.000 pontos, break-even em +40, trailing em +120/60, expiração em dois M5 e uma posição
+- Bot 13: `happy_gold_zigzag_regime_confirmed` — preserva integralmente a geometria do Bot 12; em transição/alta volatilidade exige fechamento M5 além do pivô e direção H1 alinhada. O replay de 365 dias registrou US$ 2.655,40, PF 1,39, expectativa 0,181R e drawdown 15,66R, permanecendo em shadow paralelo.
 - Estratégias anteriores e variantes EURUSD aparecem na aba `Arquivadas` para consulta histórica, mas não recebem polling, decisões ou novas operações. Os títulos públicos omitem o identificador técnico `Bot N`.
 - risco por operacao: `1%` da banca
 - risco/retorno final: `2R`, com parcial de `50%` em `1R`

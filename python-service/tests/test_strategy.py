@@ -719,7 +719,63 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.reason, "happy_gold_market_or_risk_filter_mismatch")
         self.assertFalse(response.metadata["candidate"])
 
-    def test_twelve_profiles_keep_independent_bot_scoped_state(self) -> None:
+    def test_bot_13_keeps_base_breakout_in_range(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-13"
+
+        response = evaluate_decision(
+            request,
+            settings(happy_gold_regime_snapshot=RegimeSnapshot("range", "both", "test", adx=18, atr_percentile=40)),
+            "happy_gold_zigzag_regime_confirmed",
+        )
+
+        self.assertEqual(response.reason, "happy_gold_zigzag_regime_confirmed_shadow_signal")
+        self.assertTrue(response.metadata["candidate"])
+        self.assertEqual(response.metadata["zigzag_confirmation_reason"], "base_breakout_allowed:range")
+        self.assertEqual(response.metadata["suggested_size"], .1)
+        self.assertEqual(response.stop_loss_points, 240)
+        self.assertEqual(response.take_profit_points, 1000)
+
+    def test_bot_13_requires_close_and_direction_in_ambiguous_regime(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-13"
+
+        aligned = evaluate_decision(
+            request,
+            settings(happy_gold_regime_snapshot=RegimeSnapshot("high_volatility", "buy", "test", adx=30, atr_percentile=95)),
+            "happy_gold_zigzag_regime_confirmed",
+        )
+        opposing = evaluate_decision(
+            request,
+            settings(happy_gold_regime_snapshot=RegimeSnapshot("high_volatility", "sell", "test", adx=30, atr_percentile=95)),
+            "happy_gold_zigzag_regime_confirmed",
+        )
+
+        self.assertTrue(aligned.metadata["candidate"])
+        self.assertTrue(aligned.metadata["zigzag_close_confirmed"])
+        self.assertTrue(aligned.metadata["zigzag_direction_aligned"])
+        self.assertEqual(opposing.reason, "happy_gold_selective_confirmation_block")
+        self.assertFalse(opposing.metadata["candidate"])
+        self.assertTrue(opposing.metadata["base_candidate"])
+
+    def test_bot_13_rejects_intrabar_only_breakout_in_high_volatility(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-13"
+        request.candles[-1].close = 105.99
+        request.bid = 105.99
+        request.ask = 106.01
+
+        response = evaluate_decision(
+            request,
+            settings(happy_gold_regime_snapshot=RegimeSnapshot("high_volatility", "buy", "test", adx=30, atr_percentile=95)),
+            "happy_gold_zigzag_regime_confirmed",
+        )
+
+        self.assertEqual(response.reason, "happy_gold_selective_confirmation_block")
+        self.assertFalse(response.metadata["zigzag_close_confirmed"])
+        self.assertTrue(response.metadata["zigzag_direction_aligned"])
+
+    def test_thirteen_profiles_keep_independent_bot_scoped_state(self) -> None:
         candle_time = datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc)
         portfolio_request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
         portfolio_request.bot_id = "bot-8"
@@ -730,6 +786,8 @@ class DecisionTests(unittest.TestCase):
         bot_11_request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
         bot_11_request.bot_id = "bot-11"
         bot_12_request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+        bot_13_request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+        bot_13_request.bot_id = "bot-13"
         cases = [
             (bullish_request(candle_time), "fimath_ema20_flow"),
             (momentum_request(candle_time), "momentum_atr_breakout"),
@@ -743,14 +801,22 @@ class DecisionTests(unittest.TestCase):
             (bot_10_request, "portfolio_6_7_75_50"),
             (bot_11_request, "portfolio_6_7_100_75"),
             (bot_12_request, "happy_gold_zigzag_scalper"),
+            (bot_13_request, "happy_gold_zigzag_regime_confirmed"),
         ]
 
-        responses = [evaluate_decision(request, settings(), profile) for request, profile in cases]
+        responses = [
+            evaluate_decision(
+                request,
+                settings(happy_gold_regime_snapshot=RegimeSnapshot("range", "both", "test", adx=18, atr_percentile=40)),
+                profile,
+            )
+            for request, profile in cases
+        ]
 
-        self.assertEqual({request.bot_id for request, _ in cases}, {"bot-1", "bot-2", "bot-3", "bot-4", "bot-5", "bot-6", "bot-7", "bot-8", "bot-9", "bot-10", "bot-11", "bot-12"})
+        self.assertEqual({request.bot_id for request, _ in cases}, {"bot-1", "bot-2", "bot-3", "bot-4", "bot-5", "bot-6", "bot-7", "bot-8", "bot-9", "bot-10", "bot-11", "bot-12", "bot-13"})
         self.assertEqual(
             {response.metadata["strategy_profile"] for response in responses},
-            {"fimath_ema20_flow", "momentum_atr_breakout", "rsi_bollinger_reversion", "macd_trend_crossover", "stochastic_trend_pullback", "stochastic_sell_session", "multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "portfolio_6_7_75_50", "portfolio_6_7_100_75", "happy_gold_zigzag_scalper"},
+            {"fimath_ema20_flow", "momentum_atr_breakout", "rsi_bollinger_reversion", "macd_trend_crossover", "stochastic_trend_pullback", "stochastic_sell_session", "multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "portfolio_6_7_75_50", "portfolio_6_7_100_75", "happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed"},
         )
         self.assertTrue(all(response.action == DecisionAction.HOLD for response in responses))
 

@@ -22,7 +22,7 @@ Essa separacao respeita melhor as restricoes do ambiente:
 MT5 terminal
   -> Expert Advisor MQL5
     -> coleta estado do mercado / conta / posicoes
-    -> envia o mesmo contexto somente para bot-6, bot-7, bot-11 e bot-12
+    -> envia o mesmo contexto somente para bot-6, bot-7, bot-11, bot-12 e bot-13
 Python strategy service
   -> seleciona a estratégia pelo perfil cadastrado do bot
   -> aplica risco
@@ -36,12 +36,13 @@ Expert Advisor MQL5
 ## Estado atual
 
 - O catálogo separa estratégias `active=true` e `active=false` nas abas `Estratégias ativas` e `Arquivadas`. Os títulos públicos não exibem o identificador técnico `Bot N`.
-- O catálogo operacional contém somente `stochastic_sell_session` (Bot 6), `multitimeframe_trend_pullback` (Bot 7), `portfolio_6_7_100_75` (Bot 11) e `happy_gold_zigzag_scalper` (Bot 12), todos em XAUUSD/M5 e bloqueados em shadow.
-- Um único EA consulta apenas esses quatro bots a cada ciclo. Estratégias anteriores permanecem consultáveis no painel e no banco para preservar histórico, mas não recebem polling, decisões ou novas operações.
+- O catálogo operacional contém `stochastic_sell_session` (Bot 6), `multitimeframe_trend_pullback` (Bot 7), `portfolio_6_7_100_75` (Bot 11), `happy_gold_zigzag_scalper` (Bot 12) e `happy_gold_zigzag_regime_confirmed` (Bot 13), todos em XAUUSD/M5 e bloqueados em shadow.
+- Um único EA consulta apenas esses cinco bots a cada ciclo. Estratégias anteriores permanecem consultáveis no painel e no banco para preservar histórico, mas não recebem polling, decisões ou novas operações.
 - O Bot 6 replica o setup do Bot 5, mas admite somente vendas antes das 18h UTC; ele permanece isolado em shadow para forward test.
 - O Bot 7 deriva candles H1 e M15 completos do histórico canônico M5, exige alinhamento comprador e força mínima de 0,7 ATR(H1), opera somente entre 13h e 16h UTC com metade do risco padrão e permanece bloqueado em shadow.
 - O Bot 11 preserva a prioridade 7/6 e a posição única, usando pesos 100/75. O filtro H1 vendedor do Bot 6 é aplicado no motor online, enquanto operações iniciadas, resultado diário e cooldown são lidos dos paper trades persistidos.
 - O Bot 12 agrega somente candles M30 completos, identifica pivôs fractais já confirmados como proxy causal do ZigZag e sinaliza seu rompimento no contexto M5. Reproduz lote 0,10, stop de 240 pontos, alvo de 1.000 pontos, posição única e sessão proxy 03:00–19:00 UTC. O break-even entra em +40 pontos, o trailing em +120 com distância de 60 e a posição expira após dois M5; continua travado em shadow porque saídas em segundos ainda dependem de ticks do broker original.
+- O Bot 13 mantém a geometria do Bot 12. Range e tendência usam o rompimento-base; transição e alta volatilidade exigem fechamento M5 além do pivô e direção H1 alinhada. O regime é calculado com H1 completo, enquanto o sinal conserva a janela curta do replay-base.
 - Setup técnico calculado uma vez por candle fechado e resposta consultada pelo EA a cada cinco segundos.
 - Fluxo amostrado continuamente em janela temporal, com z-scores do livro e dos ticks.
 - Política padrão `veto`: somente forte contradição simultânea bloqueia um setup.
