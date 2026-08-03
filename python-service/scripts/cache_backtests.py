@@ -16,8 +16,6 @@ def _source_bot_id(bot: BotCatalogItem, default_symbol: str, default_bot_id: str
         return default_bot_id
     if bot.symbol.upper() == "EURUSD":
         return "bot-eur-1"
-    if bot.symbol.upper() == "BTCUSD":
-        return "bot-btc-13"
     return bot.id
 
 

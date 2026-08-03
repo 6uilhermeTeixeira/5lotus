@@ -170,64 +170,13 @@ class SupabaseStore:
         for start in range(0, len(payload), 1000):
             self._request("market_candles?on_conflict=bot_id,symbol,timeframe,timestamp_utc", method="POST", payload=payload[start:start + 1000], prefer="resolution=merge-duplicates,return=minimal")
 
-    def advance_paper_trades(
-        self,
-        bot_id: str,
-        candles: list[CandleSnapshot],
-        *,
-        bid: float | None = None,
-        ask: float | None = None,
-        timestamp_utc: datetime | None = None,
-    ) -> None:
+    def advance_paper_trades(self, bot_id: str, candles: list[CandleSnapshot]) -> None:
         if not candles:
             return
         candle = candles[-1]
         rows = self._request(f"paper_trades?bot_id=eq.{bot_id}&status=eq.open&select=*")
         for trade in rows if isinstance(rows, list) else []:
             opened_at = datetime.fromisoformat(str(trade["opened_at_utc"]))
-            if bot_id == "bot-14" and bid is not None and ask is not None and timestamp_utc is not None and timestamp_utc > opened_at:
-                buy = trade["side"] == "buy"
-                entry = float(trade["entry_price"])
-                stop = float(trade["stop_price"])
-                target = float(trade["target_price"])
-                initial_stop = float(trade["initial_stop_price"])
-                risk = abs(entry - initial_stop)
-                direction = 1 if buy else -1
-                point_size = risk / 240 if risk else self.settings.backtest_point_size
-                exit_quote = bid if buy else ask
-                outcome_r = direction * (exit_quote - entry) / risk if risk else 0
-                favorable_points = direction * (exit_quote - entry) / point_size if point_size else 0
-                elapsed_seconds = (timestamp_utc - opened_at).total_seconds()
-                soft_stop_points = float(getattr(self.settings, "happy_gold_micro_soft_stop_points", 40))
-                max_holding_seconds = int(getattr(self.settings, "happy_gold_micro_max_holding_seconds", 60))
-                tick_patch: dict[str, object] = {}
-                stop_hit = exit_quote <= stop if buy else exit_quote >= stop
-                target_hit = exit_quote >= target if buy else exit_quote <= target
-                if stop_hit or favorable_points <= -soft_stop_points or target_hit or elapsed_seconds >= max_holding_seconds:
-                    tick_patch = {
-                        "status": "closed",
-                        "closed_at_utc": timestamp_utc.isoformat(),
-                        "outcome_r": outcome_r,
-                    }
-                else:
-                    next_stop = stop
-                    break_even_trigger = float(getattr(self.settings, "happy_gold_micro_break_even_trigger_points", 30))
-                    break_even_offset = float(getattr(self.settings, "happy_gold_micro_break_even_offset_points", 5))
-                    trailing_activation = float(getattr(self.settings, "happy_gold_micro_trailing_activation_points", 60))
-                    trailing_distance = float(getattr(self.settings, "happy_gold_micro_trailing_distance_points", 30))
-                    if favorable_points >= break_even_trigger:
-                        break_even_stop = entry + direction * break_even_offset * point_size
-                        next_stop = max(next_stop, break_even_stop) if buy else min(next_stop, break_even_stop)
-                    if favorable_points >= trailing_activation:
-                        trailing_stop = exit_quote - direction * trailing_distance * point_size
-                        next_stop = max(next_stop, trailing_stop) if buy else min(next_stop, trailing_stop)
-                    if next_stop != stop:
-                        tick_patch = {"stop_price": next_stop}
-                if tick_patch:
-                    filters = urlencode({"signal_key": f"eq.{trade['signal_key']}", "variant": f"eq.{trade['variant']}"})
-                    self._request(f"paper_trades?{filters}", method="PATCH", payload=tick_patch, prefer="return=minimal")
-                    if tick_patch.get("status") == "closed":
-                        continue
             if candle.timestamp_utc <= opened_at:
                 continue
             buy = trade["side"] == "buy"
@@ -281,9 +230,7 @@ class SupabaseStore:
         setup = str(response.metadata.get("setup_type", "fimath"))
         suggested_action = str(response.metadata.get("suggested_action", ""))
         candle_timestamp = payload.candles[-1].timestamp_utc
-        event_id = response.metadata.get("candidate_event_id")
-        event_suffix = f":{event_id}" if event_id else ""
-        signal_key = f"{payload.bot_id}:{payload.timeframe}:{candle_timestamp.isoformat()}:{suggested_action}:{setup}{event_suffix}"
+        signal_key = f"{payload.bot_id}:{payload.timeframe}:{candle_timestamp.isoformat()}:{suggested_action}:{setup}"
         candidate = {
             "signal_key": signal_key,
             "bot_id": payload.bot_id,
@@ -330,8 +277,6 @@ class SupabaseStore:
             "partial_price": response.partial_take_profit_price, "target_price": response.final_take_profit_price,
             "partial_close_pct": response.partial_close_pct,
             "expires_at_utc": (
-                payload.timestamp_utc + timedelta(seconds=int(response.metadata["max_holding_seconds"]))
-            ).isoformat() if "max_holding_seconds" in response.metadata else (
                 payload.timestamp_utc + timedelta(minutes=5 * int(response.metadata["max_holding_bars"]))
             ).isoformat() if "max_holding_bars" in response.metadata else None,
             "opened_at_utc": payload.timestamp_utc.isoformat(),

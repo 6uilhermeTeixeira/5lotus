@@ -218,20 +218,13 @@ def _latest_confirmed_zigzag_levels(candles: list[CandleSnapshot], span: int = 2
     return pivot_high, pivot_low
 
 
-def _happy_gold_market_calibration(settings: Settings, symbol: str) -> dict[str, float | int | str | bool]:
-    calibrations = getattr(settings, "happy_gold_market_calibrations", {})
-    return dict(calibrations.get(symbol.upper(), {})) if isinstance(calibrations, dict) else {}
-
-
-def _happy_gold_zigzag_setup(request: DecisionRequest, settings: Settings) -> Setup | None:
+def _happy_gold_zigzag_setup(request: DecisionRequest) -> Setup | None:
     if len(request.candles) < 43:
         return None
     m30 = _aggregate_completed_candles(request.candles, 30, request.timestamp_utc)
     if len(m30) < 7:
         return None
-    calibration = _happy_gold_market_calibration(settings, request.symbol)
-    pivot_span = int(calibration.get("pivot_span", 2))
-    pivot_high, pivot_low = _latest_confirmed_zigzag_levels(m30, span=pivot_span)
+    pivot_high, pivot_low = _latest_confirmed_zigzag_levels(m30)
     previous_close = request.candles[-2].close
     buy_breakout = pivot_high is not None and previous_close <= pivot_high < request.ask
     sell_breakout = pivot_low is not None and previous_close >= pivot_low > request.bid
@@ -244,15 +237,11 @@ def _happy_gold_zigzag_setup(request: DecisionRequest, settings: Settings) -> Se
         sell_breakout = not buy_breakout
     action = DecisionAction.BUY if buy_breakout else DecisionAction.SELL
     entry = request.ask if buy_breakout else request.bid
-    m30_atr = _atr(m30, min(14, len(m30)))
-    if bool(calibration.get("use_atr_geometry", False)):
-        stop_points = max(1.0, (m30_atr / request.point_size) * float(calibration.get("atr_stop_multiplier", 1.0)))
-        target_points = stop_points * float(calibration.get("target_r", 2.0))
-    else:
-        stop_points = 240.0
-        target_points = 1000.0
+    stop_points = 240.0
+    target_points = 1000.0
     stop = entry - stop_points * request.point_size if buy_breakout else entry + stop_points * request.point_size
     target = entry + target_points * request.point_size if buy_breakout else entry - target_points * request.point_size
+    m30_atr = _atr(m30, min(14, len(m30)))
     return Setup(
         action=action,
         setup_type="happy_gold_zigzag_breakout",
@@ -267,7 +256,7 @@ def _happy_gold_zigzag_setup(request: DecisionRequest, settings: Settings) -> Se
         breakout_level=float(pivot_high if buy_breakout else pivot_low),
         partial_close_pct=100.0,
         move_stop_to_breakeven=False,
-        max_holding_bars=int(calibration.get("max_holding_bars", 2)),
+        max_holding_bars=2,
     )
 
 
@@ -955,22 +944,15 @@ def _evaluate_multitimeframe_trend_pullback(request: DecisionRequest, settings: 
 
 
 def _evaluate_happy_gold_zigzag_scalper(request: DecisionRequest, settings: Settings, strategy_profile: str) -> DecisionResponse:
-    setup = _happy_gold_zigzag_setup(request, settings)
-    calibration = _happy_gold_market_calibration(settings, request.symbol)
+    setup = _happy_gold_zigzag_setup(request)
     session_time = request.timestamp_utc.astimezone(timezone.utc).time()
-    session_start = time.fromisoformat(str(calibration.get("session_start_utc", "03:00")))
-    session_end = time.fromisoformat(str(calibration.get("session_end_utc", "19:00")))
-    in_research_session = session_start <= session_time < session_end
+    in_research_session = time(3, 0) <= session_time < time(19, 0)
     same_symbol_positions = [position for position in request.positions if position.symbol.upper() == request.symbol.upper()]
     checks = [
-        RiskCheck(
-            name="symbol_match",
-            passed=request.symbol.upper() == settings.default_symbol.upper(),
-            detail=f"expected={settings.default_symbol}",
-        ),
+        RiskCheck(name="symbol_match", passed=request.symbol.upper() == "XAUUSD", detail="expected=XAUUSD"),
         RiskCheck(name="timeframe_match", passed=request.timeframe.upper() == "M5", detail="expected=M5; signal=M30"),
         RiskCheck(name="spread_limit", passed=request.spread_points <= settings.max_spread_points, detail=f"max={settings.max_spread_points}"),
-        RiskCheck(name="research_session", passed=in_research_session, detail=f"{session_start.strftime('%H:%M')}-{session_end.strftime('%H:%M')}_UTC"),
+        RiskCheck(name="research_session", passed=in_research_session, detail="03:00-19:00_UTC_proxy"),
         RiskCheck(name="single_position", passed=not same_symbol_positions, detail="max_positions_for_symbol=1"),
         RiskCheck(name="zigzag_breakout", passed=setup is not None, detail="confirmed_M30_fractal_breakout"),
     ]
@@ -1000,24 +982,18 @@ def _evaluate_happy_gold_zigzag_scalper(request: DecisionRequest, settings: Sett
     )
     fixed_lot = .10
     response.risk_amount = round(setup.stop_points * request.value_per_point_per_lot * fixed_lot, 2)
-    atr_points = setup.atr14 / request.point_size if request.point_size > 0 else 0
-    calibrated = bool(calibration.get("use_atr_geometry", False))
-    break_even_trigger = setup.stop_points * float(calibration.get("break_even_r", .75)) if calibrated else float(getattr(settings, "happy_gold_break_even_trigger_points", 40))
+    break_even_trigger = float(getattr(settings, "happy_gold_break_even_trigger_points", 40))
     break_even_offset = float(getattr(settings, "happy_gold_break_even_offset_points", 0))
-    trailing_activation = setup.stop_points * float(calibration.get("trailing_activation_r", 1.0)) if calibrated else float(getattr(settings, "happy_gold_trailing_activation_points", 120))
-    trailing_distance = atr_points * float(calibration.get("trailing_distance_atr", .8)) if calibrated else float(getattr(settings, "happy_gold_trailing_distance_points", 60))
-    max_holding_bars = int(calibration.get("max_holding_bars", getattr(settings, "happy_gold_max_holding_bars", 2)))
+    trailing_activation = float(getattr(settings, "happy_gold_trailing_activation_points", 120))
+    trailing_distance = float(getattr(settings, "happy_gold_trailing_distance_points", 60))
+    max_holding_bars = int(getattr(settings, "happy_gold_max_holding_bars", 2))
     response.metadata.update(
         {
             "suggested_size": fixed_lot,
             "signal_timeframe": "M30",
             "execution_timeframe": "M5",
-            "fixed_stop_points": None if calibrated else 240,
-            "fixed_target_points": None if calibrated else 1000,
-            "geometry_mode": "atr_normalized" if calibrated else "fixed_points",
-            "atr_stop_multiplier": calibration.get("atr_stop_multiplier") if calibrated else None,
-            "target_r": calibration.get("target_r") if calibrated else None,
-            "pivot_span": calibration.get("pivot_span", 2),
+            "fixed_stop_points": 240,
+            "fixed_target_points": 1000,
             "break_even_trigger_points": break_even_trigger,
             "break_even_offset_points": break_even_offset,
             "trailing_activation_points": trailing_activation,
@@ -1088,125 +1064,6 @@ def _evaluate_happy_gold_zigzag_regime_confirmed(request: DecisionRequest, setti
         return response
 
     response.reason = "happy_gold_zigzag_regime_confirmed_shadow_signal"
-    return response
-
-
-def _directional_candle_confirmation(candle: CandleSnapshot, side: str, minimum_body_ratio: float) -> tuple[bool, float, float]:
-    candle_range = candle.high - candle.low
-    if candle_range <= 0:
-        return False, 0.0, 0.0
-    body_ratio = abs(candle.close - candle.open) / candle_range
-    close_location = (candle.close - candle.low) / candle_range
-    directional = candle.close > candle.open and close_location >= .70 if side == "buy" else candle.close < candle.open and close_location <= .30
-    return directional and body_ratio >= minimum_body_ratio, body_ratio, close_location
-
-
-def _evaluate_happy_gold_zigzag_microstructure(request: DecisionRequest, settings: Settings, strategy_profile: str) -> DecisionResponse:
-    """Tick/M1-confirmed ZigZag candidate with an explicit M5 replay proxy."""
-    signal_request = request.model_copy(update={"candles": request.candles[-60:]})
-    response = _evaluate_happy_gold_zigzag_scalper(signal_request, settings, strategy_profile)
-    response.metadata["microstructure_confirmation"] = True
-    if not response.metadata.get("candidate"):
-        return response
-
-    side = str(response.metadata.get("suggested_action", ""))
-    direction = 1 if side == "buy" else -1
-    breakout_level = float(response.metadata.get("breakout_level", 0))
-    extension_points = direction * ((request.ask if side == "buy" else request.bid) - breakout_level) / request.point_size
-    max_extension = float(getattr(settings, "happy_gold_micro_max_extension_points", 80))
-    minimum_body_ratio = float(getattr(settings, "happy_gold_micro_min_m1_body_ratio", .55))
-
-    live_microstructure = request.flow is not None
-    tick_count = 0
-    tick_imbalance = 0.0
-    book_imbalance: float | None = None
-    book_aligned = True
-    if live_microstructure:
-        flow = request.flow
-        tick_count = flow.up_ticks + flow.down_ticks
-        tick_imbalance = (flow.up_ticks - flow.down_ticks) / tick_count if tick_count else 0.0
-        bids = sum(level.volume for level in flow.book if level.side == "bid")
-        asks = sum(level.volume for level in flow.book if level.side == "ask")
-        if bids + asks > 0:
-            book_imbalance = (bids - asks) / (bids + asks)
-            book_aligned = direction * book_imbalance >= -.25
-        min_ticks = int(getattr(settings, "happy_gold_micro_min_directional_ticks", 4))
-        min_imbalance = float(getattr(settings, "happy_gold_micro_min_tick_imbalance", .25))
-        tick_aligned = tick_count >= min_ticks and direction * tick_imbalance >= min_imbalance
-        m1_ready = bool(request.micro_candles)
-        m1_aligned, body_ratio, close_location = (
-            _directional_candle_confirmation(request.micro_candles[-1], side, minimum_body_ratio)
-            if m1_ready else (False, 0.0, 0.0)
-        )
-        m1_close_confirmed = m1_ready and (
-            request.micro_candles[-1].close > breakout_level if side == "buy" else request.micro_candles[-1].close < breakout_level
-        )
-        confirmed = tick_aligned and m1_aligned and m1_close_confirmed and book_aligned and 0 <= extension_points <= max_extension
-        source = "live_m1_tick_flow"
-        confirmation_reason = (
-            f"live_microstructure:ticks={tick_count}:imbalance={tick_imbalance:.3f}:"
-            f"m1={str(m1_aligned).lower()}:close={str(m1_close_confirmed).lower()}:"
-            f"book={str(book_aligned).lower()}:extension={extension_points:.1f}"
-        )
-    else:
-        proxy_candle = request.candles[-1]
-        proxy_aligned, body_ratio, close_location = _directional_candle_confirmation(proxy_candle, side, minimum_body_ratio)
-        m1_close_confirmed = False
-        recent_volumes = [candle.volume for candle in request.candles[-13:-1]]
-        average_volume = fmean(recent_volumes) if recent_volumes else proxy_candle.volume
-        volume_confirmed = proxy_candle.volume >= average_volume
-        confirmed = proxy_aligned and volume_confirmed and 0 <= extension_points <= max_extension
-        m1_ready = False
-        m1_aligned = False
-        tick_aligned = False
-        source = "m5_ohlcv_replay_proxy"
-        confirmation_reason = (
-            f"replay_proxy:direction={str(proxy_aligned).lower()}:volume={str(volume_confirmed).lower()}:"
-            f"extension={extension_points:.1f}"
-        )
-
-    bucket_seconds = max(1, int(getattr(settings, "happy_gold_micro_reentry_bucket_seconds", 15)))
-    event_bucket = int(request.timestamp_utc.timestamp()) // bucket_seconds
-    response.metadata.update(
-        {
-            "strategy_profile": strategy_profile,
-            "microstructure_source": source,
-            "microstructure_confirmed": confirmed,
-            "microstructure_confirmation_reason": confirmation_reason,
-            "microstructure_tick_count": tick_count,
-            "microstructure_tick_imbalance": round(tick_imbalance, 5),
-            "microstructure_tick_aligned": tick_aligned,
-            "microstructure_m1_ready": m1_ready,
-            "microstructure_m1_aligned": m1_aligned,
-            "microstructure_m1_close_confirmed": m1_close_confirmed,
-            "microstructure_book_aligned": book_aligned,
-            "microstructure_body_ratio": round(body_ratio, 5),
-            "microstructure_close_location": round(close_location, 5),
-            "microstructure_extension_points": round(extension_points, 2),
-            "candidate_event_id": f"micro-{event_bucket}",
-            "soft_stop_points": float(getattr(settings, "happy_gold_micro_soft_stop_points", 40)),
-            "break_even_trigger_points": float(getattr(settings, "happy_gold_micro_break_even_trigger_points", 30)),
-            "break_even_offset_points": float(getattr(settings, "happy_gold_micro_break_even_offset_points", 5)),
-            "trailing_activation_points": float(getattr(settings, "happy_gold_micro_trailing_activation_points", 60)),
-            "trailing_distance_points": float(getattr(settings, "happy_gold_micro_trailing_distance_points", 30)),
-            "max_holding_bars": 1,
-            "max_holding_seconds": int(getattr(settings, "happy_gold_micro_max_holding_seconds", 60)),
-            "reentry_bucket_seconds": bucket_seconds,
-            "research_status": "tick_m1_forward_validation_with_m5_replay_proxy",
-        }
-    )
-    if book_imbalance is not None:
-        response.metadata["microstructure_book_imbalance"] = round(book_imbalance, 5)
-    response.risk_checks.append(RiskCheck(name="microstructure_confirmation", passed=confirmed, detail=confirmation_reason))
-    if not confirmed:
-        response.action = DecisionAction.HOLD
-        response.reason = "happy_gold_microstructure_confirmation_block"
-        response.size = 0.0
-        response.metadata["base_candidate"] = True
-        response.metadata["candidate"] = False
-        return response
-
-    response.reason = "happy_gold_zigzag_microstructure_shadow_signal"
     return response
 
 
@@ -1580,8 +1437,6 @@ def evaluate_decision(request: DecisionRequest, settings: Settings, strategy_pro
         return _evaluate_happy_gold_zigzag_scalper(request, settings, profile)
     if profile == "happy_gold_zigzag_regime_confirmed":
         return _evaluate_happy_gold_zigzag_regime_confirmed(request, settings, profile)
-    if profile == "happy_gold_zigzag_microstructure":
-        return _evaluate_happy_gold_zigzag_microstructure(request, settings, profile)
     if profile == "portfolio_6_7":
         return _evaluate_portfolio_6_7(request, settings)
     if profile == "adaptive_portfolio_3_6_7":

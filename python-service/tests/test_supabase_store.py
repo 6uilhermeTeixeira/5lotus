@@ -1,6 +1,5 @@
 import unittest
 from datetime import datetime, timezone
-from types import SimpleNamespace
 
 from app.schemas import CandleSnapshot, DecisionResponse, HistoricalReplayResponse, ResultsSummary
 from app.supabase_store import SupabaseStore
@@ -221,29 +220,6 @@ class SupabaseStoreTests(unittest.TestCase):
         payload = store.calls[-1][2]
         self.assertEqual(payload["suggested_action"], "buy")
 
-    def test_microstructure_candidate_key_includes_reentry_event(self) -> None:
-        store = RecordingStore()
-        request = bullish_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
-        request.bot_id = "bot-14"
-        response = DecisionResponse(
-            action="hold",
-            reason="happy_gold_zigzag_microstructure_shadow_signal",
-            entry_price=102.1,
-            stop_loss_price=99.7,
-            partial_take_profit_price=112.1,
-            final_take_profit_price=112.1,
-            metadata={
-                "candidate": True,
-                "suggested_action": "buy",
-                "setup_type": "happy_gold_zigzag_breakout",
-                "candidate_event_id": "micro-123",
-            },
-        )
-
-        signal_key = store.record_strategy_candidate(request, response)
-
-        self.assertTrue(signal_key.endswith(":micro-123"))
-
     def test_parallel_variants_have_composite_conflict_target(self) -> None:
         store = RecordingStore()
         request = bullish_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
@@ -322,52 +298,6 @@ class SupabaseStoreTests(unittest.TestCase):
         patch = next(call[2] for call in store.calls if call[1] == "PATCH")
         self.assertEqual(patch["status"], "closed")
         self.assertEqual(patch["outcome_r"], .5)
-
-    def test_bot_14_paper_trade_uses_tick_soft_stop(self) -> None:
-        store = RecordingStore()
-        store.settings = SimpleNamespace(
-            backtest_point_size=.01,
-            happy_gold_micro_soft_stop_points=40,
-            happy_gold_micro_max_holding_seconds=60,
-            happy_gold_micro_break_even_trigger_points=30,
-            happy_gold_micro_break_even_offset_points=5,
-            happy_gold_micro_trailing_activation_points=60,
-            happy_gold_micro_trailing_distance_points=30,
-        )
-        store.open_rows = [{
-            "signal_key": "signal-14",
-            "variant": "technical",
-            "side": "buy",
-            "entry_price": 100,
-            "initial_stop_price": 97.6,
-            "stop_price": 97.6,
-            "partial_price": 110,
-            "target_price": 110,
-            "partial_close_pct": 100,
-            "partial_hit": False,
-            "opened_at_utc": "2026-07-31T10:00:00+00:00",
-            "expires_at_utc": "2026-07-31T10:01:00+00:00",
-        }]
-        candle = CandleSnapshot(
-            timestamp_utc="2026-07-31T09:55:00Z",
-            open=100,
-            high=100,
-            low=100,
-            close=100,
-            volume=100,
-        )
-
-        store.advance_paper_trades(
-            "bot-14",
-            [candle],
-            bid=99.5,
-            ask=99.6,
-            timestamp_utc=datetime(2026, 7, 31, 10, 0, 30, tzinfo=timezone.utc),
-        )
-
-        patch = next(call[2] for call in store.calls if call[1] == "PATCH")
-        self.assertEqual(patch["status"], "closed")
-        self.assertAlmostEqual(patch["outcome_r"], -.5 / 2.4)
 
 
 if __name__ == "__main__":

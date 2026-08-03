@@ -45,7 +45,6 @@ Payload de referencia:
     { "timestamp_utc": "2026-07-18T02:20:00Z", "open": 3358.3, "high": 3358.5, "low": 3354.9, "close": 3355.2, "volume": 120 },
     { "timestamp_utc": "2026-07-18T02:25:00Z", "open": 3355.2, "high": 3361.2, "low": 3355.0, "close": 3360.9, "volume": 280 }
   ],
-  "micro_candles": [],
   "positions": [],
   "account": {
     "balance": 10000.0,
@@ -120,17 +119,15 @@ Resposta minima:
 
 O serviço trabalha com estes pressupostos:
 
-- ativos de pesquisa: `XAUUSD`, `EURUSD` e `BTCUSD`
+- ativos de pesquisa: `XAUUSD` e `EURUSD`
 - timeframe base: `M5`
-- perfis ativos: Bot 6 usa `stochastic_sell_session`, Bot 7 usa `multitimeframe_trend_pullback`, Bot 11 usa `portfolio_6_7_100_75`, Bot 12 usa `happy_gold_zigzag_scalper`, Bot 13 usa `happy_gold_zigzag_regime_confirmed` e Bot 14 usa `happy_gold_zigzag_microstructure`, todos em XAUUSD/M5
-- `bot-eur-13` e `bot-btc-13` aplicam `happy_gold_zigzag_regime_confirmed` em EURUSD/M5 e BTCUSD/M5, respectivamente, sempre em shadow
+- perfis ativos: Bot 6 usa `stochastic_sell_session`, Bot 7 usa `multitimeframe_trend_pullback`, Bot 11 usa `portfolio_6_7_100_75`, Bot 12 usa `happy_gold_zigzag_scalper` e Bot 13 usa `happy_gold_zigzag_regime_confirmed`, todos em XAUUSD/M5
 - no Bot 7, `risk_amount`, `suggested_size` e `effective_risk_pct` já incorporam o multiplicador experimental de risco `0,5`; o alvo é `0,75R` e somente sinais de compra entre 13:00 e 15:59 UTC são candidatos
 - no Bot 8, esses campos incorporam a alocação do componente selecionado: `0,75` para o Bot 7 e `0,25` para o Bot 6; `portfolio_component`, `portfolio_weight_pct` e a prioridade aplicada são retornados em `metadata`
 - no Bot 9, `adaptive_component_health_json` registra a janela causal de 120 dias e `adaptive_active_component` permanece congelado durante o dia UTC; somente o componente selecionado recebe 100% do risco-base do candidato, sempre em shadow
 - nos Bots 10 e 11, `portfolio_risk_state_json` registra operações e resultado do dia, `portfolio_regime*` comprova o filtro vendedor do Bot 6 e `portfolio_weight_pct` retorna respectivamente 75/50 ou 100/75 conforme o componente
 - no Bot 12, `signal_timeframe=M30`, `fixed_stop_points=240`, `fixed_target_points=1000`, `suggested_size=0.10`, `break_even_trigger_points=40`, `trailing_activation_points=120` e `trailing_distance_points=60` documentam a assinatura reconstruída; `experimental_shadow_lock=true` impede execução
 - no Bot 13, `selective_regime_confirmation=true` preserva o Bot 12 em `range/trend`; `zigzag_close_confirmed` e `zigzag_direction_aligned` precisam ser verdadeiros em `transition/high_volatility`
-- no Bot 14, `micro_candles` leva os 20 candles M1 completos; `microstructure_source=live_m1_tick_flow` exige M1 direcional, ticks alinhados e extensão controlada. O EA consulta esta variante a cada segundo; `soft_stop_points=40`, `max_holding_seconds=60` e `candidate_event_id` suportam a gestão rápida e reentradas isoladas em shadow
 - risco máximo por operação: `1%` da banca
 - gatilho: pullback/rejeição da MME20 ou padrão fora-dentro
 - stop: estrutura da rejeição com buffer de ATR(14)
@@ -190,8 +187,7 @@ Regras de simulação:
 - para `fimath_ema20_flow`, apenas o gatilho técnico pode ser reconstruído porque OHLC não contém livro nem sequência de ticks.
 - todos os bots XAUUSD/M5 reutilizam o histórico canônico do Bot 1, evitando coberturas diferentes para o mesmo mercado;
 - todos os bots EURUSD/M5 reutilizam o histórico canônico do `bot-eur-1`; o ponto do replay é `0,00001`, enquanto XAUUSD mantém `0,01`;
-- BTCUSD/M5 usa `bot-btc-13` como série canônica, ponto `0,01` e candles spot públicos BTC-USD da Coinbase Exchange;
-- `GET /api/equity-comparison?symbol=XAUUSD|EURUSD|BTCUSD&days=365` retorna uma curva acumulada por estratégia a partir de snapshots previamente calculados;
+- `GET /api/equity-comparison?symbol=XAUUSD|EURUSD&days=365` retorna uma curva acumulada por estratégia a partir de snapshots previamente calculados;
 - entradas fora da sessão configurada são bloqueadas e qualquer posição restante é fechada no fim do dia;
 - compras usam ask na entrada e bid na saída; vendas usam bid na entrada e ask na saída;
 - slippage e comissão são aplicados aos fills;

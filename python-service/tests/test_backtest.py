@@ -31,11 +31,6 @@ class HistoricalReplayTests(unittest.TestCase):
 
         self.assertEqual(_instrument_point_size(bot, replay_settings()), .00001)
 
-    def test_bitcoin_uses_configured_two_decimal_point_size(self) -> None:
-        bot = BotCatalogItem(id="bot-btc-13", name="BTC", description="Teste", strategy_profile="happy_gold_zigzag_regime_confirmed", symbol="BTCUSD", timeframe="M5")
-
-        self.assertEqual(_instrument_point_size(bot, replay_settings()), .01)
-
     def test_replay_detects_signal_without_using_future_candle(self) -> None:
         request = macd_trend_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
         bot = BotCatalogItem(
@@ -142,42 +137,6 @@ class HistoricalReplayTests(unittest.TestCase):
         self.assertIsNotNone(result)
         self.assertAlmostEqual(result.exit_price, 100.7)
         self.assertEqual(result.net_pnl, 70)
-
-    def test_happy_gold_microstructure_soft_stop_precedes_emergency_stop(self) -> None:
-        opened_at = datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc)
-        trade = _OpenTrade(
-            trade_id="happy-gold-micro-1",
-            setup="happy_gold_zigzag_microstructure",
-            symbol="XAUUSD",
-            timeframe="M5",
-            side="buy",
-            opened_at_utc=opened_at,
-            volume_lots=.1,
-            entry_price=100,
-            initial_stop_price=97.6,
-            stop_price=97.6,
-            partial_price=110,
-            target_price=110,
-            risk_amount=24,
-            point_size=.01,
-            partial_close_pct=100,
-            max_holding_bars=1,
-            soft_stop_points=40,
-        )
-        candle = CandleSnapshot(
-            timestamp_utc=opened_at + timedelta(minutes=5),
-            open=100,
-            high=100.2,
-            low=99.4,
-            close=99.5,
-            volume=100,
-        )
-
-        result = _advance_trade(trade, candle, replay_settings())
-
-        self.assertIsNotNone(result)
-        self.assertEqual(result.net_pnl, -4)
-        self.assertIn("soft_stop_m5_proxy", result.note)
 
     def test_sell_stop_is_checked_against_historical_ask(self) -> None:
         configured = replay_settings()

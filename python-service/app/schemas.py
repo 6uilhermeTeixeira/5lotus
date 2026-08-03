@@ -62,7 +62,6 @@ class DecisionRequest(BaseModel):
     point_size: float
     value_per_point_per_lot: float
     candles: list[CandleSnapshot] = Field(default_factory=list)
-    micro_candles: list[CandleSnapshot] = Field(default_factory=list)
     positions: list[PositionSnapshot] = Field(default_factory=list)
     account: AccountSnapshot
     indicators: dict[str, float] = Field(default_factory=dict)

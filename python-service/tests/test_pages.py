@@ -8,12 +8,8 @@ class ComparisonPageTests(unittest.TestCase):
     def test_catalog_separates_active_and_archived_strategies(self) -> None:
         active_bots = [
             BotCatalogItem(id=f"bot-{index}", name=name, description="Teste", strategy_profile="fimath_ema20_flow", symbol="XAUUSD", timeframe="M5")
-            for index, name in [(6, "Stochastic Sell 18 UTC"), (7, "Tendência Multitemporal"), (11, "Portfólio 7/6 · 100/75"), (12, "Happy Gold ZigZag Scalper"), (13, "Happy Gold ZigZag · Confirmação de Regime"), (14, "Happy Gold ZigZag · Microestrutura")]
+            for index, name in [(6, "Stochastic Sell 18 UTC"), (7, "Tendência Multitemporal"), (11, "Portfólio 7/6 · 100/75"), (12, "Happy Gold ZigZag Scalper"), (13, "Happy Gold ZigZag · Confirmação de Regime")]
         ]
-        active_bots.extend([
-            BotCatalogItem(id="bot-eur-13", name="Confirmação · EUR/USD", description="Teste", strategy_profile="happy_gold_zigzag_regime_confirmed", symbol="EURUSD", timeframe="M5"),
-            BotCatalogItem(id="bot-btc-13", name="Confirmação · BTC/USD", description="Teste", strategy_profile="happy_gold_zigzag_regime_confirmed", symbol="BTCUSD", timeframe="M5"),
-        ])
         archived_bots = [
             BotCatalogItem(id="bot-1", name="Fimath", description="Teste", strategy_profile="fimath_ema20_flow", symbol="XAUUSD", timeframe="M5", active=False),
             BotCatalogItem(id="bot-eur-1", name="Fimath · EUR/USD", description="Teste", strategy_profile="fimath_ema20_flow", symbol="EURUSD", timeframe="M5", active=False),
@@ -25,16 +21,13 @@ class ComparisonPageTests(unittest.TestCase):
         self.assertIn('data-catalog-tab="archived"', html)
         self.assertIn('data-catalog-panel="archived"', html)
         self.assertIn('id="equity-chart"', html)
-        self.assertIn('id="equity-symbol"', html)
-        self.assertIn("/api/equity-comparison?symbol=", html)
-        self.assertIn('<option value="EURUSD">EURUSD</option>', html)
-        self.assertIn('<option value="BTCUSD">BTCUSD</option>', html)
+        self.assertIn("/api/equity-comparison?symbol=XAUUSD", html)
         self.assertIn("Happy Gold ZigZag Scalper", html)
         self.assertIn("Fimath · EUR/USD", html)
         self.assertIn("Ver histórico", html)
-        self.assertEqual(html.count('class="bot card"'), 10)
+        self.assertEqual(html.count('class="bot card"'), 7)
 
-    def test_comparison_page_renders_six_active_bots(self) -> None:
+    def test_comparison_page_renders_five_active_bots(self) -> None:
         bots = [
             BotCatalogItem(
                 id=f"bot-{index}",
@@ -50,7 +43,6 @@ class ComparisonPageTests(unittest.TestCase):
                 (11, "Portfólio 7/6 · 100/75", "portfolio_6_7_100_75"),
                 (12, "Happy Gold ZigZag Scalper", "happy_gold_zigzag_scalper"),
                 (13, "Happy Gold ZigZag · Confirmação de Regime", "happy_gold_zigzag_regime_confirmed"),
-                (14, "Happy Gold ZigZag · Microestrutura", "happy_gold_zigzag_microstructure"),
             ]
         ]
 
@@ -63,8 +55,7 @@ class ComparisonPageTests(unittest.TestCase):
         self.assertIn("Portfólio 7/6 · 100/75", html)
         self.assertIn("Happy Gold ZigZag Scalper", html)
         self.assertIn("Happy Gold ZigZag · Confirmação de Regime", html)
-        self.assertIn("Happy Gold ZigZag · Microestrutura", html)
-        self.assertIn("<strong>6</strong>", html)
+        self.assertIn("<strong>5</strong>", html)
         self.assertIn("/api/compare", html)
 
     def test_results_page_defaults_to_long_historical_validation(self) -> None:

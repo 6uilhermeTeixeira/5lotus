@@ -15,7 +15,7 @@ HISTORY_BARS = 60
 MULTITIMEFRAME_HISTORY_BARS = 1000
 ADAPTIVE_HISTORY_BARS = 4000
 DEEP_HISTORY_PROFILES = {"multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", *WEIGHTED_PORTFOLIO_PROFILES}
-HAPPY_GOLD_PROFILES = {"happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed", "happy_gold_zigzag_microstructure"}
+HAPPY_GOLD_PROFILES = {"happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed"}
 
 
 def _instrument_point_size(bot: BotCatalogItem, settings: Settings) -> float:
@@ -46,7 +46,6 @@ class _OpenTrade:
     regime: str = "unknown"
     bars_held: int = 0
     max_holding_bars: int | None = None
-    soft_stop_points: float | None = None
     break_even_trigger_points: float | None = None
     break_even_offset_points: float = 0.0
     trailing_activation_points: float | None = None
@@ -94,18 +93,6 @@ def _replay_settings(settings: Settings, bot: BotCatalogItem) -> SimpleNamespace
         happy_gold_trailing_activation_points=getattr(settings, "happy_gold_trailing_activation_points", 120),
         happy_gold_trailing_distance_points=getattr(settings, "happy_gold_trailing_distance_points", 60),
         happy_gold_max_holding_bars=getattr(settings, "happy_gold_max_holding_bars", 2),
-        happy_gold_market_calibrations=getattr(settings, "happy_gold_market_calibrations", {}),
-        happy_gold_micro_min_directional_ticks=getattr(settings, "happy_gold_micro_min_directional_ticks", 4),
-        happy_gold_micro_min_tick_imbalance=getattr(settings, "happy_gold_micro_min_tick_imbalance", .25),
-        happy_gold_micro_min_m1_body_ratio=getattr(settings, "happy_gold_micro_min_m1_body_ratio", .55),
-        happy_gold_micro_max_extension_points=getattr(settings, "happy_gold_micro_max_extension_points", 80),
-        happy_gold_micro_soft_stop_points=getattr(settings, "happy_gold_micro_soft_stop_points", 40),
-        happy_gold_micro_break_even_trigger_points=getattr(settings, "happy_gold_micro_break_even_trigger_points", 30),
-        happy_gold_micro_break_even_offset_points=getattr(settings, "happy_gold_micro_break_even_offset_points", 5),
-        happy_gold_micro_trailing_activation_points=getattr(settings, "happy_gold_micro_trailing_activation_points", 60),
-        happy_gold_micro_trailing_distance_points=getattr(settings, "happy_gold_micro_trailing_distance_points", 30),
-        happy_gold_micro_max_holding_seconds=getattr(settings, "happy_gold_micro_max_holding_seconds", 60),
-        happy_gold_micro_reentry_bucket_seconds=getattr(settings, "happy_gold_micro_reentry_bucket_seconds", 15),
     )
 
 
@@ -203,12 +190,6 @@ def _advance_trade(trade: _OpenTrade, candle: CandleSnapshot, settings: Settings
     buy = trade.side == "buy"
     quote_high = candle.high if buy else candle.high + spread_price
     quote_low = candle.low if buy else candle.low + spread_price
-    if trade.soft_stop_points is not None:
-        direction = 1 if buy else -1
-        soft_stop_price = trade.entry_price - direction * trade.soft_stop_points * trade.point_size
-        soft_stopped = quote_low <= soft_stop_price if buy else quote_high >= soft_stop_price
-        if soft_stopped:
-            return _finish_trade(trade, candle.timestamp_utc, _exit_fill(soft_stop_price, trade.side, slippage_price), settings, "soft_stop_m5_proxy")
     stopped = quote_low <= trade.stop_price if buy else quote_high >= trade.stop_price
     if stopped:
         return _finish_trade(trade, candle.timestamp_utc, _exit_fill(trade.stop_price, trade.side, slippage_price), settings, "stop")
@@ -325,9 +306,7 @@ def run_historical_replay(
     session_start = _parse_time(settings.backtest_session_start_utc)
     session_end = _parse_time(settings.backtest_session_end_utc)
     if bot.strategy_profile in HAPPY_GOLD_PROFILES:
-        market_calibration = getattr(settings, "happy_gold_market_calibrations", {}).get(bot.symbol.upper(), {})
-        session_start = _parse_time(str(market_calibration.get("session_start_utc", "03:00")))
-        session_end = _parse_time(str(market_calibration.get("session_end_utc", "19:00")))
+        session_start, session_end = time(3, 0), time(19, 0)
     point_size = _instrument_point_size(bot, settings)
     balance = settings.backtest_balance
     open_trade: _OpenTrade | None = None
@@ -339,7 +318,6 @@ def run_historical_replay(
     trades_per_day: defaultdict[object, int] = defaultdict(int)
     daily_outcome_r: defaultdict[object, float] = defaultdict(float)
     cooldown_until_index = -1
-    cooldown_bars = 0 if bot.strategy_profile == "happy_gold_zigzag_microstructure" else settings.backtest_cooldown_bars_after_loss
 
     for index in range(evaluation_start, len(ordered)):
         candle = ordered[index]
@@ -349,7 +327,7 @@ def run_historical_replay(
             balance += closed.net_pnl
             daily_outcome_r[closed.opened_at_utc.date()] += float(closed.rr_realized or 0)
             if (closed.rr_realized or 0) < 0:
-                cooldown_until_index = index + cooldown_bars
+                cooldown_until_index = index + settings.backtest_cooldown_bars_after_loss
             open_trade = None
             forced_session_closes += 1
 
@@ -360,7 +338,7 @@ def run_historical_replay(
                 balance += closed.net_pnl
                 daily_outcome_r[closed.opened_at_utc.date()] += float(closed.rr_realized or 0)
                 if (closed.rr_realized or 0) < 0:
-                    cooldown_until_index = index + cooldown_bars
+                    cooldown_until_index = index + settings.backtest_cooldown_bars_after_loss
                 open_trade = None
 
         candle_end = candle.timestamp_utc + interval
@@ -370,7 +348,7 @@ def run_historical_replay(
             balance += closed.net_pnl
             daily_outcome_r[closed.opened_at_utc.date()] += float(closed.rr_realized or 0)
             if (closed.rr_realized or 0) < 0:
-                cooldown_until_index = index + cooldown_bars
+                cooldown_until_index = index + settings.backtest_cooldown_bars_after_loss
             open_trade = None
             forced_session_closes += 1
 
@@ -423,12 +401,7 @@ def run_historical_replay(
             continue
         day = candle_end.date()
         session_allowed = session_start <= candle_end.time() < session_end
-        if bot.strategy_profile == "happy_gold_zigzag_microstructure":
-            daily_trade_cap = max(settings.backtest_max_trades_per_day, 8)
-        elif bot.strategy_profile in DEEP_HISTORY_PROFILES:
-            daily_trade_cap = min(settings.backtest_max_trades_per_day, 2)
-        else:
-            daily_trade_cap = settings.backtest_max_trades_per_day
+        daily_trade_cap = min(settings.backtest_max_trades_per_day, 2) if bot.strategy_profile in DEEP_HISTORY_PROFILES else settings.backtest_max_trades_per_day
         risk_allowed = trades_per_day[day] < daily_trade_cap and daily_outcome_r[day] > -settings.backtest_daily_loss_limit_r
         cooldown_allowed = index > cooldown_until_index
         if not session_allowed:
@@ -464,7 +437,6 @@ def run_historical_replay(
                 value_per_point_per_lot=settings.backtest_value_per_point_per_lot,
                 partial_close_pct=settings.fimath_partial_pct,
                 max_holding_bars=int(response.metadata["max_holding_bars"]) if "max_holding_bars" in response.metadata else None,
-                soft_stop_points=float(response.metadata["soft_stop_points"]) if "soft_stop_points" in response.metadata else None,
                 break_even_trigger_points=float(response.metadata["break_even_trigger_points"]) if "break_even_trigger_points" in response.metadata else None,
                 break_even_offset_points=float(response.metadata.get("break_even_offset_points", 0)),
                 trailing_activation_points=float(response.metadata["trailing_activation_points"]) if "trailing_activation_points" in response.metadata else None,
@@ -506,22 +478,6 @@ def run_historical_replay(
         f"O tamanho de um ponto usado para {bot.symbol} é {point_size:g}; o valor por ponto/lote permanece o da configuração do harness.",
         "Quando stop e alvo aparecem no mesmo candle, o stop tem precedência; M1/ticks continuam sendo preferíveis para resolver a sequência intrabar.",
     ]
-    if bot.symbol.upper() != "XAUUSD" and bot.strategy_profile == "happy_gold_zigzag_regime_confirmed":
-        calibration = getattr(settings, "happy_gold_market_calibrations", {}).get(bot.symbol.upper(), {})
-        assumptions.append(
-            "A geometria cross-market usa stop normalizado por "
-            f"{calibration.get('atr_stop_multiplier', 1)} ATR(M30), alvo de {calibration.get('target_r', 2)}R, "
-            f"pivô span {calibration.get('pivot_span', 2)} e sessão "
-            f"{calibration.get('session_start_utc', '03:00')}–{calibration.get('session_end_utc', '19:00')} UTC."
-        )
-        assumptions.append(
-            "A configuração foi escolhida por grade limitada seguida de confirmação anual; permanece rejeitada e não autoriza execução real."
-        )
-    if bot.symbol.upper() == "BTCUSD":
-        assumptions.append(
-            "Os candles BTCUSD deste replay usam o produto spot BTC-USD da Coinbase Exchange; "
-            "o feed não é o mesmo da conta MetaQuotes Demo."
-        )
     if bot.strategy_profile == "fimath_ema20_flow":
         assumptions.append("O replay do Fimath valida somente o gatilho técnico; livro de ofertas e ticks históricos não estão disponíveis.")
     if bot.strategy_profile == "adaptive_portfolio_3_6_7":
@@ -537,10 +493,6 @@ def run_historical_replay(
         assumptions.append("O trailing OHLC é atualizado pelo extremo favorável de um candle e só pode encerrar a partir do candle seguinte; isso evita presumir uma sequência intrabar favorável. Ticks continuam necessários para reproduzir saídas em segundos.")
     if bot.strategy_profile == "happy_gold_zigzag_regime_confirmed":
         assumptions.append("O Bot 13 mantém o rompimento-base em range/tendência; transição e alta volatilidade exigem fechamento M5 além do pivô e direção H1 alinhada ao sinal.")
-    if bot.strategy_profile == "happy_gold_zigzag_microstructure":
-        assumptions.append("O Bot 14 exige M1 e fluxo de ticks no forward; como o histórico canônico contém somente M5, o replay usa corpo, fechamento e volume do M5 como proxy explicitamente aproximada.")
-        assumptions.append("A saída defensiva de 40 pontos tem precedência conservadora quando o M5 toca o nível; o limite real de 60 segundos é aproximado por um candle M5. Sem ticks, a ordem entre soft stop e alvo dentro do candle permanece desconhecida.")
-        assumptions.append("O forward permite nova observação a cada janela de 15 segundos depois de ficar sem posição; o replay M5 não consegue reproduzir múltiplas reentradas dentro do mesmo candle.")
     if period_start > requested_start + interval:
         assumptions.append(f"A base não cobre os {days} dias completos; o replay começa em {period_start.isoformat()}.")
     chart_start = period_end - timedelta(days=min(days, 30))

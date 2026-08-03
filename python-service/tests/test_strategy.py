@@ -164,34 +164,6 @@ def happy_gold_breakout_request(timestamp: datetime) -> DecisionRequest:
         positions=[],
         account=AccountSnapshot(balance=10_000, equity=10_000, margin_free=10_000),
     )
-
-
-def happy_gold_micro_request(timestamp: datetime) -> DecisionRequest:
-    request = happy_gold_breakout_request(timestamp)
-    request.bot_id = "bot-14"
-    request.micro_candles = [
-        CandleSnapshot(
-            timestamp_utc=timestamp + timedelta(minutes=3),
-            open=105.85,
-            high=106.25,
-            low=105.80,
-            close=106.20,
-            volume=130,
-        )
-    ]
-    request.flow = FlowSnapshot(
-        book=[
-            OrderBookLevel(side="bid", price=106.1, volume=110),
-            OrderBookLevel(side="ask", price=106.2, volume=100),
-        ],
-        up_ticks=6,
-        down_ticks=1,
-        up_volume=6,
-        down_volume=1,
-    )
-    return request
-
-
 def mean_reversion_request(timestamp: datetime) -> DecisionRequest:
     candles = []
     for index in range(21):
@@ -764,53 +736,6 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.stop_loss_points, 240)
         self.assertEqual(response.take_profit_points, 1000)
 
-    def test_regime_confirmed_profile_accepts_configured_non_gold_market(self) -> None:
-        request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
-        request.bot_id = "bot-eur-13"
-        request.symbol = "EURUSD"
-        request.point_size = .00001
-        configured = settings(
-            default_symbol="EURUSD",
-            happy_gold_regime_snapshot=RegimeSnapshot("range", "both", "test", adx=18, atr_percentile=40),
-        )
-
-        response = evaluate_decision(request, configured, "happy_gold_zigzag_regime_confirmed")
-
-        self.assertEqual(response.reason, "happy_gold_zigzag_regime_confirmed_shadow_signal")
-        self.assertTrue(response.metadata["candidate"])
-        self.assertEqual(response.risk_checks[0].detail, "expected=EURUSD")
-
-    def test_cross_market_calibration_uses_atr_geometry(self) -> None:
-        request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
-        request.bot_id = "bot-eur-13"
-        request.symbol = "EURUSD"
-        request.point_size = .00001
-        configured = settings(
-            default_symbol="EURUSD",
-            happy_gold_market_calibrations={
-                "EURUSD": {
-                    "use_atr_geometry": True,
-                    "atr_stop_multiplier": 1.5,
-                    "target_r": 2.5,
-                    "break_even_r": 1.0,
-                    "trailing_activation_r": 1.2,
-                    "trailing_distance_atr": 1.0,
-                    "max_holding_bars": 12,
-                    "pivot_span": 2,
-                    "session_start_utc": "07:00",
-                    "session_end_utc": "17:00",
-                }
-            },
-            happy_gold_regime_snapshot=RegimeSnapshot("range", "both", "test", adx=18, atr_percentile=40),
-        )
-
-        response = evaluate_decision(request, configured, "happy_gold_zigzag_regime_confirmed")
-
-        self.assertEqual(response.metadata["geometry_mode"], "atr_normalized")
-        self.assertEqual(response.metadata["atr_stop_multiplier"], 1.5)
-        self.assertAlmostEqual(response.take_profit_points / response.stop_loss_points, 2.5)
-        self.assertEqual(response.metadata["max_holding_bars"], 12)
-
     def test_bot_13_requires_close_and_direction_in_ambiguous_regime(self) -> None:
         request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
         request.bot_id = "bot-13"
@@ -850,44 +775,7 @@ class DecisionTests(unittest.TestCase):
         self.assertFalse(response.metadata["zigzag_close_confirmed"])
         self.assertTrue(response.metadata["zigzag_direction_aligned"])
 
-    def test_bot_14_requires_live_m1_and_tick_impulse_and_stays_shadow(self) -> None:
-        request = happy_gold_micro_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
-
-        response = evaluate_decision(request, settings(), "happy_gold_zigzag_microstructure")
-
-        self.assertEqual(response.action, DecisionAction.HOLD)
-        self.assertEqual(response.reason, "happy_gold_zigzag_microstructure_shadow_signal")
-        self.assertTrue(response.metadata["candidate"])
-        self.assertTrue(response.metadata["microstructure_confirmed"])
-        self.assertEqual(response.metadata["microstructure_source"], "live_m1_tick_flow")
-        self.assertEqual(response.metadata["soft_stop_points"], 40)
-        self.assertEqual(response.metadata["break_even_trigger_points"], 30)
-        self.assertEqual(response.metadata["trailing_activation_points"], 60)
-        self.assertEqual(response.metadata["max_holding_seconds"], 60)
-        self.assertEqual(response.metadata["reentry_bucket_seconds"], 15)
-        self.assertTrue(response.metadata["experimental_shadow_lock"])
-
-    def test_bot_14_blocks_opposing_tick_flow(self) -> None:
-        request = happy_gold_micro_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
-        request.flow.up_ticks = 1
-        request.flow.down_ticks = 6
-
-        response = evaluate_decision(request, settings(), "happy_gold_zigzag_microstructure")
-
-        self.assertEqual(response.reason, "happy_gold_microstructure_confirmation_block")
-        self.assertFalse(response.metadata["candidate"])
-        self.assertTrue(response.metadata["base_candidate"])
-
-    def test_bot_14_labels_m5_historical_proxy(self) -> None:
-        request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
-        request.bot_id = "bot-14"
-
-        response = evaluate_decision(request, settings(), "happy_gold_zigzag_microstructure")
-
-        self.assertTrue(response.metadata["candidate"])
-        self.assertEqual(response.metadata["microstructure_source"], "m5_ohlcv_replay_proxy")
-
-    def test_fourteen_profiles_keep_independent_bot_scoped_state(self) -> None:
+    def test_thirteen_profiles_keep_independent_bot_scoped_state(self) -> None:
         candle_time = datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc)
         portfolio_request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
         portfolio_request.bot_id = "bot-8"
@@ -900,7 +788,6 @@ class DecisionTests(unittest.TestCase):
         bot_12_request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
         bot_13_request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
         bot_13_request.bot_id = "bot-13"
-        bot_14_request = happy_gold_micro_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
         cases = [
             (bullish_request(candle_time), "fimath_ema20_flow"),
             (momentum_request(candle_time), "momentum_atr_breakout"),
@@ -915,7 +802,6 @@ class DecisionTests(unittest.TestCase):
             (bot_11_request, "portfolio_6_7_100_75"),
             (bot_12_request, "happy_gold_zigzag_scalper"),
             (bot_13_request, "happy_gold_zigzag_regime_confirmed"),
-            (bot_14_request, "happy_gold_zigzag_microstructure"),
         ]
 
         responses = [
@@ -927,10 +813,10 @@ class DecisionTests(unittest.TestCase):
             for request, profile in cases
         ]
 
-        self.assertEqual({request.bot_id for request, _ in cases}, {"bot-1", "bot-2", "bot-3", "bot-4", "bot-5", "bot-6", "bot-7", "bot-8", "bot-9", "bot-10", "bot-11", "bot-12", "bot-13", "bot-14"})
+        self.assertEqual({request.bot_id for request, _ in cases}, {"bot-1", "bot-2", "bot-3", "bot-4", "bot-5", "bot-6", "bot-7", "bot-8", "bot-9", "bot-10", "bot-11", "bot-12", "bot-13"})
         self.assertEqual(
             {response.metadata["strategy_profile"] for response in responses},
-            {"fimath_ema20_flow", "momentum_atr_breakout", "rsi_bollinger_reversion", "macd_trend_crossover", "stochastic_trend_pullback", "stochastic_sell_session", "multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "portfolio_6_7_75_50", "portfolio_6_7_100_75", "happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed", "happy_gold_zigzag_microstructure"},
+            {"fimath_ema20_flow", "momentum_atr_breakout", "rsi_bollinger_reversion", "macd_trend_crossover", "stochastic_trend_pullback", "stochastic_sell_session", "multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "portfolio_6_7_75_50", "portfolio_6_7_100_75", "happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed"},
         )
         self.assertTrue(all(response.action == DecisionAction.HOLD for response in responses))
 
