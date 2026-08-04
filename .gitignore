@@ -21,3 +21,4 @@ wine-prefix/
 .env.*
 !.env.example
 supabase/.temp/
+.vercel

@@ -1,0 +1,6 @@
+.runtime/
+.artifacts/
+.venv/
+wine-prefix/
+node_modules/
+supabase/.temp/
