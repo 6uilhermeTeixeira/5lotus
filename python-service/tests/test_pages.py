@@ -25,11 +25,15 @@ class ComparisonPageTests(unittest.TestCase):
         html = bytes(render_growth_simulator_page().body).decode("utf-8")
 
         self.assertIn('id="initial-balance"', html)
+        self.assertIn('id="base-risk"', html)
         self.assertIn('id="tiers"', html)
         self.assertIn("/api/growth-simulation", html)
         self.assertIn('id="growth-chart"', html)
-        self.assertIn('value="10"', html)
-        self.assertIn("Faixas permanentes", html)
+        self.assertIn('value="10000"', html)
+        self.assertIn('value="0.25"', html)
+        self.assertIn("Faixas de redução de risco", html)
+        self.assertNotIn("Cinza: referência", html)
+        self.assertNotIn("data.reference,color:'#777'", html)
 
     def test_comparison_page_renders_six_active_bots(self) -> None:
         bots = [
