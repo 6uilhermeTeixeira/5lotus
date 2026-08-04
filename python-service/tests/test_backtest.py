@@ -1,9 +1,9 @@
 import unittest
 from datetime import datetime, timedelta, timezone
 
-from app.backtest import _OpenTrade, _advance_trade, _instrument_point_size, run_historical_replay
+from app.backtest import _OpenTrade, _advance_trade
 from app.schemas import BotCatalogItem, CandleSnapshot
-from tests.test_strategy import macd_trend_request, settings
+from tests.test_strategy import settings
 
 
 def replay_settings():
@@ -26,32 +26,6 @@ def replay_settings():
 
 
 class HistoricalReplayTests(unittest.TestCase):
-    def test_eurusd_uses_five_decimal_point_size(self) -> None:
-        bot = BotCatalogItem(id="bot-eur-1", name="EUR", description="Teste", strategy_profile="fimath_ema20_flow", symbol="EURUSD", timeframe="M5")
-
-        self.assertEqual(_instrument_point_size(bot, replay_settings()), .00001)
-
-    def test_replay_detects_signal_without_using_future_candle(self) -> None:
-        request = macd_trend_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
-        bot = BotCatalogItem(
-            id="bot-4",
-            name="MACD",
-            description="Teste",
-            strategy_profile="macd_trend_crossover",
-            symbol="XAUUSD",
-            timeframe="M5",
-        )
-
-        result = run_historical_replay(bot, request.candles, replay_settings())
-
-        self.assertEqual(result.candidates_detected, 1)
-        self.assertEqual(result.candidates_eligible, 1)
-        self.assertEqual(result.summary.trades_count, 1)
-        self.assertEqual(result.summary.open_positions, 0)
-        self.assertEqual(result.forced_session_closes, 1)
-        self.assertEqual(result.validation_status, "insufficient_history")
-        self.assertEqual(result.trades[0].opened_at_utc, request.candles[-1].timestamp_utc + timedelta(minutes=5))
-
     def test_stop_precedes_targets_when_same_candle_touches_both(self) -> None:
         opened_at = datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc)
         trade = _OpenTrade(

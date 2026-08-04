@@ -31,8 +31,7 @@ Perfis ativos, executados em paralelo:
 - Bot 11: `portfolio_6_7_100_100` — variante com Bot 7 e Bot 6 em 100% do risco-base, sob posição e travas diárias compartilhadas. Replay anual: 171 trades, US$ 1.112,20, PF 1,80, expectativa +0,2477R, drawdown 6,10R e 12/12 janelas positivas; promising_not_live e sempre sem execução.
 - Bot 12: `happy_gold_zigzag_scalper` — reconstrução shadow da assinatura de 773 operações XAUUSD: pivô M30 confirmado, rompimento M5, lote 0,10, stop de 240 pontos, alvo de 1.000 pontos, break-even em +40, trailing em +120/60, expiração em dois M5 e uma posição
 - Bot 13: `happy_gold_zigzag_regime_confirmed` — preserva integralmente a geometria do Bot 12; em transição/alta volatilidade exige fechamento M5 além do pivô e direção H1 alinhada. O replay de 365 dias registrou US$ 2.655,40, PF 1,39, expectativa 0,181R e drawdown 15,66R, permanecendo em shadow paralelo.
-- Bot 15: `happy_gold_zigzag_retest_atr` — v2 em shadow que exige rompimento fechado do pivô M30, reteste/rejeição M5 e tendência H1 alinhada entre 07:00–16:00 UTC. Usa stop estrutural com piso de 1,5 ATR, alvo 2R, break-even 0,8R, trailing 1,2R/0,8 ATR e timeout de 12 M5. Na grade anual definida previamente, marcou 22 trades, PF 1,32, expectativa +0,1285R e drawdown 3,63R, mas falhou estabilidade (5/10 janelas positivas) e permanece rejeitada para seleção.
-- Bot 16: `happy_gold_portfolio_100_100` — meta-portfólio que mantém a confirmação de regime do ZigZag e o Portfólio 7/6 independentes, bloqueia conflitos e compartilha uma posição. Não limita a quantidade de entradas, mas mantém cooldown e perda diária de 2R. Com sessão 06:00–19:00 UTC e risco composto de 2%, o replay anual marcou 795 trades, PF 1,21, expectativa +0,1656R, drawdown 13,84R e 9/13 janelas positivas; o PnL de US$ 98.002,76 não é projeção de retorno. Permanece promising_not_live e em shadow.
+- Bot 16: `happy_gold_portfolio_100_100` — meta-portfólio que mantém a confirmação de regime do ZigZag e o Portfólio 7/6 independentes, bloqueia conflitos e compartilha uma posição. Não limita a quantidade de entradas, mas mantém cooldown e perda diária de 2R. No recorte anual encerrado em 2026-08-04, com risco composto de 0,25%, marcou 797 operações, PnL de US$ 3.933,44 e PF 1,35. Permanece promising_not_live e em shadow.
 - Estratégias anteriores e variantes EURUSD aparecem na aba `Arquivadas` para consulta histórica, mas não recebem polling, decisões ou novas operações. Os títulos públicos omitem o identificador técnico `Bot N`.
 - risco por operacao: `1%` da banca
 - risco/retorno final: `2R`, com parcial de `50%` em `1R`
@@ -67,7 +66,7 @@ O replay aprimorado separa geração de sinal e autorização por regime. Estrat
 só entram quando ADX(14) e EMA50/EMA200 em H1 confirmam tendência e direção; RSI Bollinger só
 entra em range. Transição e volatilidade extrema ficam sem operação. A simulação também:
 
-- usa o histórico canônico do `bot-1` para todos os bots XAUUSD/M5;
+- usa `market_history` como histórico canônico XAUUSD/M5 independente de bots;
 - restringe entradas à sessão UTC configurada e fecha posições no fim do dia;
 - aplica bid/ask, spread, slippage e comissão configurável;
 - limita operações diárias, perda diária e adiciona cooldown após loss;
@@ -120,8 +119,7 @@ DAYTRADE_BACKTEST_SPREAD_POINTS=10
 DAYTRADE_BACKTEST_POINT_SIZE=0.01
 DAYTRADE_BACKTEST_VALUE_PER_POINT_PER_LOT=1
 DAYTRADE_BACKTEST_CANDLE_LIMIT=100000
-DAYTRADE_BACKTEST_MARKET_DATA_BOT_ID=bot-1
-DAYTRADE_BACKTEST_RISK_PER_TRADE_PCT=2.0
+DAYTRADE_BACKTEST_RISK_PER_TRADE_PCT=0.25
 DAYTRADE_BACKTEST_SLIPPAGE_POINTS=2
 DAYTRADE_BACKTEST_COMMISSION_PER_LOT=0
 DAYTRADE_BACKTEST_SESSION_START_UTC=06:00
@@ -167,14 +165,14 @@ open http://127.0.0.1:8000/login
 ## Acompanhamento de resultado
 
 O servico expoe um portal protegido por senha em `/login`. Depois do acesso, `/bots` lista os
-testes disponiveis e cada bot possui uma pagina individual em `/bots/<id>`. A rota antiga
-`/results` redireciona para o primeiro bot do catalogo. A página `/compare` apresenta os 14
-testes (sete perfis em dois ativos) e atualiza seus indicadores pela API autenticada `/api/compare`.
+testes disponíveis e cada bot possui uma página individual em `/bots/<id>`. A rota antiga
+`/results` redireciona para o primeiro bot do catálogo. A página `/compare` apresenta as seis
+estratégias selecionadas e atualiza seus indicadores pela API autenticada `/api/compare`.
 
-A tela `/bots` alterna entre XAU/USD e EUR/USD e carrega `/api/equity-comparison?symbol=<ativo>&days=365`.
+A tela `/bots` carrega `/api/equity-comparison?symbol=XAUUSD&days=365`.
 As curvas vêm de snapshots compactos em `backtest_snapshots`, gerados por
-`python-service/scripts/cache_backtests.py`; candles permanecem canônicos em `market_candles`
-(`bot-1` para XAUUSD e `bot-eur-1` para EURUSD).
+`python-service/scripts/cache_backtests.py`; candles permanecem canônicos por `symbol` e
+`timeframe` em `market_history`.
 
 O catálogo fica em `data/bots.json`. Para adicionar outro bot, inclua um novo item com `id`
 único e um `results_file` dentro de `data/`; em seguida, crie esse JSON com a lista de trades.

@@ -110,9 +110,8 @@ Resposta minima:
 ## Catálogo de estratégias
 
 - `GET /api/bots` retorna somente estratégias ativas.
-- `GET /api/bots?archived=true` retorna somente estratégias arquivadas.
-- `GET /api/bots/{bot_id}/results`, `/chart` e `/historical-replay` aceitam IDs ativos ou arquivados para preservar a consulta histórica.
-- `POST /decision`, `POST /api/trades` e `POST /api/candles` rejeitam estratégias arquivadas, pois resolvem exclusivamente o catálogo ativo.
+- `GET /api/bots?archived=true` retorna `410`; estratégias aposentadas não fazem parte do catálogo.
+- `GET /api/bots/{bot_id}/results`, `/chart` e `/historical-replay` aceitam somente os seis IDs selecionados.
 - O campo `active` explicita o estado operacional. O campo `name` contém apenas o título público; o identificador `bot-N` permanece no campo `id`.
 
 ## Decisao atual
@@ -128,7 +127,6 @@ O serviço trabalha com estes pressupostos:
 - nos Bots 10 e 11, `portfolio_risk_state_json` registra operações e resultado do dia, `portfolio_regime*` comprova o filtro vendedor do Bot 6 e `portfolio_weight_pct` retorna respectivamente 75/50 ou 100/100 conforme o componente
 - no Bot 12, `signal_timeframe=M30`, `fixed_stop_points=240`, `fixed_target_points=1000`, `suggested_size=0.10`, `break_even_trigger_points=40`, `trailing_activation_points=120` e `trailing_distance_points=60` documentam a assinatura reconstruída; `experimental_shadow_lock=true` impede execução
 - no Bot 13, `selective_regime_confirmation=true` preserva o Bot 12 em `range/trend`; `zigzag_close_confirmed` e `zigzag_direction_aligned` precisam ser verdadeiros em `transition/high_volatility`
-- no Bot 15, `entry_model=breakout_retest_rejection`, `target_r=2`, gestão dinâmica em pontos e `max_holding_bars=12` descrevem a v2; `experimental_shadow_lock=true` impede execução
 - no Bot 16, `combined_component`, `combined_priority` e os flags de candidato identificam a fonte selecionada; conflitos ficam em `hold`, `combined_daily_trade_cap=unlimited`, a sessão é 06:00–19:00 UTC e o risco total nunca ultrapassa 100% do risco-base
 - risco máximo por operação: `1%` da banca
 - gatilho: pullback/rejeição da MME20 ou padrão fora-dentro
@@ -173,7 +171,7 @@ O roteiro operacional completo de teste em demo esta em:
 - `GET /api/bots/{bot_id}/historical-replay?days=120`
 - `days` aceita valores de `1` a `30`
 - requer a mesma sessão autenticada do portal
-- requer candles em `market_candles` e `DAYTRADE_RESULTS_STORE=SUPABASE`
+- requer candles em `market_history` e `DAYTRADE_RESULTS_STORE=SUPABASE`
 
 O período termina no fechamento do candle mais recente disponível. A resposta inclui candles,
 operações simuladas, contagem de candidatos, resumo de performance, PnL diário e as premissas do
@@ -186,10 +184,8 @@ Regras de simulação:
 - parcial em 1R move o stop do saldo para breakeven e o alvo final permanece em 2R;
 - quando o OHLC toca stop e alvo no mesmo candle, o stop vence;
 - entrada, spread, slippage e custos são aproximações configuráveis;
-- para `fimath_ema20_flow`, apenas o gatilho técnico pode ser reconstruído porque OHLC não contém livro nem sequência de ticks.
-- todos os bots XAUUSD/M5 reutilizam o histórico canônico do Bot 1, evitando coberturas diferentes para o mesmo mercado;
-- todos os bots EURUSD/M5 reutilizam o histórico canônico do `bot-eur-1`; o ponto do replay é `0,00001`, enquanto XAUUSD mantém `0,01`;
-- `GET /api/equity-comparison?symbol=XAUUSD|EURUSD&days=365` retorna uma curva acumulada por estratégia a partir de snapshots previamente calculados;
+- todos os bots XAUUSD/M5 reutilizam `market_history`, evitando coberturas diferentes para o mesmo mercado;
+- `GET /api/equity-comparison?symbol=XAUUSD&days=365` retorna uma curva acumulada por estratégia a partir de snapshots previamente calculados;
 - entradas fora da sessão configurada são bloqueadas e qualquer posição restante é fechada no fim do dia;
 - compras usam ask na entrada e bid na saída; vendas usam bid na entrada e ask na saída;
 - slippage e comissão são aplicados aos fills;

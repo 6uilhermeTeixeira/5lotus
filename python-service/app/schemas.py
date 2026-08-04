@@ -42,7 +42,7 @@ class OrderBookLevel(BaseModel):
 
 
 class FlowSnapshot(BaseModel):
-    book: list[OrderBookLevel] = Field(default_factory=list)
+    book: list[OrderBookLevel] = Field(default_factory=list, max_length=500)
     up_ticks: int = 0
     down_ticks: int = 0
     neutral_ticks: int = 0
@@ -61,8 +61,8 @@ class DecisionRequest(BaseModel):
     spread_points: float
     point_size: float
     value_per_point_per_lot: float
-    candles: list[CandleSnapshot] = Field(default_factory=list)
-    positions: list[PositionSnapshot] = Field(default_factory=list)
+    candles: list[CandleSnapshot] = Field(default_factory=list, max_length=5000)
+    positions: list[PositionSnapshot] = Field(default_factory=list, max_length=100)
     account: AccountSnapshot
     indicators: dict[str, float] = Field(default_factory=dict)
     flow: FlowSnapshot | None = None
@@ -201,6 +201,9 @@ class HistoricalReplayResponse(BaseModel):
     bot_id: str
     symbol: str
     timeframe: str
+    risk_per_trade_pct: float = 0.0
+    strategy_version: str = "legacy"
+    settings_fingerprint: str = "legacy"
     period_start_utc: datetime
     period_end_utc: datetime
     candles_evaluated: int
@@ -244,3 +247,68 @@ class EquityComparisonResponse(BaseModel):
     updated_at_utc: datetime
     series: list[EquitySeries] = Field(default_factory=list)
     missing_bot_ids: list[str] = Field(default_factory=list)
+
+
+class GrowthPoint(BaseModel):
+    day: date
+    balance: float
+
+
+class GrowthMilestone(BaseModel):
+    balance_threshold: float
+    risk_per_trade_pct: float
+    reached_at_utc: datetime | None = None
+
+
+class GrowthSimulationSeries(BaseModel):
+    label: str
+    initial_balance: float
+    risk_per_trade_pct: float
+    final_balance: float
+    net_pnl: float
+    return_pct: float
+    max_drawdown: float
+    max_drawdown_pct: float
+    trades_simulated: int
+    minimum_balance: float = 0.0
+    milestones: list[GrowthMilestone] = Field(default_factory=list)
+    points: list[GrowthPoint] = Field(default_factory=list)
+
+
+class GrowthSimulationResponse(BaseModel):
+    bot_id: str
+    bot_name: str
+    period_start_utc: datetime
+    period_end_utc: datetime
+    reference: GrowthSimulationSeries
+    simulation: GrowthSimulationSeries
+
+
+class RiskTier(BaseModel):
+    balance_threshold: float = Field(..., ge=0, le=100_000_000)
+    risk_per_trade_pct: float = Field(..., ge=0.01, le=10)
+
+
+class GrowthSimulationRequest(BaseModel):
+    initial_balance: float = Field(10000, ge=1, le=100_000_000)
+    risk_tiers: list[RiskTier] = Field(default_factory=lambda: [RiskTier(balance_threshold=0, risk_per_trade_pct=0.25)], min_length=1, max_length=12)
+
+
+class RuntimeStatusItem(BaseModel):
+    bot_id: str
+    name: str
+    last_request_at_utc: datetime | None = None
+    last_candle_at_utc: datetime | None = None
+    last_action: str | None = None
+    last_reason: str | None = None
+    last_latency_ms: float | None = None
+    consecutive_errors: int = 0
+    last_error: str | None = None
+    snapshot_updated_at_utc: datetime | None = None
+    market_data_through_utc: datetime | None = None
+    status: str = "no_data"
+
+
+class OperationsResponse(BaseModel):
+    updated_at_utc: datetime
+    bots: list[RuntimeStatusItem] = Field(default_factory=list)

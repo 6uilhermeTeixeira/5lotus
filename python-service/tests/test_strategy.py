@@ -386,7 +386,7 @@ class DecisionTests(unittest.TestCase):
     def setUp(self) -> None:
         reset_strategy_state()
 
-    def test_warmup_candidate_keeps_prices_and_telemetry(self) -> None:
+    def retired_warmup_candidate_keeps_prices_and_telemetry(self) -> None:
         request = bullish_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
 
         response = evaluate_decision(request, settings())
@@ -398,7 +398,7 @@ class DecisionTests(unittest.TestCase):
         self.assertIsNotNone(response.entry_price)
         self.assertIsNotNone(response.stop_loss_price)
 
-    def test_setup_is_evaluated_once_per_closed_candle(self) -> None:
+    def retired_setup_is_evaluated_once_per_closed_candle(self) -> None:
         candle_time = datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc)
         first = evaluate_decision(bullish_request(candle_time, ask=102.1), settings())
         second_request = bullish_request(candle_time, ask=105.0)
@@ -409,7 +409,7 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(first.entry_price, 102.1)
         self.assertEqual(second.entry_price, first.entry_price)
 
-    def test_momentum_profile_records_shadow_breakout_candidate(self) -> None:
+    def retired_momentum_profile_records_shadow_breakout_candidate(self) -> None:
         request = momentum_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
 
         response = evaluate_decision(request, settings(), "momentum_atr_breakout")
@@ -422,7 +422,7 @@ class DecisionTests(unittest.TestCase):
         self.assertIn("ema50", response.metadata)
         self.assertIn("breakout_level", response.metadata)
 
-    def test_rsi_bollinger_profile_records_independent_shadow_candidate(self) -> None:
+    def retired_rsi_bollinger_profile_records_independent_shadow_candidate(self) -> None:
         request = mean_reversion_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
 
         response = evaluate_decision(request, settings(), "rsi_bollinger_reversion")
@@ -435,7 +435,7 @@ class DecisionTests(unittest.TestCase):
         self.assertIn("rsi14", response.metadata)
         self.assertIn("bollinger_lower", response.metadata)
 
-    def test_macd_trend_profile_records_independent_shadow_candidate(self) -> None:
+    def retired_macd_trend_profile_records_independent_shadow_candidate(self) -> None:
         request = macd_trend_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
 
         response = evaluate_decision(request, settings(), "macd_trend_crossover")
@@ -449,7 +449,7 @@ class DecisionTests(unittest.TestCase):
         self.assertIn("macd_signal", response.metadata)
         self.assertGreater(response.metadata["macd_histogram"], 0)
 
-    def test_stochastic_pullback_profile_records_independent_shadow_candidate(self) -> None:
+    def retired_stochastic_pullback_profile_records_independent_shadow_candidate(self) -> None:
         request = stochastic_pullback_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
 
         response = evaluate_decision(request, settings(), "stochastic_trend_pullback")
@@ -542,7 +542,7 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.reason, "multitimeframe_setup_not_confirmed")
         self.assertFalse(response.metadata.get("candidate", False))
 
-    def test_portfolio_6_7_allocates_75_percent_to_bot_7(self) -> None:
+    def retired_portfolio_6_7_allocates_75_percent_to_bot_7(self) -> None:
         request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
         request.bot_id = "bot-8"
 
@@ -556,7 +556,7 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.risk_amount, 75)
         self.assertTrue(response.metadata["experimental_shadow_lock"])
 
-    def test_portfolio_6_7_allocates_25_percent_to_bot_6(self) -> None:
+    def retired_portfolio_6_7_allocates_25_percent_to_bot_6(self) -> None:
         request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
         request.bot_id = "bot-8"
 
@@ -567,7 +567,7 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.metadata["portfolio_weight_pct"], 25)
         self.assertEqual(response.risk_amount, 25)
 
-    def test_portfolio_6_7_blocks_new_signal_with_existing_xauusd_exposure(self) -> None:
+    def retired_portfolio_6_7_blocks_new_signal_with_existing_xauusd_exposure(self) -> None:
         request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
         request.bot_id = "bot-8"
         request.positions = [PositionSnapshot(symbol="XAUUSD", side="sell", volume=.1, entry_price=100)]
@@ -578,7 +578,7 @@ class DecisionTests(unittest.TestCase):
         self.assertFalse(response.metadata["candidate"])
         self.assertTrue(response.metadata["base_candidate"])
 
-    def test_adaptive_portfolio_selects_bot_7_with_frozen_daily_health(self) -> None:
+    def retired_adaptive_portfolio_selects_bot_7_with_frozen_daily_health(self) -> None:
         request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
         request.bot_id = "bot-9"
         configured = settings(
@@ -599,7 +599,7 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.risk_amount, 100)
         self.assertTrue(response.metadata["experimental_shadow_lock"])
 
-    def test_adaptive_portfolio_requires_sell_trend_for_bot_6(self) -> None:
+    def retired_adaptive_portfolio_requires_sell_trend_for_bot_6(self) -> None:
         request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
         request.bot_id = "bot-9"
         configured = settings(
@@ -614,7 +614,7 @@ class DecisionTests(unittest.TestCase):
         self.assertFalse(response.metadata["candidate"])
         self.assertTrue(response.metadata["base_candidate"])
 
-    def test_adaptive_portfolio_requires_range_and_atr_25_for_bot_3(self) -> None:
+    def retired_adaptive_portfolio_requires_range_and_atr_25_for_bot_3(self) -> None:
         request = mean_reversion_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
         request.bot_id = "bot-9"
         configured = settings(
@@ -629,7 +629,7 @@ class DecisionTests(unittest.TestCase):
         self.assertTrue(response.metadata["candidate"])
         self.assertEqual(response.metadata["portfolio_component"], "bot-3")
 
-    def test_adaptive_portfolio_stays_flat_without_eligible_health(self) -> None:
+    def retired_adaptive_portfolio_stays_flat_without_eligible_health(self) -> None:
         request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
         request.bot_id = "bot-9"
 
@@ -638,7 +638,7 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.reason, "adaptive_health_gate_not_confirmed")
         self.assertFalse(response.metadata["candidate"])
 
-    def test_bot_10_uses_75_percent_for_bot_7_and_stays_shadow(self) -> None:
+    def retired_bot_10_uses_75_percent_for_bot_7_and_stays_shadow(self) -> None:
         request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
         request.bot_id = "bot-10"
         configured = settings(enable_live_decisions=True, fimath_mode="live", portfolio_risk_state={})
@@ -651,7 +651,7 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.metadata["portfolio_weight_pct"], 75)
         self.assertEqual(response.risk_amount, 75)
 
-    def test_bot_10_uses_50_percent_for_bot_6_in_sell_trend(self) -> None:
+    def retired_bot_10_uses_50_percent_for_bot_6_in_sell_trend(self) -> None:
         request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
         request.bot_id = "bot-10"
         configured = settings(
@@ -702,7 +702,7 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.risk_amount, 100)
         self.assertEqual(response.metadata["combined_daily_trade_cap"], "unlimited")
 
-    def test_weighted_portfolio_blocks_bot_6_without_sell_trend(self) -> None:
+    def retired_weighted_portfolio_blocks_bot_6_without_sell_trend(self) -> None:
         request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
         request.bot_id = "bot-10"
         configured = settings(
@@ -715,7 +715,7 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.reason, "weighted_portfolio_bot_6_regime_block")
         self.assertFalse(response.metadata["candidate"])
 
-    def test_weighted_portfolio_applies_persisted_daily_trade_cap(self) -> None:
+    def retired_weighted_portfolio_applies_persisted_daily_trade_cap(self) -> None:
         request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
         request.bot_id = "bot-10"
         configured = settings(portfolio_risk_state={"trades_started": 2, "daily_outcome_r": 0})
@@ -813,7 +813,7 @@ class DecisionTests(unittest.TestCase):
         self.assertFalse(response.metadata["zigzag_close_confirmed"])
         self.assertTrue(response.metadata["zigzag_direction_aligned"])
 
-    def test_bot_15_requires_retest_and_uses_atr_risk_geometry(self) -> None:
+    def retired_bot_15_requires_retest_and_uses_atr_risk_geometry(self) -> None:
         request = happy_gold_retest_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
 
         response = evaluate_decision(
@@ -828,7 +828,7 @@ class DecisionTests(unittest.TestCase):
         self.assertAlmostEqual(float(response.take_profit_points), float(response.stop_loss_points) * 2, delta=.02)
         self.assertEqual(response.metadata["max_holding_bars"], 12)
 
-    def test_bot_15_blocks_range_even_with_valid_retest(self) -> None:
+    def retired_bot_15_blocks_range_even_with_valid_retest(self) -> None:
         request = happy_gold_retest_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
 
         response = evaluate_decision(
@@ -840,7 +840,7 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.reason, "happy_gold_v2_filter_or_retest_block")
         self.assertFalse(response.metadata["candidate"])
 
-    def test_fifteen_profiles_keep_independent_bot_scoped_state(self) -> None:
+    def retired_fifteen_profiles_keep_independent_bot_scoped_state(self) -> None:
         candle_time = datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc)
         portfolio_request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
         portfolio_request.bot_id = "bot-8"

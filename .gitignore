@@ -16,6 +16,7 @@ coverage/
 .vscode/
 wine-prefix/
 .runtime/
+.artifacts/
 .env
 .env.*
 !.env.example

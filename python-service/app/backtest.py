@@ -1,9 +1,10 @@
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import datetime, time, timedelta
+from hashlib import sha256
+import json
 from types import SimpleNamespace
 
-from .adaptive import build_adaptive_schedule
 from .config import Settings
 from .regime import RegimeSnapshot, build_regime_timeline, regime_allows, regime_at
 from .results_store import build_results_snapshot
@@ -14,8 +15,25 @@ from .strategy import HAPPY_GOLD_COMBINED_PROFILE, WEIGHTED_PORTFOLIO_PROFILES, 
 HISTORY_BARS = 60
 MULTITIMEFRAME_HISTORY_BARS = 1000
 ADAPTIVE_HISTORY_BARS = 4000
-DEEP_HISTORY_PROFILES = {"multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "happy_gold_zigzag_retest_atr", HAPPY_GOLD_COMBINED_PROFILE, *WEIGHTED_PORTFOLIO_PROFILES}
-HAPPY_GOLD_PROFILES = {"happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed", "happy_gold_zigzag_retest_atr"}
+STRATEGY_VERSION = "2026-08-04-shadow-core-v1"
+DEEP_HISTORY_PROFILES = {"multitimeframe_trend_pullback", HAPPY_GOLD_COMBINED_PROFILE, *WEIGHTED_PORTFOLIO_PROFILES}
+HAPPY_GOLD_PROFILES = {"happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed"}
+
+
+def replay_settings_fingerprint(settings: Settings, bot: BotCatalogItem) -> str:
+    values = {
+        "strategy_version": STRATEGY_VERSION,
+        "profile": bot.strategy_profile,
+        "risk": settings.backtest_risk_per_trade_pct,
+        "spread": settings.backtest_spread_points,
+        "slippage": settings.backtest_slippage_points,
+        "commission": settings.backtest_commission_per_lot,
+        "session": [settings.backtest_session_start_utc, settings.backtest_session_end_utc],
+        "daily_loss_r": settings.backtest_daily_loss_limit_r,
+        "cooldown": settings.backtest_cooldown_bars_after_loss,
+        "regime": settings.backtest_regime_enabled,
+    }
+    return sha256(json.dumps(values, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
 
 
 def _instrument_point_size(bot: BotCatalogItem, settings: Settings) -> float:
@@ -83,8 +101,6 @@ def _replay_settings(settings: Settings, bot: BotCatalogItem) -> SimpleNamespace
         backtest_regime_trend_adx=getattr(settings, "backtest_regime_trend_adx", 25),
         backtest_regime_range_adx=getattr(settings, "backtest_regime_range_adx", 20),
         backtest_regime_high_volatility_percentile=getattr(settings, "backtest_regime_high_volatility_percentile", 90),
-        adaptive_active_component=None,
-        adaptive_component_health={},
         portfolio_regime_snapshot=None,
         portfolio_risk_state={},
         happy_gold_regime_snapshot=None,
@@ -93,61 +109,9 @@ def _replay_settings(settings: Settings, bot: BotCatalogItem) -> SimpleNamespace
         happy_gold_trailing_activation_points=getattr(settings, "happy_gold_trailing_activation_points", 120),
         happy_gold_trailing_distance_points=getattr(settings, "happy_gold_trailing_distance_points", 60),
         happy_gold_max_holding_bars=getattr(settings, "happy_gold_max_holding_bars", 2),
-        happy_gold_v2_stop_atr=getattr(settings, "happy_gold_v2_stop_atr", 1.5),
-        happy_gold_v2_target_r=getattr(settings, "happy_gold_v2_target_r", 2.0),
-        happy_gold_v2_break_even_r=getattr(settings, "happy_gold_v2_break_even_r", .8),
-        happy_gold_v2_trailing_activation_r=getattr(settings, "happy_gold_v2_trailing_activation_r", 1.2),
-        happy_gold_v2_trailing_atr=getattr(settings, "happy_gold_v2_trailing_atr", .8),
-        happy_gold_v2_max_extension_atr=getattr(settings, "happy_gold_v2_max_extension_atr", .35),
-        happy_gold_v2_retest_tolerance_atr=getattr(settings, "happy_gold_v2_retest_tolerance_atr", .15),
-        happy_gold_v2_max_holding_bars=getattr(settings, "happy_gold_v2_max_holding_bars", 12),
         happy_gold_combined_session_start_utc=getattr(settings, "happy_gold_combined_session_start_utc", "06:00"),
         happy_gold_combined_session_end_utc=getattr(settings, "happy_gold_combined_session_end_utc", "19:00"),
     )
-
-
-def _adaptive_bot_3_trade_allowed(trade: TradeResult) -> bool:
-    marker = "atr_pct="
-    if marker not in trade.note:
-        return False
-    raw = trade.note.split(marker, 1)[1].split(";", 1)[0].split(":", 1)[0]
-    try:
-        return float(raw) >= 25
-    except ValueError:
-        return False
-
-
-def _adaptive_replay_schedule(
-    bot: BotCatalogItem,
-    candles: list[CandleSnapshot],
-    settings: Settings,
-    period_start: datetime,
-    period_end: datetime,
-    days: int,
-) -> dict[object, dict[str, object]]:
-    if bot.strategy_profile != "adaptive_portfolio_3_6_7":
-        return {}
-    component_profiles = {
-        "bot-3": "rsi_bollinger_reversion",
-        "bot-6": "stochastic_sell_session",
-        "bot-7": "multitimeframe_trend_pullback",
-    }
-    component_trades: dict[str, list[TradeResult]] = {}
-    for component, profile in component_profiles.items():
-        component_bot = BotCatalogItem(
-            id=f"adaptive-source-{component}",
-            name=f"Adaptive source {component}",
-            description="Independent causal health source for Bot 9",
-            strategy_profile=profile,
-            symbol=bot.symbol,
-            timeframe=bot.timeframe,
-        )
-        replay = run_historical_replay(component_bot, candles, settings, days=days + 120)
-        rows = replay.trades
-        if component == "bot-3":
-            rows = [trade for trade in rows if _adaptive_bot_3_trade_allowed(trade)]
-        component_trades[component] = rows
-    return build_adaptive_schedule(component_trades, period_start.date(), period_end.date())
 
 
 def _pnl_for_fill(trade: _OpenTrade, exit_price: float, fraction: float) -> float:
@@ -305,20 +269,17 @@ def run_historical_replay(
     requested_start = period_end - timedelta(days=days)
     first_visible = next((index for index, candle in enumerate(ordered) if candle.timestamp_utc >= requested_start), len(ordered) - 1)
     history_bars = (
-        ADAPTIVE_HISTORY_BARS if bot.strategy_profile in {"adaptive_portfolio_3_6_7", HAPPY_GOLD_COMBINED_PROFILE} or bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES
+        ADAPTIVE_HISTORY_BARS if bot.strategy_profile == HAPPY_GOLD_COMBINED_PROFILE or bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES
         else MULTITIMEFRAME_HISTORY_BARS if bot.strategy_profile in DEEP_HISTORY_PROFILES
         else HISTORY_BARS
     )
     evaluation_start = max(history_bars - 1, first_visible)
     replay_settings = _replay_settings(settings, bot)
     regime_timeline = build_regime_timeline(ordered, settings) if settings.backtest_regime_enabled else ([], [])
-    adaptive_schedule = _adaptive_replay_schedule(bot, ordered, settings, ordered[first_visible].timestamp_utc, period_end, days)
     session_start = _parse_time(settings.backtest_session_start_utc)
     session_end = _parse_time(settings.backtest_session_end_utc)
     if bot.strategy_profile in HAPPY_GOLD_PROFILES:
         session_start, session_end = time(3, 0), time(19, 0)
-    if bot.strategy_profile == "happy_gold_zigzag_retest_atr":
-        session_start, session_end = time(7, 0), time(16, 0)
     if bot.strategy_profile == HAPPY_GOLD_COMBINED_PROFILE:
         session_start = _parse_time(replay_settings.happy_gold_combined_session_start_utc)
         session_end = _parse_time(replay_settings.happy_gold_combined_session_end_utc)
@@ -383,13 +344,9 @@ def run_historical_replay(
             positions=[],
             account=AccountSnapshot(balance=balance, equity=balance, margin_free=balance),
         )
-        if bot.strategy_profile == "adaptive_portfolio_3_6_7":
-            adaptive_day = adaptive_schedule.get(candle_end.date(), {})
-            replay_settings.adaptive_active_component = adaptive_day.get("active_component")
-            replay_settings.adaptive_component_health = adaptive_day.get("health", {})
         if (bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES or bot.strategy_profile == HAPPY_GOLD_COMBINED_PROFILE) and settings.backtest_regime_enabled:
             replay_settings.portfolio_regime_snapshot = regime_at(regime_timeline, candle_end)
-        if bot.strategy_profile in {"happy_gold_zigzag_regime_confirmed", "happy_gold_zigzag_retest_atr", HAPPY_GOLD_COMBINED_PROFILE} and settings.backtest_regime_enabled:
+        if bot.strategy_profile in {"happy_gold_zigzag_regime_confirmed", HAPPY_GOLD_COMBINED_PROFILE} and settings.backtest_regime_enabled:
             replay_settings.happy_gold_regime_snapshot = regime_at(regime_timeline, candle_end)
         response = evaluate_decision(request, replay_settings, bot.strategy_profile)
         if not response.metadata.get("candidate"):
@@ -400,7 +357,7 @@ def run_historical_replay(
         regime: RegimeSnapshot = regime_at(regime_timeline, candle_end) if settings.backtest_regime_enabled else RegimeSnapshot("disabled", side, "regime_filter_disabled")
         regime_counts[regime.name] += 1
         portfolio_component = str(response.metadata.get("portfolio_component", ""))
-        if bot.strategy_profile in {"adaptive_portfolio_3_6_7", HAPPY_GOLD_COMBINED_PROFILE} or bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES:
+        if bot.strategy_profile == HAPPY_GOLD_COMBINED_PROFILE or bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES:
             regime_allowed, regime_reason = True, "strategy_uses_internal_adaptive_component_regime"
         elif bot.strategy_profile in HAPPY_GOLD_PROFILES:
             regime_allowed, regime_reason = True, "strategy_uses_internal_m30_breakout_regime"
@@ -496,9 +453,6 @@ def run_historical_replay(
     ]
     if bot.strategy_profile == "fimath_ema20_flow":
         assumptions.append("O replay do Fimath valida somente o gatilho técnico; livro de ofertas e ticks históricos não estão disponíveis.")
-    if bot.strategy_profile == "adaptive_portfolio_3_6_7":
-        assumptions.append("O Bot 9 reconstrói os Bots 3, 6 e 7 independentemente; a seleção de cada dia usa somente operações encerradas antes de 00:00 UTC.")
-        assumptions.append("A saúde adaptativa usa uma janela de 120 dias, mínimo de 8 operações, expectativa positiva e profit factor mínimo de 1,10; sem elegível, o portfólio fica sem operar.")
     if bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES:
         weights = WEIGHTED_PORTFOLIO_PROFILES[bot.strategy_profile]
         assumptions.append(f"A variante mantém posição única e usa {weights['bot-7']:.0%} do risco-base no Bot 7 e {weights['bot-6']:.0%} no Bot 6; os pesos não representam posições simultâneas.")
@@ -513,9 +467,6 @@ def run_historical_replay(
         assumptions.append("O trailing OHLC é atualizado pelo extremo favorável de um candle e só pode encerrar a partir do candle seguinte; isso evita presumir uma sequência intrabar favorável. Ticks continuam necessários para reproduzir saídas em segundos.")
     if bot.strategy_profile == "happy_gold_zigzag_regime_confirmed":
         assumptions.append("O Bot 13 mantém o rompimento-base em range/tendência; transição e alta volatilidade exigem fechamento M5 além do pivô e direção H1 alinhada ao sinal.")
-    if bot.strategy_profile == "happy_gold_zigzag_retest_atr":
-        assumptions.append("A V2 exige rompimento fechado e reteste/rejeição M5 do pivô M30, em tendência H1 alinhada e entre 07:00–16:00 UTC.")
-        assumptions.append("Stop usa o maior entre 1,5 ATR(M5) e a estrutura do reteste; alvo 2R, break-even 0,8R, trailing após 1,2R com distância de 0,8 ATR e timeout de 12 candles M5.")
     if period_start > requested_start + interval:
         assumptions.append(f"A base não cobre os {days} dias completos; o replay começa em {period_start.isoformat()}.")
     chart_start = period_end - timedelta(days=min(days, 30))
@@ -526,6 +477,9 @@ def run_historical_replay(
         bot_id=bot.id,
         symbol=bot.symbol,
         timeframe=bot.timeframe,
+        risk_per_trade_pct=settings.backtest_risk_per_trade_pct,
+        strategy_version=STRATEGY_VERSION,
+        settings_fingerprint=replay_settings_fingerprint(settings, bot),
         period_start_utc=period_start,
         period_end_utc=period_end,
         candles_evaluated=len(visible_candles),

@@ -1276,7 +1276,6 @@ def _evaluate_portfolio_6_7(request: DecisionRequest, settings: Settings) -> Dec
 
 
 WEIGHTED_PORTFOLIO_PROFILES = {
-    "portfolio_6_7_75_50": {"bot-7": .75, "bot-6": .50},
     "portfolio_6_7_100_100": {"bot-7": 1.00, "bot-6": 1.00},
 }
 
@@ -1634,14 +1633,6 @@ def _evaluate_adaptive_portfolio_3_6_7(request: DecisionRequest, settings: Setti
 
 def evaluate_decision(request: DecisionRequest, settings: Settings, strategy_profile: str | None = None) -> DecisionResponse:
     profile = strategy_profile or settings.strategy_profile
-    if profile == "momentum_atr_breakout":
-        return _evaluate_momentum_atr(request, settings, profile)
-    if profile == "rsi_bollinger_reversion":
-        return _evaluate_rsi_bollinger(request, settings, profile)
-    if profile == "macd_trend_crossover":
-        return _evaluate_macd_trend(request, settings, profile)
-    if profile == "stochastic_trend_pullback":
-        return _evaluate_stochastic_pullback(request, settings, profile)
     if profile == "stochastic_sell_session":
         return _evaluate_stochastic_sell_session(request, settings, profile)
     if profile == "multitimeframe_trend_pullback":
@@ -1650,18 +1641,10 @@ def evaluate_decision(request: DecisionRequest, settings: Settings, strategy_pro
         return _evaluate_happy_gold_zigzag_scalper(request, settings, profile)
     if profile == "happy_gold_zigzag_regime_confirmed":
         return _evaluate_happy_gold_zigzag_regime_confirmed(request, settings, profile)
-    if profile == "happy_gold_zigzag_retest_atr":
-        return _evaluate_happy_gold_zigzag_retest_atr(request, settings, profile)
-    if profile == "portfolio_6_7":
-        return _evaluate_portfolio_6_7(request, settings)
-    if profile == "adaptive_portfolio_3_6_7":
-        return _evaluate_adaptive_portfolio_3_6_7(request, settings)
     if profile in WEIGHTED_PORTFOLIO_PROFILES:
         return _evaluate_weighted_portfolio_6_7(request, settings, profile)
     if profile == HAPPY_GOLD_COMBINED_PROFILE:
         return _evaluate_happy_gold_combined_portfolio(request, settings)
-    if profile == "fimath_ema20_flow":
-        return _evaluate_fimath(request, settings, profile)
     return DecisionResponse(
         action=DecisionAction.HOLD,
         reason="unsupported_strategy_profile",

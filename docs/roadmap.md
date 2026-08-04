@@ -1,49 +1,26 @@
-# Roadmap inicial
+# Roadmap
 
-## Fase 0 - Preparacao do ambiente
+## Concluído
 
-- [x] instalar Wine
-- [x] instalar MT5 no Linux
-- [x] validar execucao headless
-- [x] conectar conta demo
-- [x] documentar paths, logs e recuperacao
+- runtime MT5 reproduzível em Docker
+- serviço Python e contrato HTTP
+- histórico canônico desacoplado de estratégias
+- seis estratégias selecionadas em shadow
+- replay causal anual e snapshots versionados
+- portal autenticado, comparação e simulador por faixas
+- painel de saúde operacional
+- backup e remoção das estratégias rejeitadas
 
-## Fase 1 - Base do projeto
+## Próxima etapa: forward test shadow
 
-- [x] definir estrategia inicial
-- [x] definir simbolos e timeframes
-- [x] definir regras de entrada e saida
-- [x] definir limites de risco
-- [ ] definir horario operacional
+- acumular amostra independente dos seis bots
+- acompanhar heartbeat, latência, gaps e paper trades diariamente
+- confirmar custos reais, timezone e sequência intrabar com ticks
+- definir critérios formais de promoção/rejeição por estratégia
+- testar recuperação após queda do MT5, API e rede
 
-## Fase 2 - Arquitetura executavel
+## Fora do escopo atual
 
-- [x] criar EA MQL5 minimo
-- [x] criar Python service minimo
-- [x] criar contrato HTTP entre EA e Python
-- [x] registrar logs estruturados
-
-## Fase 3 - Simulacao e validacao
-
-- [ ] backtest historico
-- [x] replay controlado
-- [x] paper trading em demo
-- [x] cinco estratégias e uma variante experimental independentes em shadow no mesmo runtime
-- [x] comparação consolidada no portal
-- [ ] validacao de risco e falhas
-
-## Fase 4 - Operacao assistida
-
-- [ ] dashboard minimo de saude
-- [ ] alertas operacionais
-- [ ] bloqueios de emergencia
-- [ ] checklist pre-market e post-market
-
-## Perguntas que precisamos fechar antes da implementacao
-
-1. O bot vai operar qual mercado?
-2. Qual broker e servidor MT5 serao usados?
-3. O bot sera scalping, momentum, mean reversion ou breakout?
-4. Qual timeframe principal?
-5. Qual limite diario de perda?
-6. Vai operar so em conta demo no primeiro ciclo?
+- ativação em conta real
+- aumento automático de risco
+- garantia de retorno baseada no replay

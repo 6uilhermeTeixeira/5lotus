@@ -95,7 +95,8 @@ class SupabaseStoreTests(unittest.TestCase):
         candles = store.load_candles(bot, 1000, source_bot_id="bot-1")
 
         self.assertEqual(candles, [])
-        self.assertIn("bot_id=eq.bot-1", store.calls[0][0])
+        self.assertIn("market_history?", store.calls[0][0])
+        self.assertNotIn("bot_id=", store.calls[0][0])
 
     def test_bot_3_uses_its_own_open_position_scope(self) -> None:
         store = RecordingStore()

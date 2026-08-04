@@ -49,17 +49,12 @@ Preencha os inputs:
 - `ShadowBotIds`: `bot-2,bot-3,bot-4,bot-5` (aceita uma lista separada por vírgulas)
 - `ExperimentalBotId`: `bot-6` (força o polling do experimento mesmo em gráficos que preservam a lista shadow antiga)
 - `MultitimeframeResearchBotId`: `bot-7` (força o polling do experimento multitemporal sempre sem execução)
-- `PortfolioResearchBotId`, `AdaptivePortfolioResearchBotId` e `BalancedPortfolioResearchBotId`: legados, ignorados pelo polling
 - `AggressivePortfolioResearchBotId`: `bot-11` (força o polling da variante 100/100 sempre sem execução)
 - `HappyGoldResearchBotId`: `bot-12` (força o polling da reconstrução ZigZag M30 sempre sem execução)
 - `HappyGoldConfirmedResearchBotId`: `bot-13` (variante ZigZag com confirmação seletiva de regime, sempre sem execução)
-- `HappyGoldRetestResearchBotId`: `bot-15` (v2 com reteste M5, regime direcional e gestão ATR/R, sempre sem execução)
 - `HappyGoldCombinedPortfolioBotId`: `bot-16` (meta-portfólio da confirmação de regime com 7/6 100/100, sempre sem execução)
 - `HistoryCacheBars`: `100000` somente no bot canônico, visando aproximadamente um ano de M5 quando a corretora disponibilizar essa profundidade
 - `RefreshDeepHistoryOnInit`: `false` por padrão; ative somente para um bootstrap explícito dos 100 mil candles
-- `SecondaryHistorySymbol`: `EURUSD`
-- `SecondaryHistoryBotId`: `bot-eur-1`
-- `RefreshSecondaryHistoryOnInit`: `false`; estratégias EURUSD estão arquivadas
 - `LotusIngestApiKey`: valor de `DAYTRADE_INGEST_API_KEY`
 - `EnableOrderExecution`: `false`
 
@@ -93,7 +88,7 @@ O resultado deve indicar `"status":"ok"`. Após o fechamento de um trade demo, o
 `POST /api/trades` com a chave no header `X-2Lotus-Ingest-Key`; o painel 2Lotus passa a mostrar a
 operação gravada no Supabase.
 
-Durante shadow, confirme também nos logs que `bot-6`, `bot-7`, `bot-11`, `bot-12`, `bot-13`, `bot-15` e `bot-16` recebem HTTP 200. `strategy_signals`
+Durante shadow, confirme também nos logs que `bot-6`, `bot-7`, `bot-11`, `bot-12`, `bot-13` e `bot-16` recebem HTTP 200. `strategy_signals`
 recebe os candidatos quando cada setup ocorre e `paper_trades` mantém o variant `technical`;
 o Bot 1 também acompanha `flow_confirmed`. As chaves de sinal e as consultas de posição são
 segmentadas por bot. A execução real só pode ser avaliada depois da
@@ -115,17 +110,13 @@ dois, dá prioridade ao Bot 7 quando houver conflito, aplica 75% do risco-base a
 25% ao componente 6, e mantém uma única posição. O replay limita o conjunto a duas entradas e
 2R de perda por dia. O EA consulta o Bot 8 sempre com execução falsa durante o forward test.
 
-O Bot 16 combina o portfólio 6/7 com risco 100/100 e o Happy Gold ZigZag. Seu replay usa 2% do
+O Bot 16 combina o portfólio 6/7 com risco 100/100 e o Happy Gold ZigZag. Seu replay usa 0,25% do
 saldo por risco-base, aceita entradas entre 06:00–18:59 UTC e não possui limite diário de
 operações. Permanecem ativos o limite de uma posição simultânea, o cooldown de 15 minutos e o
 bloqueio ao atingir -2R no dia. O status `promising_not_live` mantém o bot somente em shadow.
 
-O catálogo EUR/USD replica os sete perfis e parâmetros do catálogo XAU/USD. O propósito é medir
-generalização; os resultados não devem ser interpretados como parâmetros otimizados para forex.
-O EA envia o histórico profundo EURUSD/M5 uma única vez para `bot-eur-1`, e os demais bots EUR
-reutilizam essa série. Depois da carga, dentro de `python-service`, execute
-`python -m scripts.cache_backtests --symbol EURUSD --days 365` para atualizar as curvas exibidas
-na tela inicial.
+O catálogo final acompanha somente XAUUSD/M5. O histórico profundo fica em `market_history` e é
+reutilizado pelas seis estratégias selecionadas.
 
 ## Segurança e recuperação
 

@@ -58,6 +58,9 @@ class SupabaseStore:
                 "period_days": period_days,
                 "period_start_utc": replay.period_start_utc.isoformat(),
                 "period_end_utc": replay.period_end_utc.isoformat(),
+                "strategy_version": replay.strategy_version,
+                "settings_fingerprint": replay.settings_fingerprint,
+                "market_data_through_utc": replay.period_end_utc.isoformat(),
                 "payload": compact_payload,
             },
             prefer="resolution=merge-duplicates,return=minimal",
@@ -155,7 +158,6 @@ class SupabaseStore:
             return
         payload = [
             {
-                "bot_id": bot_id,
                 "symbol": symbol,
                 "timeframe": timeframe,
                 "timestamp_utc": candle.timestamp_utc.isoformat(),
@@ -168,7 +170,12 @@ class SupabaseStore:
             for candle in candles
         ]
         for start in range(0, len(payload), 1000):
-            self._request("market_candles?on_conflict=bot_id,symbol,timeframe,timestamp_utc", method="POST", payload=payload[start:start + 1000], prefer="resolution=merge-duplicates,return=minimal")
+            batch = payload[start:start + 1000]
+            try:
+                self._request("market_history?on_conflict=symbol,timeframe,timestamp_utc", method="POST", payload=batch, prefer="resolution=merge-duplicates,return=minimal")
+            except RuntimeError:
+                legacy_batch = [{**row, "bot_id": bot_id} for row in batch]
+                self._request("market_candles?on_conflict=bot_id,symbol,timeframe,timestamp_utc", method="POST", payload=legacy_batch, prefer="resolution=merge-duplicates,return=minimal")
 
     def advance_paper_trades(self, bot_id: str, candles: list[CandleSnapshot]) -> None:
         if not candles:
@@ -353,7 +360,7 @@ class SupabaseStore:
         }
 
     def load_chart(self, bot: BotCatalogItem, limit: int = 5000, source_bot_id: str | None = None) -> MarketChartResponse:
-        candles = self.load_candles(bot, limit, source_bot_id=source_bot_id)
+        candles = self.load_candles(bot, limit)
         trades_query = urlencode(
             {
                 "bot_id": f"eq.{bot.id}",
@@ -370,13 +377,32 @@ class SupabaseStore:
 
     def load_candles(self, bot: BotCatalogItem, limit: int = 5000, source_bot_id: str | None = None) -> list[CandleSnapshot]:
         candle_rows: list[object] = []
-        market_data_bot_id = source_bot_id or bot.id
         for offset in range(0, limit, 1000):
-            query = urlencode({"bot_id": f"eq.{market_data_bot_id}", "symbol": f"eq.{bot.symbol}", "timeframe": f"eq.{bot.timeframe}", "select": "timestamp_utc,open,high,low,close,volume", "order": "timestamp_utc.desc", "limit": "1000", "offset": str(offset)})
-            page = self._request(f"market_candles?{query}")
+            query = urlencode({"symbol": f"eq.{bot.symbol}", "timeframe": f"eq.{bot.timeframe}", "select": "timestamp_utc,open,high,low,close,volume", "order": "timestamp_utc.desc", "limit": "1000", "offset": str(offset)})
+            try:
+                page = self._request(f"market_history?{query}")
+            except RuntimeError:
+                legacy_query = urlencode({"bot_id": f"eq.{source_bot_id or bot.id}", "symbol": f"eq.{bot.symbol}", "timeframe": f"eq.{bot.timeframe}", "select": "timestamp_utc,open,high,low,close,volume", "order": "timestamp_utc.desc", "limit": "1000", "offset": str(offset)})
+                page = self._request(f"market_candles?{legacy_query}")
             if not isinstance(page, list) or not page:
                 break
             candle_rows.extend(page)
             if len(page) < 1000:
                 break
         return [CandleSnapshot.model_validate(row) for row in reversed(candle_rows)]
+
+    def record_runtime_status(self, bot_id: str, *, request_at: datetime, candle_at: datetime | None, action: str, reason: str, latency_ms: float) -> None:
+        self._request(
+            "bot_runtime_status?on_conflict=bot_id",
+            method="POST",
+            payload={"bot_id": bot_id, "last_request_at_utc": request_at.isoformat(), "last_candle_at_utc": candle_at.isoformat() if candle_at else None, "last_action": action, "last_reason": reason, "last_latency_ms": round(latency_ms, 2), "consecutive_errors": 0, "last_error": None},
+            prefer="resolution=merge-duplicates,return=minimal",
+        )
+
+    def load_operations(self) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
+        statuses = self._request("bot_runtime_status?select=*&order=bot_id")
+        snapshots = self._request("backtest_snapshots?period_days=eq.365&select=bot_id,updated_at,market_data_through_utc&order=bot_id")
+        return (
+            [row for row in statuses if isinstance(row, dict)] if isinstance(statuses, list) else [],
+            [row for row in snapshots if isinstance(row, dict)] if isinstance(snapshots, list) else [],
+        )

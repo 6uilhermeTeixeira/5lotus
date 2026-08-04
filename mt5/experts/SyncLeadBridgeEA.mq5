@@ -7,25 +7,17 @@ input string TradeResultsUrl = "http://127.0.0.1:8000/api/trades";
 input string CandleCacheUrl = "http://127.0.0.1:8000/api/candles";
 input string LotusIngestApiKey = "";
 input string ResultsBotId = "bot-6";
-input string ShadowBotIds = "bot-2,bot-3,bot-4,bot-5";
 input string ExperimentalBotId = "bot-6";
 input string MultitimeframeResearchBotId = "bot-7";
-input string PortfolioResearchBotId = "bot-8";
-input string AdaptivePortfolioResearchBotId = "bot-9";
-input string BalancedPortfolioResearchBotId = "bot-10";
 input string AggressivePortfolioResearchBotId = "bot-11";
 input string HappyGoldResearchBotId = "bot-12";
 input string HappyGoldConfirmedResearchBotId = "bot-13";
-input string HappyGoldRetestResearchBotId = "bot-15";
 input string HappyGoldCombinedPortfolioBotId = "bot-16";
 input string StrategySymbol = "XAUUSD";
-input string SecondaryHistorySymbol = "EURUSD";
-input string SecondaryHistoryBotId = "bot-eur-1";
 input string StrategyTimeframe = "M5";
 input int HistoryBars = 60;
 input int HistoryCacheBars = 100000;
 input bool RefreshDeepHistoryOnInit = false;
-input bool RefreshSecondaryHistoryOnInit = false;
 input int PollIntervalSeconds = 5;
 input int RequestTimeoutMs = 3000;
 input bool EnableOrderExecution = false;
@@ -36,9 +28,6 @@ CTrade trade;
 double lastBid = 0.0;
 int upTicks = 0, downTicks = 0, neutralTicks = 0;
 double upVolume = 0.0, downVolume = 0.0;
-bool secondaryHistoryReady = false;
-int secondaryHistoryAttempts = 0;
-string secondaryHistoryCacheKey = "";
 
 int OnInit()
 {
@@ -88,14 +77,6 @@ void OnTradeTransaction(const MqlTradeTransaction &transaction, const MqlTradeRe
 
 void OnTimer()
 {
-   if(RefreshSecondaryHistoryOnInit && !secondaryHistoryReady && secondaryHistoryAttempts < 6)
-   {
-      secondaryHistoryAttempts++;
-      secondaryHistoryReady = CacheHistory(SecondaryHistorySymbol, SecondaryHistoryBotId);
-      if(secondaryHistoryReady && secondaryHistoryCacheKey != "")
-         GlobalVariableSet(secondaryHistoryCacheKey, (double)TimeGMT());
-   }
-
    MqlTick tick;
    if(!SymbolInfoTick(_Symbol, tick))
    {
@@ -103,9 +84,7 @@ void OnTimer()
       return;
    }
 
-   // The active research portfolio is intentionally restricted to Bots 6, 7,
-   // 11, 12, 13, 15 and 16. Legacy inputs remain declared so existing chart presets load,
-   // but they no longer cause archived strategies to be polled.
+   // The shadow portfolio is intentionally restricted to Bots 6, 7, 11, 12, 13 and 16.
    if(ExperimentalBotId != "")
       PollDecision(tick, ExperimentalBotId, false);
    if(MultitimeframeResearchBotId != "" && MultitimeframeResearchBotId != ExperimentalBotId)
@@ -116,9 +95,7 @@ void OnTimer()
       PollDecision(tick, HappyGoldResearchBotId, false);
    if(HappyGoldConfirmedResearchBotId != "" && HappyGoldConfirmedResearchBotId != ExperimentalBotId && HappyGoldConfirmedResearchBotId != MultitimeframeResearchBotId && HappyGoldConfirmedResearchBotId != AggressivePortfolioResearchBotId && HappyGoldConfirmedResearchBotId != HappyGoldResearchBotId)
       PollDecision(tick, HappyGoldConfirmedResearchBotId, false);
-   if(HappyGoldRetestResearchBotId != "" && HappyGoldRetestResearchBotId != ExperimentalBotId && HappyGoldRetestResearchBotId != MultitimeframeResearchBotId && HappyGoldRetestResearchBotId != AggressivePortfolioResearchBotId && HappyGoldRetestResearchBotId != HappyGoldResearchBotId && HappyGoldRetestResearchBotId != HappyGoldConfirmedResearchBotId)
-      PollDecision(tick, HappyGoldRetestResearchBotId, false);
-   if(HappyGoldCombinedPortfolioBotId != "" && HappyGoldCombinedPortfolioBotId != ExperimentalBotId && HappyGoldCombinedPortfolioBotId != MultitimeframeResearchBotId && HappyGoldCombinedPortfolioBotId != AggressivePortfolioResearchBotId && HappyGoldCombinedPortfolioBotId != HappyGoldResearchBotId && HappyGoldCombinedPortfolioBotId != HappyGoldConfirmedResearchBotId && HappyGoldCombinedPortfolioBotId != HappyGoldRetestResearchBotId)
+   if(HappyGoldCombinedPortfolioBotId != "" && HappyGoldCombinedPortfolioBotId != ExperimentalBotId && HappyGoldCombinedPortfolioBotId != MultitimeframeResearchBotId && HappyGoldCombinedPortfolioBotId != AggressivePortfolioResearchBotId && HappyGoldCombinedPortfolioBotId != HappyGoldResearchBotId && HappyGoldCombinedPortfolioBotId != HappyGoldConfirmedResearchBotId)
       PollDecision(tick, HappyGoldCombinedPortfolioBotId, false);
 
    upTicks = downTicks = neutralTicks = 0;
@@ -201,20 +178,6 @@ void CacheConfiguredBots()
       CacheHistory(StrategySymbol, ResultsBotId);
    else
       Print("Deep history refresh skipped; set RefreshDeepHistoryOnInit=true for an explicit bootstrap.");
-   if(RefreshSecondaryHistoryOnInit)
-   {
-      secondaryHistoryCacheKey = "2LotusHistory_" + SecondaryHistorySymbol + "_" + StrategyTimeframe;
-      if(GlobalVariableCheck(secondaryHistoryCacheKey))
-      {
-         secondaryHistoryReady = true;
-         PrintFormat("Secondary history already bootstrapped symbol=%s at=%s", SecondaryHistorySymbol, TimeToString((datetime)GlobalVariableGet(secondaryHistoryCacheKey), TIME_DATE|TIME_SECONDS));
-      }
-      else
-      {
-         SymbolSelect(SecondaryHistorySymbol, true);
-         PrintFormat("Secondary history refresh scheduled symbol=%s bot_id=%s", SecondaryHistorySymbol, SecondaryHistoryBotId);
-      }
-   }
 }
 
 bool CacheHistory(const string symbol, const string botId)

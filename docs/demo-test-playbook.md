@@ -116,7 +116,7 @@ Dentro do desktop remoto:
 
 - `StrategyServiceUrl = http://127.0.0.1:8000/decision`
 - `TradeResultsUrl = http://127.0.0.1:8000/api/trades`
-- `ResultsBotId = bot-1`
+- `ResultsBotId = bot-6`
 - `LotusIngestApiKey =` valor de `DAYTRADE_INGEST_API_KEY` do `.env` do 2Lotus
 - `StrategyTimeframe = M5`
 - `HistoryBars = 30`
@@ -126,7 +126,7 @@ Dentro do desktop remoto:
 
 - `StrategyServiceUrl = http://127.0.0.1:8000/decision`
 - `TradeResultsUrl = http://127.0.0.1:8000/api/trades`
-- `ResultsBotId = bot-1`
+- `ResultsBotId = bot-6`
 - `StrategyTimeframe = M5`
 - `HistoryBars = 30`
 - `EnableOrderExecution = true`

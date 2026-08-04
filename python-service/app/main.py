@@ -3,17 +3,19 @@ from copy import copy
 from hmac import compare_digest
 from datetime import datetime, timezone
 from pathlib import Path
+from time import monotonic
 
 from fastapi import FastAPI, Header, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .auth import SESSION_COOKIE_NAME, create_session_value, has_valid_session, password_matches, read_login_password
-from .backtest import run_historical_replay
+from .backtest import replay_settings_fingerprint
 from .config import get_settings
-from .pages import render_catalog_page, render_comparison_page, render_login_page, render_results_page
+from .growth import simulate_growth, simulate_tiered_growth
+from .pages import render_catalog_page, render_comparison_page, render_growth_simulator_page, render_login_page, render_operations_page, render_results_page
 from .results_store import get_bot, load_bots_catalog, load_results_snapshot, resolve_bot_results_file
-from .schemas import BotCatalogItem, CandleIngestRequest, DecisionAction, DecisionRequest, DecisionResponse, EquityComparisonResponse, EquityPoint, EquitySeries, HealthResponse, HistoricalReplayResponse, MarketChartResponse, ResultsResponse, TradeIngestRequest
+from .schemas import BotCatalogItem, CandleIngestRequest, DecisionAction, DecisionRequest, DecisionResponse, EquityComparisonResponse, EquityPoint, EquitySeries, GrowthSimulationRequest, GrowthSimulationResponse, HealthResponse, HistoricalReplayResponse, MarketChartResponse, OperationsResponse, ResultsResponse, ResultsSummary, RuntimeStatusItem, TradeIngestRequest
 from .strategy import HAPPY_GOLD_COMBINED_PROFILE, WEIGHTED_PORTFOLIO_PROFILES, evaluate_decision
 from .supabase_store import SupabaseStore
 
@@ -24,6 +26,16 @@ settings = get_settings()
 app = FastAPI(title=settings.app_name)
 app.mount("/static", StaticFiles(directory=Path(__file__).resolve().parent / "static"), name="static")
 BRAND_ICON_PATH = Path(__file__).resolve().parent / "static" / "brand" / "icon-1-black.png"
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    return response
 
 
 @app.get("/favicon.ico", include_in_schema=False)
@@ -72,12 +84,61 @@ def _load_bot_results(bot: BotCatalogItem) -> ResultsResponse:
     return load_results_snapshot(resolve_bot_results_file(settings.bots_catalog_path, bot))
 
 
-def _market_data_source_bot_id(bot: BotCatalogItem) -> str:
-    if bot.symbol.upper() == settings.default_symbol.upper() and bot.timeframe.upper() == settings.default_timeframe.upper():
-        return settings.backtest_market_data_bot_id
-    if bot.symbol.upper() == "EURUSD" and bot.timeframe.upper() == "M5":
-        return "bot-eur-1"
-    return bot.id
+def _replay_cache_matches_settings(replay: HistoricalReplayResponse, bot: BotCatalogItem | None = None) -> bool:
+    risk_matches = round(replay.risk_per_trade_pct, 8) == round(settings.backtest_risk_per_trade_pct, 8)
+    return risk_matches and (bot is None or replay.settings_fingerprint == replay_settings_fingerprint(settings, bot))
+
+
+def _risk_scale_for_legacy_replay(bot: BotCatalogItem, replay: HistoricalReplayResponse) -> float | None:
+    if round(replay.risk_per_trade_pct, 8) == round(settings.backtest_risk_per_trade_pct, 8):
+        return 1.0
+    legacy_risk = replay.risk_per_trade_pct
+    if legacy_risk <= 0 and bot.strategy_profile == HAPPY_GOLD_COMBINED_PROFILE:
+        legacy_risk = 2.0
+    if legacy_risk <= 0:
+        return None
+    return settings.backtest_risk_per_trade_pct / legacy_risk
+
+
+def _normalize_replay_for_equity(bot: BotCatalogItem, replay: HistoricalReplayResponse) -> HistoricalReplayResponse | None:
+    scale = _risk_scale_for_legacy_replay(bot, replay)
+    if scale is None:
+        return None
+    if scale == 1.0:
+        return replay
+    normalized = replay.model_copy(deep=True)
+    normalized.risk_per_trade_pct = settings.backtest_risk_per_trade_pct
+    normalized.daily_pnl = [
+        point.model_copy(update={"net_pnl": round(point.net_pnl * scale, 2)})
+        for point in normalized.daily_pnl
+    ]
+    normalized.summary = ResultsSummary(
+        trades_count=replay.summary.trades_count,
+        wins=replay.summary.wins,
+        losses=replay.summary.losses,
+        breakevens=replay.summary.breakevens,
+        open_positions=replay.summary.open_positions,
+        win_rate_pct=replay.summary.win_rate_pct,
+        gross_profit=round(replay.summary.gross_profit * scale, 2),
+        gross_loss=round(replay.summary.gross_loss * scale, 2),
+        net_pnl=round(replay.summary.net_pnl * scale, 2),
+        avg_win=round(replay.summary.avg_win * scale, 2),
+        avg_loss=round(replay.summary.avg_loss * scale, 2),
+        profit_factor=replay.summary.profit_factor,
+        avg_rr=replay.summary.avg_rr,
+        best_trade=round(replay.summary.best_trade * scale, 2),
+        worst_trade=round(replay.summary.worst_trade * scale, 2),
+    )
+    return normalized
+
+
+def _load_or_run_backtest_replay(store: SupabaseStore, bot: BotCatalogItem, days: int, *, include_candles: bool = False) -> HistoricalReplayResponse | None:
+    cached = store.load_backtest_snapshot(bot.id, days)
+    if cached is not None and _replay_cache_matches_settings(cached, bot):
+        if include_candles:
+            cached.candles = store.load_candles(bot, settings.chart_cache_limit)
+        return cached
+    return None
 
 
 def _require_ingest_key(provided_key: str | None) -> None:
@@ -131,7 +192,7 @@ def logout() -> RedirectResponse:
 def bots_page(request: Request) -> HTMLResponse | RedirectResponse:
     if redirect := _require_page_session(request):
         return redirect
-    return render_catalog_page(_list_bots(True), _list_bots(False))
+    return render_catalog_page(_list_bots(True))
 
 
 @app.get("/compare", response_class=HTMLResponse, response_model=None, include_in_schema=False)
@@ -139,6 +200,20 @@ def comparison_page(request: Request) -> HTMLResponse | RedirectResponse:
     if redirect := _require_page_session(request):
         return redirect
     return render_comparison_page(_list_bots())
+
+
+@app.get("/growth-simulator", response_class=HTMLResponse, response_model=None, include_in_schema=False)
+def growth_simulator_page(request: Request) -> HTMLResponse | RedirectResponse:
+    if redirect := _require_page_session(request):
+        return redirect
+    return render_growth_simulator_page()
+
+
+@app.get("/operations", response_class=HTMLResponse, response_model=None, include_in_schema=False)
+def operations_page(request: Request) -> HTMLResponse | RedirectResponse:
+    if redirect := _require_page_session(request):
+        return redirect
+    return render_operations_page()
 
 
 @app.get("/bots/{bot_id}", response_class=HTMLResponse, response_model=None, include_in_schema=False)
@@ -159,7 +234,9 @@ def legacy_results(request: Request) -> RedirectResponse:
 @app.get("/api/bots", response_model=list[BotCatalogItem])
 def read_bots(request: Request, archived: bool = False) -> list[BotCatalogItem]:
     _require_api_session(request)
-    return _list_bots(not archived)
+    if archived:
+        raise HTTPException(status_code=410, detail="archived strategies were retired")
+    return _list_bots(True)
 
 
 @app.get("/api/compare")
@@ -199,6 +276,8 @@ def read_equity_comparison(request: Request, symbol: str = "XAUUSD", days: int =
     missing: list[str] = []
     for bot in bots:
         replay = store.load_backtest_snapshot(bot.id, days)
+        if replay is not None:
+            replay = _normalize_replay_for_equity(bot, replay)
         if replay is None:
             missing.append(bot.id)
             continue
@@ -218,6 +297,88 @@ def read_equity_comparison(request: Request, symbol: str = "XAUUSD", days: int =
     )
 
 
+@app.get("/api/growth-simulation", response_model=GrowthSimulationResponse)
+def read_growth_simulation(
+    request: Request,
+    initial_balance: float = 10000,
+    risk_per_trade_pct: float = 0.25,
+) -> GrowthSimulationResponse:
+    _require_api_session(request)
+    if not 100 <= initial_balance <= 100_000_000:
+        raise HTTPException(status_code=422, detail="initial balance must be between 100 and 100000000")
+    if not 0.01 <= risk_per_trade_pct <= 10:
+        raise HTTPException(status_code=422, detail="risk per trade must be between 0.01 and 10")
+    if not _uses_supabase_results():
+        raise HTTPException(status_code=503, detail="growth simulation requires DAYTRADE_RESULTS_STORE=SUPABASE")
+    bot = _find_bot("bot-16", include_archived=True)
+    replay = SupabaseStore(settings).load_backtest_snapshot(bot.id, 365)
+    if replay is None or not _replay_cache_matches_settings(replay, bot):
+        raise HTTPException(status_code=503, detail="the annual 0.25 percent replay must be recalculated first")
+    return GrowthSimulationResponse(
+        bot_id=bot.id,
+        bot_name=bot.name,
+        period_start_utc=replay.period_start_utc,
+        period_end_utc=replay.period_end_utc,
+        reference=simulate_growth(replay, settings.backtest_balance, settings.backtest_risk_per_trade_pct, label="Referência"),
+        simulation=simulate_growth(replay, initial_balance, risk_per_trade_pct, label="Simulação"),
+    )
+
+
+@app.post("/api/growth-simulation", response_model=GrowthSimulationResponse)
+def create_growth_simulation(payload: GrowthSimulationRequest, request: Request) -> GrowthSimulationResponse:
+    _require_api_session(request)
+    if not _uses_supabase_results():
+        raise HTTPException(status_code=503, detail="growth simulation requires DAYTRADE_RESULTS_STORE=SUPABASE")
+    tiers = sorted(payload.risk_tiers, key=lambda tier: tier.balance_threshold)
+    if tiers[0].balance_threshold > payload.initial_balance:
+        raise HTTPException(status_code=422, detail="the first tier must start at or below the initial balance")
+    if any(tiers[index].risk_per_trade_pct > tiers[index - 1].risk_per_trade_pct for index in range(1, len(tiers))):
+        raise HTTPException(status_code=422, detail="risk must stay equal or decrease at higher balance tiers")
+    bot = _find_bot("bot-16")
+    replay = SupabaseStore(settings).load_backtest_snapshot(bot.id, 365)
+    if replay is None or not _replay_cache_matches_settings(replay, bot):
+        raise HTTPException(status_code=503, detail="the annual replay cache is unavailable or stale")
+    return GrowthSimulationResponse(
+        bot_id=bot.id,
+        bot_name=bot.name,
+        period_start_utc=replay.period_start_utc,
+        period_end_utc=replay.period_end_utc,
+        reference=simulate_growth(replay, settings.backtest_balance, settings.backtest_risk_per_trade_pct, label="Referência"),
+        simulation=simulate_tiered_growth(replay, payload.initial_balance, tiers, label="Simulação"),
+    )
+
+
+@app.get("/api/operations", response_model=OperationsResponse)
+def read_operations(request: Request) -> OperationsResponse:
+    _require_api_session(request)
+    bots = _list_bots()
+    store = SupabaseStore(settings)
+    statuses, snapshots = store.load_operations()
+    status_by_bot = {str(row.get("bot_id")): row for row in statuses}
+    snapshot_by_bot = {str(row.get("bot_id")): row for row in snapshots}
+    now = datetime.now(timezone.utc)
+    items: list[RuntimeStatusItem] = []
+    for bot in bots:
+        state = status_by_bot.get(bot.id, {})
+        snapshot = snapshot_by_bot.get(bot.id, {})
+        last_request = datetime.fromisoformat(str(state["last_request_at_utc"])) if state.get("last_request_at_utc") else None
+        if now.weekday() >= 5:
+            health = "market_closed"
+        elif last_request is None:
+            health = "no_data"
+        else:
+            age_minutes = (now - last_request).total_seconds() / 60
+            health = "healthy" if age_minutes <= 15 else "delayed" if age_minutes <= 30 else "stale"
+        items.append(RuntimeStatusItem(
+            bot_id=bot.id, name=bot.name, status=health,
+            last_request_at_utc=last_request,
+            last_candle_at_utc=state.get("last_candle_at_utc"), last_action=state.get("last_action"), last_reason=state.get("last_reason"),
+            last_latency_ms=state.get("last_latency_ms"), consecutive_errors=int(state.get("consecutive_errors") or 0), last_error=state.get("last_error"),
+            snapshot_updated_at_utc=snapshot.get("updated_at"), market_data_through_utc=snapshot.get("market_data_through_utc"),
+        ))
+    return OperationsResponse(updated_at_utc=now, bots=items)
+
+
 @app.get("/api/bots/{bot_id}/results", response_model=ResultsResponse)
 def read_bot_results(bot_id: str, request: Request) -> ResultsResponse:
     _require_api_session(request)
@@ -230,7 +391,7 @@ def read_bot_chart(bot_id: str, request: Request) -> MarketChartResponse:
     bot = _find_bot(bot_id, include_archived=True)
     if not _uses_supabase_results():
         raise HTTPException(status_code=503, detail="chart data requires DAYTRADE_RESULTS_STORE=SUPABASE")
-    return SupabaseStore(settings).load_chart(bot, settings.chart_cache_limit, source_bot_id=_market_data_source_bot_id(bot))
+    return SupabaseStore(settings).load_chart(bot, settings.chart_cache_limit)
 
 
 @app.get("/api/bots/{bot_id}/historical-replay", response_model=HistoricalReplayResponse)
@@ -242,15 +403,10 @@ def read_historical_replay(bot_id: str, request: Request, days: int = 120) -> Hi
     if not _uses_supabase_results():
         raise HTTPException(status_code=503, detail="historical replay requires DAYTRADE_RESULTS_STORE=SUPABASE")
     store = SupabaseStore(settings)
-    source_bot_id = _market_data_source_bot_id(bot)
-    cached = store.load_backtest_snapshot(bot.id, days)
-    if cached is not None:
-        cached.candles = store.load_candles(bot, settings.chart_cache_limit, source_bot_id=source_bot_id)
-        return cached
-    candles = store.load_candles(bot, settings.backtest_candle_limit, source_bot_id=source_bot_id)
-    if not candles:
+    replay = _load_or_run_backtest_replay(store, bot, days, include_candles=True)
+    if replay is None:
         raise HTTPException(status_code=404, detail="no historical candles available for replay")
-    return run_historical_replay(bot, candles, settings, days=days)
+    return replay
 
 
 @app.get("/api/results", response_model=ResultsResponse, deprecated=True)
@@ -288,7 +444,8 @@ def healthcheck() -> HealthResponse:
 
 
 @app.get("/config")
-def read_config() -> dict[str, str | int | float | bool]:
+def read_config(request: Request) -> dict[str, str | int | float | bool]:
+    _require_api_session(request)
     return {
         "app_name": settings.app_name,
         "host": settings.host,
@@ -310,7 +467,6 @@ def read_config() -> dict[str, str | int | float | bool]:
         "backtest_balance": settings.backtest_balance,
         "backtest_spread_points": settings.backtest_spread_points,
         "backtest_candle_limit": settings.backtest_candle_limit,
-        "backtest_market_data_bot_id": settings.backtest_market_data_bot_id,
         "backtest_risk_per_trade_pct": settings.backtest_risk_per_trade_pct,
         "backtest_slippage_points": settings.backtest_slippage_points,
         "backtest_commission_per_lot": settings.backtest_commission_per_lot,
@@ -322,9 +478,6 @@ def read_config() -> dict[str, str | int | float | bool]:
         "happy_gold_trailing_activation_points": settings.happy_gold_trailing_activation_points,
         "happy_gold_trailing_distance_points": settings.happy_gold_trailing_distance_points,
         "happy_gold_max_holding_bars": settings.happy_gold_max_holding_bars,
-        "happy_gold_v2_stop_atr": settings.happy_gold_v2_stop_atr,
-        "happy_gold_v2_target_r": settings.happy_gold_v2_target_r,
-        "happy_gold_v2_max_holding_bars": settings.happy_gold_v2_max_holding_bars,
         "happy_gold_combined_session_start_utc": settings.happy_gold_combined_session_start_utc,
         "happy_gold_combined_session_end_utc": settings.happy_gold_combined_session_end_utc,
         "enable_live_decisions": settings.enable_live_decisions,
@@ -336,6 +489,7 @@ def read_config() -> dict[str, str | int | float | bool]:
 
 @app.post("/decision", response_model=DecisionResponse)
 def decision(payload: DecisionRequest, x_2lotus_ingest_key: str | None = Header(default=None)) -> DecisionResponse:
+    started_at = monotonic()
     _require_ingest_key(x_2lotus_ingest_key)
     store: SupabaseStore | None = None
     strategy_profile = settings.strategy_profile
@@ -347,22 +501,24 @@ def decision(payload: DecisionRequest, x_2lotus_ingest_key: str | None = Header(
         store = SupabaseStore(settings)
         store.upsert_candles(payload.bot_id, payload.symbol, payload.timeframe, payload.candles)
         store.advance_paper_trades(payload.bot_id, payload.candles)
-        if strategy_profile in {"multitimeframe_trend_pullback", "portfolio_6_7", "adaptive_portfolio_3_6_7", "happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed", "happy_gold_zigzag_retest_atr", HAPPY_GOLD_COMBINED_PROFILE, *WEIGHTED_PORTFOLIO_PROFILES}:
+        if strategy_profile in {"multitimeframe_trend_pullback", "happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed", HAPPY_GOLD_COMBINED_PROFILE, *WEIGHTED_PORTFOLIO_PROFILES}:
             payload.candles = store.load_candles(
                 bot,
-                4000 if strategy_profile in {"adaptive_portfolio_3_6_7", "happy_gold_zigzag_regime_confirmed", "happy_gold_zigzag_retest_atr", HAPPY_GOLD_COMBINED_PROFILE} or strategy_profile in WEIGHTED_PORTFOLIO_PROFILES else 1000,
-                source_bot_id=_market_data_source_bot_id(bot),
+                4000 if strategy_profile in {"happy_gold_zigzag_regime_confirmed", HAPPY_GOLD_COMBINED_PROFILE} or strategy_profile in WEIGHTED_PORTFOLIO_PROFILES else 1000,
             )
     strategy_settings = settings
     if payload.bot_id:
         strategy_settings = copy(settings)
         strategy_settings.default_symbol = payload.symbol
         strategy_settings.default_timeframe = payload.timeframe
-        if strategy_profile == "adaptive_portfolio_3_6_7" and store:
-            strategy_settings.adaptive_component_health = store.load_adaptive_component_health(payload.timestamp_utc)
         if (strategy_profile in WEIGHTED_PORTFOLIO_PROFILES or strategy_profile == HAPPY_GOLD_COMBINED_PROFILE) and store:
             strategy_settings.portfolio_risk_state = store.load_portfolio_risk_state(payload.bot_id, payload.timestamp_utc)
     response = evaluate_decision(payload, strategy_settings, strategy_profile)
+    if payload.bot_id and store:
+        try:
+            store.record_runtime_status(payload.bot_id, request_at=payload.timestamp_utc, candle_at=payload.candles[-1].timestamp_utc if payload.candles else None, action=response.action.value, reason=response.reason, latency_ms=(monotonic() - started_at) * 1000)
+        except RuntimeError:
+            logger.warning("runtime status could not be persisted bot_id=%s", payload.bot_id)
     if payload.bot_id and store and response.metadata.get("candidate"):
         signal_key = store.record_strategy_candidate(payload, response)
         if signal_key:
