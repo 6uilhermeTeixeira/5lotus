@@ -1,0 +1,124 @@
+{
+  "method": "Known high/medium-confidence entries matched to exhaustive multiwindow candidates by side and time.",
+  "tolerance_seconds": 10,
+  "known_entries": 95,
+  "known_entries_with_candidate": 47,
+  "candidate_rows": 43610,
+  "matched_candidate_rows": 47,
+  "candidate_precision_pct": 0.1078,
+  "top_discriminators": [
+    {
+      "feature": "hour_utc",
+      "matched_median": 9.533333,
+      "unmatched_median": 12.133333,
+      "auc": 0.379942,
+      "separation": 0.620058,
+      "matched_p10": 3.36,
+      "matched_p90": 13.92
+    },
+    {
+      "feature": "score",
+      "matched_median": 6.0,
+      "unmatched_median": 5.0,
+      "auc": 0.591474,
+      "separation": 0.591474,
+      "matched_p10": 4.0,
+      "matched_p90": 6.0
+    },
+    {
+      "feature": "ratio_300_900",
+      "matched_median": 0.737127,
+      "unmatched_median": 0.675124,
+      "auc": 0.570356,
+      "separation": 0.570356,
+      "matched_p10": 0.459227,
+      "matched_p90": 1.411283
+    },
+    {
+      "feature": "ratio_10_60",
+      "matched_median": 0.370079,
+      "unmatched_median": 0.29486,
+      "auc": 0.568019,
+      "separation": 0.568019,
+      "matched_p10": 0.07693,
+      "matched_p90": 1.009204
+    },
+    {
+      "feature": "move_10s_pips",
+      "matched_median": 79.65,
+      "unmatched_median": 66.5,
+      "auc": 0.567311,
+      "separation": 0.567311,
+      "matched_p10": 14.89,
+      "matched_p90": 268.2
+    },
+    {
+      "feature": "move_900s_pips",
+      "matched_median": 876.65,
+      "unmatched_median": 953.15,
+      "auc": 0.44309,
+      "separation": 0.55691,
+      "matched_p10": 441.8,
+      "matched_p90": 1676.64
+    },
+    {
+      "feature": "move_30s_pips",
+      "matched_median": 149.35,
+      "unmatched_median": 124.0,
+      "auc": 0.545682,
+      "separation": 0.545682,
+      "matched_p10": 31.4,
+      "matched_p90": 355.78
+    },
+    {
+      "feature": "move_5s_pips",
+      "matched_median": 74.0,
+      "unmatched_median": 61.5,
+      "auc": 0.532561,
+      "separation": 0.532561,
+      "matched_p10": 1.4,
+      "matched_p90": 247.76
+    },
+    {
+      "feature": "ratio_5_60",
+      "matched_median": 0.352334,
+      "unmatched_median": 0.272171,
+      "auc": 0.528608,
+      "separation": 0.528608,
+      "matched_p10": -0.012258,
+      "matched_p90": 0.696204
+    },
+    {
+      "feature": "ratio_60_300",
+      "matched_median": 0.391902,
+      "unmatched_median": 0.338677,
+      "auc": 0.527878,
+      "separation": 0.527878,
+      "matched_p10": 0.163975,
+      "matched_p90": 0.91663
+    },
+    {
+      "feature": "ratio_30_60",
+      "matched_median": 0.548647,
+      "unmatched_median": 0.564356,
+      "auc": 0.527555,
+      "separation": 0.527555,
+      "matched_p10": 0.098831,
+      "matched_p90": 1.274296
+    },
+    {
+      "feature": "acceleration_60_vs_prior_240",
+      "matched_median": 0.644471,
+      "unmatched_median": 0.512121,
+      "auc": 0.52676,
+      "separation": 0.52676,
+      "matched_p10": 0.196146,
+      "matched_p90": 12.382368
+    }
+  ],
+  "limitations": [
+    "Candidate thresholds were derived from this labeled period.",
+    "A temporal match is evidence of correspondence, not proof of the original internal signal.",
+    "Unmatched candidates greatly outnumber entries; AUC alone does not establish usable precision."
+  ]
+}

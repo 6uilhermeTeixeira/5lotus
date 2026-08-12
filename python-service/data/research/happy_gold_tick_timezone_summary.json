@@ -1,0 +1,82 @@
+{
+  "method": "Best side-correct Dukascopy quote inside each published Myfxbook minute",
+  "limitations": [
+    "Myfxbook timestamps have minute precision and unknown timezone.",
+    "Dukascopy is not the unknown broker used by the strategy.",
+    "Only dates with completed local tick files are included in matched_trades."
+  ],
+  "ranking": [
+    {
+      "hypothesis": "europe_helsinki",
+      "candidate_trades": 773,
+      "matched_trades": 81,
+      "coverage_percent": 10.479,
+      "median_absolute_error": 0.005,
+      "p90_absolute_error": 0.055,
+      "mean_absolute_error": 0.02157,
+      "within_0_25": 81,
+      "within_0_50": 81,
+      "within_1_00": 81
+    },
+    {
+      "hypothesis": "fixed_utc_plus_2",
+      "candidate_trades": 773,
+      "matched_trades": 81,
+      "coverage_percent": 10.479,
+      "median_absolute_error": 0.075,
+      "p90_absolute_error": 22.215,
+      "mean_absolute_error": 6.60521,
+      "within_0_25": 45,
+      "within_0_50": 47,
+      "within_1_00": 48
+    },
+    {
+      "hypothesis": "fixed_utc_plus_3",
+      "candidate_trades": 773,
+      "matched_trades": 81,
+      "coverage_percent": 10.479,
+      "median_absolute_error": 1.138,
+      "p90_absolute_error": 17.615,
+      "mean_absolute_error": 6.23444,
+      "within_0_25": 40,
+      "within_0_50": 40,
+      "within_1_00": 40
+    },
+    {
+      "hypothesis": "europe_berlin",
+      "candidate_trades": 773,
+      "matched_trades": 81,
+      "coverage_percent": 10.479,
+      "median_absolute_error": 7.302,
+      "p90_absolute_error": 27.795,
+      "mean_absolute_error": 11.29774,
+      "within_0_25": 7,
+      "within_0_50": 11,
+      "within_1_00": 17
+    },
+    {
+      "hypothesis": "fixed_utc_plus_1",
+      "candidate_trades": 773,
+      "matched_trades": 81,
+      "coverage_percent": 10.479,
+      "median_absolute_error": 9.905,
+      "p90_absolute_error": 27.795,
+      "mean_absolute_error": 13.6381,
+      "within_0_25": 8,
+      "within_0_50": 10,
+      "within_1_00": 16
+    },
+    {
+      "hypothesis": "utc",
+      "candidate_trades": 773,
+      "matched_trades": 81,
+      "coverage_percent": 10.479,
+      "median_absolute_error": 15.145,
+      "p90_absolute_error": 47.079,
+      "mean_absolute_error": 20.71912,
+      "within_0_25": 5,
+      "within_0_50": 7,
+      "within_1_00": 7
+    }
+  ]
+}

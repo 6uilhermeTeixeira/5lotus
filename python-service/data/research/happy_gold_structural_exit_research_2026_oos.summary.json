@@ -1,0 +1,419 @@
+{
+  "method": "Tick-executable exit grid on fixed structural signals; ranking prioritizes profitable quarters before full-period PF.",
+  "signals": 91,
+  "configs": 54,
+  "modeled_spread_pips": 10.0,
+  "top_10": [
+    {
+      "config": {
+        "stop_pips": 60,
+        "max_hold_seconds": 30,
+        "break_even_trigger_pips": 20,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 80,
+        "trailing_distance_pips": 40
+      },
+      "name": "stop60_hold30_be20p1_trail80x40",
+      "full_year": {
+        "trades": 91,
+        "wins": 38,
+        "losses": 53,
+        "win_rate_pct": 41.758,
+        "net_pnl": 505.15,
+        "profit_factor": 2.649,
+        "max_drawdown": 40.67
+      },
+      "profitable_quarters": 2,
+      "by_quarter": {
+        "2026-Q1": {
+          "trades": 74,
+          "wins": 31,
+          "losses": 43,
+          "win_rate_pct": 41.892,
+          "net_pnl": 392.91,
+          "profit_factor": 2.486,
+          "max_drawdown": 40.67
+        },
+        "2026-Q2": {
+          "trades": 17,
+          "wins": 7,
+          "losses": 10,
+          "win_rate_pct": 41.176,
+          "net_pnl": 112.24,
+          "profit_factor": 3.668,
+          "max_drawdown": 16.7
+        }
+      }
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "max_hold_seconds": 60,
+        "break_even_trigger_pips": 20,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 80,
+        "trailing_distance_pips": 40
+      },
+      "name": "stop60_hold60_be20p1_trail80x40",
+      "full_year": {
+        "trades": 91,
+        "wins": 38,
+        "losses": 53,
+        "win_rate_pct": 41.758,
+        "net_pnl": 505.15,
+        "profit_factor": 2.649,
+        "max_drawdown": 40.67
+      },
+      "profitable_quarters": 2,
+      "by_quarter": {
+        "2026-Q1": {
+          "trades": 74,
+          "wins": 31,
+          "losses": 43,
+          "win_rate_pct": 41.892,
+          "net_pnl": 392.91,
+          "profit_factor": 2.486,
+          "max_drawdown": 40.67
+        },
+        "2026-Q2": {
+          "trades": 17,
+          "wins": 7,
+          "losses": 10,
+          "win_rate_pct": 41.176,
+          "net_pnl": 112.24,
+          "profit_factor": 3.668,
+          "max_drawdown": 16.7
+        }
+      }
+    },
+    {
+      "config": {
+        "stop_pips": 240,
+        "max_hold_seconds": 30,
+        "break_even_trigger_pips": 20,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 80,
+        "trailing_distance_pips": 40
+      },
+      "name": "stop240_hold30_be20p1_trail80x40",
+      "full_year": {
+        "trades": 91,
+        "wins": 48,
+        "losses": 43,
+        "win_rate_pct": 52.747,
+        "net_pnl": 579.8,
+        "profit_factor": 2.58,
+        "max_drawdown": 91.87
+      },
+      "profitable_quarters": 2,
+      "by_quarter": {
+        "2026-Q1": {
+          "trades": 74,
+          "wins": 39,
+          "losses": 35,
+          "win_rate_pct": 52.703,
+          "net_pnl": 406.94,
+          "profit_factor": 2.224,
+          "max_drawdown": 91.87
+        },
+        "2026-Q2": {
+          "trades": 17,
+          "wins": 9,
+          "losses": 8,
+          "win_rate_pct": 52.941,
+          "net_pnl": 172.86,
+          "profit_factor": 6.044,
+          "max_drawdown": 28.33
+        }
+      }
+    },
+    {
+      "config": {
+        "stop_pips": 120,
+        "max_hold_seconds": 30,
+        "break_even_trigger_pips": 20,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 80,
+        "trailing_distance_pips": 40
+      },
+      "name": "stop120_hold30_be20p1_trail80x40",
+      "full_year": {
+        "trades": 91,
+        "wins": 43,
+        "losses": 48,
+        "win_rate_pct": 47.253,
+        "net_pnl": 542.99,
+        "profit_factor": 2.576,
+        "max_drawdown": 48.09
+      },
+      "profitable_quarters": 2,
+      "by_quarter": {
+        "2026-Q1": {
+          "trades": 74,
+          "wins": 35,
+          "losses": 39,
+          "win_rate_pct": 47.297,
+          "net_pnl": 392.82,
+          "profit_factor": 2.263,
+          "max_drawdown": 48.09
+        },
+        "2026-Q2": {
+          "trades": 17,
+          "wins": 8,
+          "losses": 9,
+          "win_rate_pct": 47.059,
+          "net_pnl": 150.17,
+          "profit_factor": 5.476,
+          "max_drawdown": 27.61
+        }
+      }
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "max_hold_seconds": 30,
+        "break_even_trigger_pips": 20,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 120,
+        "trailing_distance_pips": 60
+      },
+      "name": "stop60_hold30_be20p1_trail120x60",
+      "full_year": {
+        "trades": 91,
+        "wins": 33,
+        "losses": 58,
+        "win_rate_pct": 36.264,
+        "net_pnl": 503.37,
+        "profit_factor": 2.564,
+        "max_drawdown": 40.67
+      },
+      "profitable_quarters": 2,
+      "by_quarter": {
+        "2026-Q1": {
+          "trades": 74,
+          "wins": 27,
+          "losses": 47,
+          "win_rate_pct": 36.486,
+          "net_pnl": 402.91,
+          "profit_factor": 2.449,
+          "max_drawdown": 40.67
+        },
+        "2026-Q2": {
+          "trades": 17,
+          "wins": 6,
+          "losses": 11,
+          "win_rate_pct": 35.294,
+          "net_pnl": 100.46,
+          "profit_factor": 3.298,
+          "max_drawdown": 16.7
+        }
+      }
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "max_hold_seconds": 60,
+        "break_even_trigger_pips": 20,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 120,
+        "trailing_distance_pips": 60
+      },
+      "name": "stop60_hold60_be20p1_trail120x60",
+      "full_year": {
+        "trades": 91,
+        "wins": 33,
+        "losses": 58,
+        "win_rate_pct": 36.264,
+        "net_pnl": 503.37,
+        "profit_factor": 2.564,
+        "max_drawdown": 40.67
+      },
+      "profitable_quarters": 2,
+      "by_quarter": {
+        "2026-Q1": {
+          "trades": 74,
+          "wins": 27,
+          "losses": 47,
+          "win_rate_pct": 36.486,
+          "net_pnl": 402.91,
+          "profit_factor": 2.449,
+          "max_drawdown": 40.67
+        },
+        "2026-Q2": {
+          "trades": 17,
+          "wins": 6,
+          "losses": 11,
+          "win_rate_pct": 35.294,
+          "net_pnl": 100.46,
+          "profit_factor": 3.298,
+          "max_drawdown": 16.7
+        }
+      }
+    },
+    {
+      "config": {
+        "stop_pips": 120,
+        "max_hold_seconds": 60,
+        "break_even_trigger_pips": 20,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 80,
+        "trailing_distance_pips": 40
+      },
+      "name": "stop120_hold60_be20p1_trail80x40",
+      "full_year": {
+        "trades": 91,
+        "wins": 43,
+        "losses": 48,
+        "win_rate_pct": 47.253,
+        "net_pnl": 538.39,
+        "profit_factor": 2.542,
+        "max_drawdown": 48.09
+      },
+      "profitable_quarters": 2,
+      "by_quarter": {
+        "2026-Q1": {
+          "trades": 74,
+          "wins": 35,
+          "losses": 39,
+          "win_rate_pct": 47.297,
+          "net_pnl": 388.22,
+          "profit_factor": 2.23,
+          "max_drawdown": 48.09
+        },
+        "2026-Q2": {
+          "trades": 17,
+          "wins": 8,
+          "losses": 9,
+          "win_rate_pct": 47.059,
+          "net_pnl": 150.17,
+          "profit_factor": 5.476,
+          "max_drawdown": 27.61
+        }
+      }
+    },
+    {
+      "config": {
+        "stop_pips": 120,
+        "max_hold_seconds": 30,
+        "break_even_trigger_pips": 20,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 120,
+        "trailing_distance_pips": 60
+      },
+      "name": "stop120_hold30_be20p1_trail120x60",
+      "full_year": {
+        "trades": 91,
+        "wins": 38,
+        "losses": 53,
+        "win_rate_pct": 41.758,
+        "net_pnl": 537.39,
+        "profit_factor": 2.493,
+        "max_drawdown": 51.11
+      },
+      "profitable_quarters": 2,
+      "by_quarter": {
+        "2026-Q1": {
+          "trades": 74,
+          "wins": 31,
+          "losses": 43,
+          "win_rate_pct": 41.892,
+          "net_pnl": 400.46,
+          "profit_factor": 2.233,
+          "max_drawdown": 51.11
+        },
+        "2026-Q2": {
+          "trades": 17,
+          "wins": 7,
+          "losses": 10,
+          "win_rate_pct": 41.176,
+          "net_pnl": 136.93,
+          "profit_factor": 4.891,
+          "max_drawdown": 27.61
+        }
+      }
+    },
+    {
+      "config": {
+        "stop_pips": 240,
+        "max_hold_seconds": 30,
+        "break_even_trigger_pips": 20,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 120,
+        "trailing_distance_pips": 60
+      },
+      "name": "stop240_hold30_be20p1_trail120x60",
+      "full_year": {
+        "trades": 91,
+        "wins": 42,
+        "losses": 49,
+        "win_rate_pct": 46.154,
+        "net_pnl": 569.99,
+        "profit_factor": 2.488,
+        "max_drawdown": 94.89
+      },
+      "profitable_quarters": 2,
+      "by_quarter": {
+        "2026-Q1": {
+          "trades": 74,
+          "wins": 34,
+          "losses": 40,
+          "win_rate_pct": 45.946,
+          "net_pnl": 407.48,
+          "profit_factor": 2.174,
+          "max_drawdown": 94.89
+        },
+        "2026-Q2": {
+          "trades": 17,
+          "wins": 8,
+          "losses": 9,
+          "win_rate_pct": 47.059,
+          "net_pnl": 162.51,
+          "profit_factor": 5.525,
+          "max_drawdown": 28.33
+        }
+      }
+    },
+    {
+      "config": {
+        "stop_pips": 120,
+        "max_hold_seconds": 60,
+        "break_even_trigger_pips": 20,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 120,
+        "trailing_distance_pips": 60
+      },
+      "name": "stop120_hold60_be20p1_trail120x60",
+      "full_year": {
+        "trades": 91,
+        "wins": 38,
+        "losses": 53,
+        "win_rate_pct": 41.758,
+        "net_pnl": 532.79,
+        "profit_factor": 2.461,
+        "max_drawdown": 51.11
+      },
+      "profitable_quarters": 2,
+      "by_quarter": {
+        "2026-Q1": {
+          "trades": 74,
+          "wins": 31,
+          "losses": 43,
+          "win_rate_pct": 41.892,
+          "net_pnl": 395.86,
+          "profit_factor": 2.202,
+          "max_drawdown": 51.11
+        },
+        "2026-Q2": {
+          "trades": 17,
+          "wins": 7,
+          "losses": 10,
+          "win_rate_pct": 41.176,
+          "net_pnl": 136.93,
+          "profit_factor": 4.891,
+          "max_drawdown": 27.61
+        }
+      }
+    }
+  ],
+  "warning": "This is exit research on a small selected sample, not authorization for live execution."
+}

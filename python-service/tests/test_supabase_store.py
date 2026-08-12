@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from app.schemas import CandleSnapshot, DecisionResponse, HistoricalReplayResponse, ResultsSummary
+from app.schemas import CandleSnapshot, DecisionResponse, HistoricalReplayResponse, ResultsSummary, TickIngestRequest
 from app.supabase_store import SupabaseStore
 from tests.test_strategy import bullish_request, macd_trend_request, mean_reversion_request, stochastic_pullback_request
 
@@ -50,7 +50,94 @@ class PaperResultsStore(RecordingStore):
         return []
 
 
+class TickShadowResultsStore(RecordingStore):
+    def _request(self, path: str, *, method: str = "GET", payload: object = None, prefer: str | None = None) -> object:
+        if path.startswith("tick_shadow_trades?"):
+            return [{
+                "signal_key": "bot-19:signal", "bot_id": "bot-19", "symbol": "XAUUSD",
+                "side": "buy", "opened_at_utc": "2026-08-09T10:00:00+00:00",
+                "closed_at_utc": "2026-08-09T10:00:20+00:00",
+                "entry_price": 100.0, "initial_stop_price": 99.4,
+                "target_price": 110.0, "exit_price": 100.3,
+                "pip_size": .01, "value_per_pip": .1, "volume_lots": .1,
+                "net_pnl": 3.0, "exit_reason": "stop",
+            }]
+        return []
+
+
 class SupabaseStoreTests(unittest.TestCase):
+    @staticmethod
+    def tick_shadow_row(side: str = "buy") -> dict[str, object]:
+        return {
+            "signal_key": "bot-19:signal", "side": side,
+            "entry_price": 100.0, "stop_price": 99.4 if side == "buy" else 100.6,
+            "best_price": 100.0, "target_price": 110.0 if side == "buy" else 90.0,
+            "pip_size": 0.01, "value_per_pip": 0.1,
+            "opened_time_msc": 1_700_000_000_000,
+            "break_even_trigger_pips": 40, "break_even_offset_pips": 1,
+            "trailing_activation_pips": 40, "trailing_distance_pips": 20,
+            "max_holding_seconds": 60,
+        }
+
+    def test_tick_batches_are_idempotent_and_chunked(self) -> None:
+        store = RecordingStore()
+        batch = TickIngestRequest(
+            collector_id="forward-01",
+            symbol="XAUUSD",
+            point_size=0.01,
+            ticks=[
+                {"time_msc": 1_700_000_000_000 + index, "sequence": index, "bid": 2000, "ask": 2000.1}
+                for index in range(501)
+            ],
+        )
+
+        store.upsert_ticks(batch)
+
+        self.assertEqual(len(store.calls), 2)
+        self.assertTrue(all("on_conflict=collector_id,symbol,time_msc,sequence" in call[0] for call in store.calls))
+        self.assertEqual(len(store.calls[0][2]), 500)
+        self.assertEqual(store.calls[0][3], "resolution=ignore-duplicates,return=minimal")
+
+    def test_tick_shadow_buy_applies_trailing_then_closes_on_executable_bid(self) -> None:
+        batch = TickIngestRequest(
+            collector_id="forward-01", symbol="XAUUSD", point_size=0.01,
+            ticks=[
+                {"time_msc": 1_700_000_001_000, "sequence": 1, "bid": 100.5, "ask": 100.6},
+                {"time_msc": 1_700_000_002_000, "sequence": 2, "bid": 100.29, "ask": 100.39},
+            ],
+        )
+
+        patch = SupabaseStore._advance_tick_shadow_row(self.tick_shadow_row(), batch)
+
+        self.assertEqual(patch["status"], "closed")
+        self.assertEqual(patch["exit_reason"], "stop")
+        self.assertEqual(patch["exit_price"], 100.29)
+        self.assertAlmostEqual(float(patch["pnl_pips"]), 29)
+
+    def test_tick_shadow_sell_uses_ask_and_closes_at_timeout(self) -> None:
+        batch = TickIngestRequest(
+            collector_id="forward-01", symbol="XAUUSD", point_size=0.01,
+            ticks=[
+                {"time_msc": 1_700_000_060_000, "sequence": 1, "bid": 99.7, "ask": 99.8},
+            ],
+        )
+
+        patch = SupabaseStore._advance_tick_shadow_row(self.tick_shadow_row("sell"), batch)
+
+        self.assertEqual(patch["status"], "closed")
+        self.assertEqual(patch["exit_reason"], "time")
+        self.assertEqual(patch["exit_price"], 99.8)
+        self.assertAlmostEqual(float(patch["pnl_pips"]), 20)
+
+    def test_tick_shadow_results_are_exposed_without_looking_like_real_trades(self) -> None:
+        results = TickShadowResultsStore()._load_tick_shadow_results("bot-19")
+
+        self.assertEqual(len(results), 1)
+        self.assertEqual(results[0]["trade_id"], "tick-shadow:bot-19:signal")
+        self.assertEqual(results[0]["timeframe"], "TICK")
+        self.assertAlmostEqual(float(results[0]["rr_realized"]), .5)
+        self.assertIn("Nenhuma ordem", str(results[0]["note"]))
+
     def test_catalog_only_loads_active_bots(self) -> None:
         store = RecordingStore()
 

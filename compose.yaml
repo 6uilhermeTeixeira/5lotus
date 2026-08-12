@@ -80,3 +80,27 @@ services:
       options:
         max-size: "10m"
         max-file: "5"
+
+  tick-uploader:
+    image: 2lotus-api-runtime:local
+    container_name: 2lotus-tick-uploader
+    restart: unless-stopped
+    user: "${LOCAL_UID:-1000}:${LOCAL_GID:-1000}"
+    network_mode: "service:mt5"
+    depends_on:
+      api:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      DAYTRADE_TICK_API_URL: http://127.0.0.1:8000/api/ticks
+      DAYTRADE_TICK_SPOOL_ROOT: /data/mt5-prefix
+      DAYTRADE_TICK_FORWARD_COLLECTOR_ID: 2lotus-forward-01
+    volumes:
+      - ./.runtime/mt5-prefix:/data/mt5-prefix
+    command: ["/app/.venv/bin/python", "scripts/upload_tick_spool.py"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"

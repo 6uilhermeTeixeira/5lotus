@@ -1,0 +1,75 @@
+{
+  "method": "P90 of normalized prior-M5 range from matched 2025 entries, fixed before 2026 evaluation.",
+  "feature": "prior_m5_range_pips / atr14_pips",
+  "training_matched_entries": 26,
+  "threshold_lte": 1.876955192,
+  "partitions": {
+    "2025_pre_label_holdout": {
+      "baseline": {
+        "trades": 14,
+        "wins": 8,
+        "losses": 6,
+        "win_rate_pct": 57.143,
+        "net_pnl": 47.67,
+        "profit_factor": 2.106,
+        "max_drawdown": 16.97
+      },
+      "selected": {
+        "trades": 10,
+        "wins": 6,
+        "losses": 4,
+        "win_rate_pct": 60.0,
+        "net_pnl": 38.0,
+        "profit_factor": 2.291,
+        "max_drawdown": 16.97
+      }
+    },
+    "2025_labeled_training_period": {
+      "baseline": {
+        "trades": 13,
+        "wins": 10,
+        "losses": 3,
+        "win_rate_pct": 76.923,
+        "net_pnl": 82.22,
+        "profit_factor": 5.327,
+        "max_drawdown": 6.7
+      },
+      "selected": {
+        "trades": 10,
+        "wins": 8,
+        "losses": 2,
+        "win_rate_pct": 80.0,
+        "net_pnl": 63.85,
+        "profit_factor": 5.969,
+        "max_drawdown": 6.7
+      }
+    },
+    "2026_post_training_holdout": {
+      "baseline": {
+        "trades": 91,
+        "wins": 51,
+        "losses": 40,
+        "win_rate_pct": 56.044,
+        "net_pnl": 387.5,
+        "profit_factor": 2.228,
+        "max_drawdown": 40.67
+      },
+      "selected": {
+        "trades": 75,
+        "wins": 43,
+        "losses": 32,
+        "win_rate_pct": 57.333,
+        "net_pnl": 380.28,
+        "profit_factor": 2.485,
+        "max_drawdown": 34.22
+      },
+      "original_entry_correspondence": {
+        "baseline_matched": 14,
+        "selected_matched": 13,
+        "selected_precision_pct": 17.333,
+        "matched_recall_pct": 92.857
+      }
+    }
+  },
+  "decision": "candidate_only_if_both_temporal_holdouts_preserve_positive_expectancy_and_2026_pf_improves"
+}

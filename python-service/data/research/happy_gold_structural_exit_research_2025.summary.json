@@ -1,0 +1,599 @@
+{
+  "method": "Tick-executable exit grid on the 27 fixed structural signals; ranking prioritizes profitable quarters before full-year PF.",
+  "signals": 27,
+  "configs": 54,
+  "modeled_spread_pips": 10,
+  "top_10": [
+    {
+      "config": {
+        "stop_pips": 60,
+        "max_hold_seconds": 60,
+        "break_even_trigger_pips": 40,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 80,
+        "trailing_distance_pips": 40
+      },
+      "name": "stop60_hold60_be40p1_trail80x40",
+      "full_year": {
+        "trades": 27,
+        "wins": 15,
+        "losses": 12,
+        "win_rate_pct": 55.556,
+        "net_pnl": 146.67,
+        "profit_factor": 3.321,
+        "max_drawdown": 16.97
+      },
+      "profitable_quarters": 3,
+      "by_quarter": {
+        "2025-Q1": {
+          "trades": 1,
+          "wins": 0,
+          "losses": 1,
+          "win_rate_pct": 0.0,
+          "net_pnl": -6.45,
+          "profit_factor": 0.0,
+          "max_drawdown": 6.45
+        },
+        "2025-Q2": {
+          "trades": 8,
+          "wins": 5,
+          "losses": 3,
+          "win_rate_pct": 62.5,
+          "net_pnl": 39.52,
+          "profit_factor": 4.247,
+          "max_drawdown": 6.05
+        },
+        "2025-Q3": {
+          "trades": 3,
+          "wins": 2,
+          "losses": 1,
+          "win_rate_pct": 66.667,
+          "net_pnl": 34.99,
+          "profit_factor": 5.604,
+          "max_drawdown": 7.6
+        },
+        "2025-Q4": {
+          "trades": 15,
+          "wins": 8,
+          "losses": 7,
+          "win_rate_pct": 53.333,
+          "net_pnl": 78.61,
+          "profit_factor": 3.126,
+          "max_drawdown": 16.97
+        }
+      }
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "max_hold_seconds": 30,
+        "break_even_trigger_pips": 40,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 80,
+        "trailing_distance_pips": 40
+      },
+      "name": "stop60_hold30_be40p1_trail80x40",
+      "full_year": {
+        "trades": 27,
+        "wins": 15,
+        "losses": 12,
+        "win_rate_pct": 55.556,
+        "net_pnl": 136.85,
+        "profit_factor": 3.166,
+        "max_drawdown": 16.97
+      },
+      "profitable_quarters": 3,
+      "by_quarter": {
+        "2025-Q1": {
+          "trades": 1,
+          "wins": 0,
+          "losses": 1,
+          "win_rate_pct": 0.0,
+          "net_pnl": -6.45,
+          "profit_factor": 0.0,
+          "max_drawdown": 6.45
+        },
+        "2025-Q2": {
+          "trades": 8,
+          "wins": 5,
+          "losses": 3,
+          "win_rate_pct": 62.5,
+          "net_pnl": 29.7,
+          "profit_factor": 3.44,
+          "max_drawdown": 6.05
+        },
+        "2025-Q3": {
+          "trades": 3,
+          "wins": 2,
+          "losses": 1,
+          "win_rate_pct": 66.667,
+          "net_pnl": 34.99,
+          "profit_factor": 5.604,
+          "max_drawdown": 7.6
+        },
+        "2025-Q4": {
+          "trades": 15,
+          "wins": 8,
+          "losses": 7,
+          "win_rate_pct": 53.333,
+          "net_pnl": 78.61,
+          "profit_factor": 3.126,
+          "max_drawdown": 16.97
+        }
+      }
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "max_hold_seconds": 30,
+        "break_even_trigger_pips": 20,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 80,
+        "trailing_distance_pips": 40
+      },
+      "name": "stop60_hold30_be20p1_trail80x40",
+      "full_year": {
+        "trades": 27,
+        "wins": 13,
+        "losses": 14,
+        "win_rate_pct": 48.148,
+        "net_pnl": 122.72,
+        "profit_factor": 3.104,
+        "max_drawdown": 16.97
+      },
+      "profitable_quarters": 3,
+      "by_quarter": {
+        "2025-Q1": {
+          "trades": 1,
+          "wins": 0,
+          "losses": 1,
+          "win_rate_pct": 0.0,
+          "net_pnl": -6.45,
+          "profit_factor": 0.0,
+          "max_drawdown": 6.45
+        },
+        "2025-Q2": {
+          "trades": 8,
+          "wins": 4,
+          "losses": 4,
+          "win_rate_pct": 50.0,
+          "net_pnl": 30.02,
+          "profit_factor": 5.434,
+          "max_drawdown": 6.05
+        },
+        "2025-Q3": {
+          "trades": 3,
+          "wins": 2,
+          "losses": 1,
+          "win_rate_pct": 66.667,
+          "net_pnl": 34.99,
+          "profit_factor": 5.604,
+          "max_drawdown": 7.6
+        },
+        "2025-Q4": {
+          "trades": 15,
+          "wins": 7,
+          "losses": 8,
+          "win_rate_pct": 46.667,
+          "net_pnl": 64.16,
+          "profit_factor": 2.71,
+          "max_drawdown": 16.97
+        }
+      }
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "max_hold_seconds": 60,
+        "break_even_trigger_pips": 20,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 80,
+        "trailing_distance_pips": 40
+      },
+      "name": "stop60_hold60_be20p1_trail80x40",
+      "full_year": {
+        "trades": 27,
+        "wins": 13,
+        "losses": 14,
+        "win_rate_pct": 48.148,
+        "net_pnl": 122.72,
+        "profit_factor": 3.104,
+        "max_drawdown": 16.97
+      },
+      "profitable_quarters": 3,
+      "by_quarter": {
+        "2025-Q1": {
+          "trades": 1,
+          "wins": 0,
+          "losses": 1,
+          "win_rate_pct": 0.0,
+          "net_pnl": -6.45,
+          "profit_factor": 0.0,
+          "max_drawdown": 6.45
+        },
+        "2025-Q2": {
+          "trades": 8,
+          "wins": 4,
+          "losses": 4,
+          "win_rate_pct": 50.0,
+          "net_pnl": 30.02,
+          "profit_factor": 5.434,
+          "max_drawdown": 6.05
+        },
+        "2025-Q3": {
+          "trades": 3,
+          "wins": 2,
+          "losses": 1,
+          "win_rate_pct": 66.667,
+          "net_pnl": 34.99,
+          "profit_factor": 5.604,
+          "max_drawdown": 7.6
+        },
+        "2025-Q4": {
+          "trades": 15,
+          "wins": 7,
+          "losses": 8,
+          "win_rate_pct": 46.667,
+          "net_pnl": 64.16,
+          "profit_factor": 2.71,
+          "max_drawdown": 16.97
+        }
+      }
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "max_hold_seconds": 60,
+        "break_even_trigger_pips": 40,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 40,
+        "trailing_distance_pips": 20
+      },
+      "name": "stop60_hold60_be40p1_trail40x20",
+      "full_year": {
+        "trades": 27,
+        "wins": 18,
+        "losses": 9,
+        "win_rate_pct": 66.667,
+        "net_pnl": 129.89,
+        "profit_factor": 3.092,
+        "max_drawdown": 16.97
+      },
+      "profitable_quarters": 3,
+      "by_quarter": {
+        "2025-Q1": {
+          "trades": 1,
+          "wins": 0,
+          "losses": 1,
+          "win_rate_pct": 0.0,
+          "net_pnl": -6.45,
+          "profit_factor": 0.0,
+          "max_drawdown": 6.45
+        },
+        "2025-Q2": {
+          "trades": 8,
+          "wins": 6,
+          "losses": 2,
+          "win_rate_pct": 75.0,
+          "net_pnl": 43.9,
+          "profit_factor": 4.637,
+          "max_drawdown": 6.05
+        },
+        "2025-Q3": {
+          "trades": 3,
+          "wins": 2,
+          "losses": 1,
+          "win_rate_pct": 66.667,
+          "net_pnl": 27.19,
+          "profit_factor": 4.578,
+          "max_drawdown": 7.6
+        },
+        "2025-Q4": {
+          "trades": 15,
+          "wins": 10,
+          "losses": 5,
+          "win_rate_pct": 66.667,
+          "net_pnl": 65.25,
+          "profit_factor": 2.814,
+          "max_drawdown": 16.97
+        }
+      }
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "max_hold_seconds": 60,
+        "break_even_trigger_pips": 40,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 120,
+        "trailing_distance_pips": 60
+      },
+      "name": "stop60_hold60_be40p1_trail120x60",
+      "full_year": {
+        "trades": 27,
+        "wins": 14,
+        "losses": 13,
+        "win_rate_pct": 51.852,
+        "net_pnl": 139.81,
+        "profit_factor": 3.065,
+        "max_drawdown": 16.97
+      },
+      "profitable_quarters": 3,
+      "by_quarter": {
+        "2025-Q1": {
+          "trades": 1,
+          "wins": 0,
+          "losses": 1,
+          "win_rate_pct": 0.0,
+          "net_pnl": -6.45,
+          "profit_factor": 0.0,
+          "max_drawdown": 6.45
+        },
+        "2025-Q2": {
+          "trades": 8,
+          "wins": 4,
+          "losses": 4,
+          "win_rate_pct": 50.0,
+          "net_pnl": 45.06,
+          "profit_factor": 3.701,
+          "max_drawdown": 6.05
+        },
+        "2025-Q3": {
+          "trades": 3,
+          "wins": 2,
+          "losses": 1,
+          "win_rate_pct": 66.667,
+          "net_pnl": 32.94,
+          "profit_factor": 5.334,
+          "max_drawdown": 7.6
+        },
+        "2025-Q4": {
+          "trades": 15,
+          "wins": 8,
+          "losses": 7,
+          "win_rate_pct": 53.333,
+          "net_pnl": 68.26,
+          "profit_factor": 2.846,
+          "max_drawdown": 16.97
+        }
+      }
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "max_hold_seconds": 30,
+        "break_even_trigger_pips": 20,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 40,
+        "trailing_distance_pips": 20
+      },
+      "name": "stop60_hold30_be20p1_trail40x20",
+      "full_year": {
+        "trades": 27,
+        "wins": 16,
+        "losses": 11,
+        "win_rate_pct": 59.259,
+        "net_pnl": 116.88,
+        "profit_factor": 3.042,
+        "max_drawdown": 16.97
+      },
+      "profitable_quarters": 3,
+      "by_quarter": {
+        "2025-Q1": {
+          "trades": 1,
+          "wins": 0,
+          "losses": 1,
+          "win_rate_pct": 0.0,
+          "net_pnl": -6.45,
+          "profit_factor": 0.0,
+          "max_drawdown": 6.45
+        },
+        "2025-Q2": {
+          "trades": 8,
+          "wins": 5,
+          "losses": 3,
+          "win_rate_pct": 62.5,
+          "net_pnl": 35.41,
+          "profit_factor": 6.309,
+          "max_drawdown": 6.05
+        },
+        "2025-Q3": {
+          "trades": 3,
+          "wins": 2,
+          "losses": 1,
+          "win_rate_pct": 66.667,
+          "net_pnl": 27.19,
+          "profit_factor": 4.578,
+          "max_drawdown": 7.6
+        },
+        "2025-Q4": {
+          "trades": 15,
+          "wins": 9,
+          "losses": 6,
+          "win_rate_pct": 60.0,
+          "net_pnl": 60.73,
+          "profit_factor": 2.663,
+          "max_drawdown": 16.97
+        }
+      }
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "max_hold_seconds": 60,
+        "break_even_trigger_pips": 20,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 40,
+        "trailing_distance_pips": 20
+      },
+      "name": "stop60_hold60_be20p1_trail40x20",
+      "full_year": {
+        "trades": 27,
+        "wins": 16,
+        "losses": 11,
+        "win_rate_pct": 59.259,
+        "net_pnl": 116.88,
+        "profit_factor": 3.042,
+        "max_drawdown": 16.97
+      },
+      "profitable_quarters": 3,
+      "by_quarter": {
+        "2025-Q1": {
+          "trades": 1,
+          "wins": 0,
+          "losses": 1,
+          "win_rate_pct": 0.0,
+          "net_pnl": -6.45,
+          "profit_factor": 0.0,
+          "max_drawdown": 6.45
+        },
+        "2025-Q2": {
+          "trades": 8,
+          "wins": 5,
+          "losses": 3,
+          "win_rate_pct": 62.5,
+          "net_pnl": 35.41,
+          "profit_factor": 6.309,
+          "max_drawdown": 6.05
+        },
+        "2025-Q3": {
+          "trades": 3,
+          "wins": 2,
+          "losses": 1,
+          "win_rate_pct": 66.667,
+          "net_pnl": 27.19,
+          "profit_factor": 4.578,
+          "max_drawdown": 7.6
+        },
+        "2025-Q4": {
+          "trades": 15,
+          "wins": 9,
+          "losses": 6,
+          "win_rate_pct": 60.0,
+          "net_pnl": 60.73,
+          "profit_factor": 2.663,
+          "max_drawdown": 16.97
+        }
+      }
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "max_hold_seconds": 30,
+        "break_even_trigger_pips": 40,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 40,
+        "trailing_distance_pips": 20
+      },
+      "name": "stop60_hold30_be40p1_trail40x20",
+      "full_year": {
+        "trades": 27,
+        "wins": 18,
+        "losses": 9,
+        "win_rate_pct": 66.667,
+        "net_pnl": 121.08,
+        "profit_factor": 2.95,
+        "max_drawdown": 16.97
+      },
+      "profitable_quarters": 3,
+      "by_quarter": {
+        "2025-Q1": {
+          "trades": 1,
+          "wins": 0,
+          "losses": 1,
+          "win_rate_pct": 0.0,
+          "net_pnl": -6.45,
+          "profit_factor": 0.0,
+          "max_drawdown": 6.45
+        },
+        "2025-Q2": {
+          "trades": 8,
+          "wins": 6,
+          "losses": 2,
+          "win_rate_pct": 75.0,
+          "net_pnl": 35.09,
+          "profit_factor": 3.907,
+          "max_drawdown": 6.05
+        },
+        "2025-Q3": {
+          "trades": 3,
+          "wins": 2,
+          "losses": 1,
+          "win_rate_pct": 66.667,
+          "net_pnl": 27.19,
+          "profit_factor": 4.578,
+          "max_drawdown": 7.6
+        },
+        "2025-Q4": {
+          "trades": 15,
+          "wins": 10,
+          "losses": 5,
+          "win_rate_pct": 66.667,
+          "net_pnl": 65.25,
+          "profit_factor": 2.814,
+          "max_drawdown": 16.97
+        }
+      }
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "max_hold_seconds": 30,
+        "break_even_trigger_pips": 40,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 120,
+        "trailing_distance_pips": 60
+      },
+      "name": "stop60_hold30_be40p1_trail120x60",
+      "full_year": {
+        "trades": 27,
+        "wins": 14,
+        "losses": 13,
+        "win_rate_pct": 51.852,
+        "net_pnl": 131.75,
+        "profit_factor": 2.946,
+        "max_drawdown": 16.97
+      },
+      "profitable_quarters": 3,
+      "by_quarter": {
+        "2025-Q1": {
+          "trades": 1,
+          "wins": 0,
+          "losses": 1,
+          "win_rate_pct": 0.0,
+          "net_pnl": -6.45,
+          "profit_factor": 0.0,
+          "max_drawdown": 6.45
+        },
+        "2025-Q2": {
+          "trades": 8,
+          "wins": 4,
+          "losses": 4,
+          "win_rate_pct": 50.0,
+          "net_pnl": 37.0,
+          "profit_factor": 3.218,
+          "max_drawdown": 6.05
+        },
+        "2025-Q3": {
+          "trades": 3,
+          "wins": 2,
+          "losses": 1,
+          "win_rate_pct": 66.667,
+          "net_pnl": 32.94,
+          "profit_factor": 5.334,
+          "max_drawdown": 7.6
+        },
+        "2025-Q4": {
+          "trades": 15,
+          "wins": 8,
+          "losses": 7,
+          "win_rate_pct": 53.333,
+          "net_pnl": 68.26,
+          "profit_factor": 2.846,
+          "max_drawdown": 16.97
+        }
+      }
+    }
+  ],
+  "warning": "This is exit research on a small selected sample, not authorization for live execution."
+}

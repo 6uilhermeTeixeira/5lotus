@@ -11,11 +11,14 @@ Esta pasta vai conter:
 Foi criado um EA inicial em:
 
 - `experts/SyncLeadBridgeEA.mq5`
+- `experts/TickCollectorEA.mq5`, coletor isolado e sem funções de negociação
+- `scripts/TickHistoryExporter.mq5`, exportador sob demanda do histórico de ticks da corretora
 
 ## Papel do EA
 
 - coletar contexto basico do simbolo
 - coletar historico recente de candles
+- manter uma janela circular de 905 segundos de mids Bid/Ask e derivar impulso de 5, 10, 30, 60 e 900 segundos
 - chamar o servico Python em `POST /decision`
 - registrar a resposta no log do terminal
 - executar a ordem automaticamente quando:
@@ -23,6 +26,10 @@ Foi criado um EA inicial em:
   - `EnableOrderExecution=true`
 
 Nesta fase, o caminho de execucao ja existe, mas ainda nao foi validado dentro do terminal MT5 neste servidor porque o ambiente Wine continua em estabilizacao.
+
+A configuração do coletor de ticks e do uploader está em `../docs/tick-research.md`.
+Os ticks ingeridos também avançam o lifecycle shadow do Bot 19; esse caminho não contém chamadas
+de negociação e nunca depende de `EnableOrderExecution`.
 
 ## Teste em demo
 

@@ -1,0 +1,234 @@
+{
+  "method": "Exit selected on 2025 only; unchanged evaluation on 2026 tick holdout.",
+  "modeled_spread_pips": 10.0,
+  "training_signals": 20,
+  "holdout_signals": 75,
+  "selection_gate": "training PF >= 1.20; rank profitable months, proximity to 85% win rate, then PF",
+  "selected": {
+    "config": {
+      "stop_pips": 60,
+      "target_pips": 80,
+      "max_hold_seconds": 60
+    },
+    "name": "stop60_target80_hold60",
+    "training": {
+      "trades": 20,
+      "wins": 13,
+      "losses": 7,
+      "win_rate_pct": 65.0,
+      "net_pnl": 107.74,
+      "profit_factor": 3.203,
+      "max_drawdown": 16.97
+    },
+    "profitable_training_months": 7,
+    "training_months": 8,
+    "holdout_2026": {
+      "trades": 75,
+      "wins": 38,
+      "losses": 37,
+      "win_rate_pct": 50.667,
+      "net_pnl": 129.37,
+      "profit_factor": 1.416,
+      "max_drawdown": 61.33
+    }
+  },
+  "top_training_candidates": [
+    {
+      "config": {
+        "stop_pips": 60,
+        "target_pips": 80,
+        "max_hold_seconds": 60
+      },
+      "name": "stop60_target80_hold60",
+      "training": {
+        "trades": 20,
+        "wins": 13,
+        "losses": 7,
+        "win_rate_pct": 65.0,
+        "net_pnl": 107.74,
+        "profit_factor": 3.203,
+        "max_drawdown": 16.97
+      },
+      "profitable_training_months": 7,
+      "training_months": 8
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "target_pips": 80,
+        "max_hold_seconds": 20
+      },
+      "name": "stop60_target80_hold20",
+      "training": {
+        "trades": 20,
+        "wins": 13,
+        "losses": 7,
+        "win_rate_pct": 65.0,
+        "net_pnl": 93.21,
+        "profit_factor": 2.906,
+        "max_drawdown": 16.97
+      },
+      "profitable_training_months": 7,
+      "training_months": 8
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "target_pips": 80,
+        "max_hold_seconds": 30
+      },
+      "name": "stop60_target80_hold30",
+      "training": {
+        "trades": 20,
+        "wins": 13,
+        "losses": 7,
+        "win_rate_pct": 65.0,
+        "net_pnl": 93.19,
+        "profit_factor": 2.906,
+        "max_drawdown": 16.97
+      },
+      "profitable_training_months": 7,
+      "training_months": 8
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "target_pips": 160,
+        "max_hold_seconds": 20
+      },
+      "name": "stop60_target160_hold20",
+      "training": {
+        "trades": 20,
+        "wins": 12,
+        "losses": 8,
+        "win_rate_pct": 60.0,
+        "net_pnl": 143.32,
+        "profit_factor": 3.606,
+        "max_drawdown": 16.97
+      },
+      "profitable_training_months": 7,
+      "training_months": 8
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "target_pips": 40,
+        "max_hold_seconds": 10
+      },
+      "name": "stop60_target40_hold10",
+      "training": {
+        "trades": 20,
+        "wins": 14,
+        "losses": 6,
+        "win_rate_pct": 70.0,
+        "net_pnl": 71.85,
+        "profit_factor": 2.699,
+        "max_drawdown": 16.97
+      },
+      "profitable_training_months": 6,
+      "training_months": 8
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "target_pips": 40,
+        "max_hold_seconds": 20
+      },
+      "name": "stop60_target40_hold20",
+      "training": {
+        "trades": 20,
+        "wins": 14,
+        "losses": 6,
+        "win_rate_pct": 70.0,
+        "net_pnl": 71.85,
+        "profit_factor": 2.699,
+        "max_drawdown": 16.97
+      },
+      "profitable_training_months": 6,
+      "training_months": 8
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "target_pips": 40,
+        "max_hold_seconds": 30
+      },
+      "name": "stop60_target40_hold30",
+      "training": {
+        "trades": 20,
+        "wins": 14,
+        "losses": 6,
+        "win_rate_pct": 70.0,
+        "net_pnl": 71.85,
+        "profit_factor": 2.699,
+        "max_drawdown": 16.97
+      },
+      "profitable_training_months": 6,
+      "training_months": 8
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "target_pips": 40,
+        "max_hold_seconds": 60
+      },
+      "name": "stop60_target40_hold60",
+      "training": {
+        "trades": 20,
+        "wins": 14,
+        "losses": 6,
+        "win_rate_pct": 70.0,
+        "net_pnl": 71.85,
+        "profit_factor": 2.699,
+        "max_drawdown": 16.97
+      },
+      "profitable_training_months": 6,
+      "training_months": 8
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "target_pips": 160,
+        "max_hold_seconds": 10
+      },
+      "name": "stop60_target160_hold10",
+      "training": {
+        "trades": 20,
+        "wins": 13,
+        "losses": 7,
+        "win_rate_pct": 65.0,
+        "net_pnl": 111.7,
+        "profit_factor": 3.284,
+        "max_drawdown": 16.97
+      },
+      "profitable_training_months": 6,
+      "training_months": 8
+    },
+    {
+      "config": {
+        "stop_pips": 60,
+        "target_pips": 80,
+        "max_hold_seconds": 10
+      },
+      "name": "stop60_target80_hold10",
+      "training": {
+        "trades": 20,
+        "wins": 13,
+        "losses": 7,
+        "win_rate_pct": 65.0,
+        "net_pnl": 89.46,
+        "profit_factor": 2.829,
+        "max_drawdown": 16.97
+      },
+      "profitable_training_months": 6,
+      "training_months": 8
+    }
+  ],
+  "decision": "rejected_holdout_underperformed_bot21_tick_lifecycle",
+  "bot21_holdout_reference": {
+    "win_rate_pct": 57.333,
+    "profit_factor": 2.485,
+    "max_drawdown": 34.22
+  },
+  "warning": "Small 2025 training sample; holdout result is required before any forward candidate."
+}

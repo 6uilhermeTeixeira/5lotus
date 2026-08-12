@@ -1,5 +1,6 @@
 import json
-from datetime import datetime, timedelta
+import time
+from datetime import datetime, timedelta, timezone
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
@@ -7,7 +8,16 @@ from urllib.request import Request, urlopen
 from .adaptive import ADAPTIVE_COMPONENTS, ADAPTIVE_WINDOW_DAYS, summarize_outcomes, utc_day_start
 from .config import Settings
 from .results_store import build_results_snapshot
-from .schemas import BotCatalogItem, CandleSnapshot, DecisionRequest, DecisionResponse, HistoricalReplayResponse, MarketChartResponse, ResultsResponse, TradeResult
+from .schemas import BotCatalogItem, CandleSnapshot, DecisionRequest, DecisionResponse, HistoricalReplayResponse, MarketChartResponse, ResultsResponse, TickIngestRequest, TradeResult
+from .telemetry import StepTimer, emit_event
+
+
+class SupabaseRequestError(RuntimeError):
+    def __init__(self, message: str, *, code: str, retryable: bool = False, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.retryable = retryable
+        self.status_code = status_code
 
 
 class SupabaseStore:
@@ -18,7 +28,16 @@ class SupabaseStore:
         self.key = settings.supabase_service_role_key or ""
         self.settings = settings
 
-    def _request(self, path: str, *, method: str = "GET", payload: object | None = None, prefer: str | None = None) -> object:
+    def _request(
+        self,
+        path: str,
+        *,
+        method: str = "GET",
+        payload: object | None = None,
+        prefer: str | None = None,
+        idempotent: bool = False,
+        run_id: str = "supabase-background",
+    ) -> object:
         headers = {"apikey": self.key, "Authorization": f"Bearer {self.key}"}
         body = None
         if payload is not None:
@@ -26,15 +45,36 @@ class SupabaseStore:
             body = json.dumps(payload, default=str).encode("utf-8")
         if prefer:
             headers["Prefer"] = prefer
-        request = Request(f"{self.base_url}/rest/v1/{path}", data=body, headers=headers, method=method)
-        try:
-            with urlopen(request, timeout=10) as response:
-                response_body = response.read().decode("utf-8")
-        except HTTPError as error:
-            raise RuntimeError(f"Supabase request failed with status {error.code}") from error
-        except URLError as error:
-            raise RuntimeError("Supabase request could not be completed") from error
-        return json.loads(response_body) if response_body else None
+        safe_to_retry = method == "GET" or idempotent or bool(prefer and "resolution=" in prefer)
+        attempts = getattr(self.settings, "supabase_retry_attempts", 1) if safe_to_retry else 1
+        resource = path.split("?", 1)[0]
+        for attempt in range(1, attempts + 1):
+            request = Request(f"{self.base_url}/rest/v1/{path}", data=body, headers=headers, method=method)
+            timer = StepTimer(run_id, f"supabase_{method.lower()}_{resource}", integration="supabase")
+            try:
+                with urlopen(request, timeout=getattr(self.settings, "supabase_timeout_seconds", 10.0)) as response:
+                    response_body = response.read().decode("utf-8")
+                timer.finish(attempt=attempt)
+                return json.loads(response_body) if response_body else None
+            except HTTPError as error:
+                retryable = error.code == 429 or error.code >= 500
+                error_code = "rate_limit" if error.code == 429 else "auth_error" if error.code in {401, 403} else "http_error"
+                timer.finish(status="failed", attempt=attempt, error_code=error_code)
+                failure = SupabaseRequestError(
+                    f"Supabase request failed with status {error.code}",
+                    code=error_code,
+                    retryable=retryable,
+                    status_code=error.code,
+                )
+            except (URLError, TimeoutError) as error:
+                error_code = "timeout" if isinstance(getattr(error, "reason", None), TimeoutError) or isinstance(error, TimeoutError) else "network_error"
+                timer.finish(status="failed", attempt=attempt, error_code=error_code)
+                failure = SupabaseRequestError("Supabase request could not be completed", code=error_code, retryable=True)
+            if not failure.retryable or attempt >= attempts:
+                raise failure
+            emit_event(run_id=run_id, step=f"supabase_{resource}", status="retry", integration="supabase", error_code=failure.code, attempt=attempt)
+            time.sleep(0.05 * (2 ** (attempt - 1)))
+        raise SupabaseRequestError("Supabase request failed", code="unknown")
 
     def list_bots(self, active: bool | None = True) -> list[BotCatalogItem]:
         active_filter = "" if active is None else f"active=eq.{str(active).lower()}&"
@@ -45,7 +85,10 @@ class SupabaseStore:
         query = urlencode({"bot_id": f"eq.{bot_id}", "select": "*", "order": "closed_at_utc.desc.nullslast"})
         rows = self._request(f"trade_results?{query}")
         real_trades = rows if isinstance(rows, list) else []
-        return build_results_snapshot(real_trades + self._load_paper_results(bot_id), f"supabase:trades:{bot_id}")
+        return build_results_snapshot(
+            real_trades + self._load_paper_results(bot_id) + self._load_tick_shadow_results(bot_id),
+            f"supabase:trades:{bot_id}",
+        )
 
     def save_backtest_snapshot(self, replay: HistoricalReplayResponse, period_days: int) -> None:
         compact_payload = replay.model_dump(mode="json")
@@ -142,6 +185,38 @@ class SupabaseStore:
             )
         return results
 
+    def _load_tick_shadow_results(self, bot_id: str) -> list[dict[str, object]]:
+        query = urlencode({
+            "bot_id": f"eq.{bot_id}", "select": "*",
+            "order": "opened_at_utc.desc", "limit": "1000",
+        })
+        rows = self._request(f"tick_shadow_trades?{query}")
+        results: list[dict[str, object]] = []
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, dict):
+                continue
+            initial_risk = abs(float(row["entry_price"]) - float(row["initial_stop_price"]))
+            initial_risk_pips = initial_risk / float(row["pip_size"])
+            risk_amount = initial_risk_pips * float(row["value_per_pip"])
+            net_pnl = float(row.get("net_pnl") or 0)
+            results.append({
+                "trade_id": f"tick-shadow:{row['signal_key']}",
+                "symbol": row["symbol"], "timeframe": "TICK",
+                "setup": "happy_gold_zigzag_structural_tick_shadow",
+                "side": row["side"], "opened_at_utc": row["opened_at_utc"],
+                "closed_at_utc": row.get("closed_at_utc"),
+                "volume_lots": float(row.get("volume_lots") or .10),
+                "entry_price": float(row["entry_price"]),
+                "exit_price": float(row["exit_price"]) if row.get("exit_price") is not None else None,
+                "stop_loss_price": float(row["initial_stop_price"]),
+                "take_profit_price": float(row["target_price"]) if row.get("target_price") is not None else None,
+                "risk_amount": risk_amount,
+                "gross_pnl": net_pnl, "fees": 0, "net_pnl": net_pnl,
+                "rr_realized": net_pnl / risk_amount if risk_amount and row.get("closed_at_utc") else None,
+                "note": f"Shadow tick; saída={row.get('exit_reason') or 'open'}. Nenhuma ordem enviada ao mercado.",
+            })
+        return results
+
     def upsert_trade(self, bot_id: str, trade: TradeResult) -> None:
         payload = trade.model_dump(mode="json")
         payload["bot_id"] = bot_id
@@ -171,11 +246,174 @@ class SupabaseStore:
         ]
         for start in range(0, len(payload), 1000):
             batch = payload[start:start + 1000]
-            try:
-                self._request("market_history?on_conflict=symbol,timeframe,timestamp_utc", method="POST", payload=batch, prefer="resolution=merge-duplicates,return=minimal")
-            except RuntimeError:
-                legacy_batch = [{**row, "bot_id": bot_id} for row in batch]
-                self._request("market_candles?on_conflict=bot_id,symbol,timeframe,timestamp_utc", method="POST", payload=legacy_batch, prefer="resolution=merge-duplicates,return=minimal")
+            self._request(
+                "market_history?on_conflict=symbol,timeframe,timestamp_utc",
+                method="POST",
+                payload=batch,
+                prefer="resolution=merge-duplicates,return=minimal",
+            )
+
+    def upsert_ticks(self, batch: TickIngestRequest) -> None:
+        payload = [
+            {
+                "collector_id": batch.collector_id,
+                "symbol": batch.symbol,
+                "time_msc": tick.time_msc,
+                "sequence": tick.sequence,
+                "bid": tick.bid,
+                "ask": tick.ask,
+                "last": tick.last,
+                "volume": tick.volume,
+                "volume_real": tick.volume_real,
+                "flags": tick.flags,
+                "point_size": batch.point_size,
+            }
+            for tick in batch.ticks
+        ]
+        for start in range(0, len(payload), 500):
+            self._request(
+                "market_ticks?on_conflict=collector_id,symbol,time_msc,sequence",
+                method="POST",
+                payload=payload[start:start + 500],
+                prefer="resolution=ignore-duplicates,return=minimal",
+            )
+
+    def record_tick_shadow_trade(
+        self, signal_key: str, payload: DecisionRequest, response: DecisionResponse
+    ) -> bool:
+        if not payload.bot_id or response.entry_price is None or response.stop_loss_price is None:
+            return False
+        query = urlencode({
+            "bot_id": f"eq.{payload.bot_id}", "status": "eq.open",
+            "select": "signal_key", "limit": "1",
+        })
+        rows = self._request(f"tick_shadow_trades?{query}")
+        if isinstance(rows, list) and rows:
+            return False
+        side = str(response.metadata.get("suggested_action", "buy"))
+        pip_size = 0.01
+        value_per_pip = payload.value_per_point_per_lot * (pip_size / payload.point_size) * float(
+            response.metadata.get("suggested_size", 0.10)
+        )
+        self._request(
+            "tick_shadow_trades?on_conflict=signal_key",
+            method="POST",
+            payload={
+                "signal_key": signal_key, "bot_id": payload.bot_id,
+                "symbol": payload.symbol, "side": side, "status": "open",
+                "opened_at_utc": payload.timestamp_utc.isoformat(),
+                "opened_time_msc": int(payload.timestamp_utc.timestamp() * 1000),
+                "entry_price": response.entry_price,
+                "volume_lots": float(response.metadata.get("suggested_size", .10)),
+                "initial_stop_price": response.stop_loss_price,
+                "stop_price": response.stop_loss_price,
+                "target_price": response.final_take_profit_price,
+                "best_price": response.entry_price,
+                "pip_size": pip_size, "value_per_pip": value_per_pip,
+                "break_even_trigger_pips": response.metadata.get("break_even_trigger_pips", 40),
+                "break_even_offset_pips": response.metadata.get("break_even_offset_pips", 1),
+                "trailing_activation_pips": response.metadata.get("trailing_activation_pips", 40),
+                "trailing_distance_pips": response.metadata.get("trailing_distance_pips", 20),
+                "max_holding_seconds": response.metadata.get("max_holding_seconds", 60),
+            },
+            prefer="resolution=ignore-duplicates,return=minimal",
+        )
+        recent_query = urlencode({
+            "symbol": f"eq.{payload.symbol}",
+            "time_msc": f"gte.{int(payload.timestamp_utc.timestamp() * 1000)}",
+            "select": "time_msc,bid,ask,last,volume,volume_real,flags",
+            "order": "time_msc.asc", "limit": "2000",
+        })
+        recent_rows = self._request(f"market_ticks?{recent_query}")
+        if isinstance(recent_rows, list) and recent_rows:
+            replay_ticks = []
+            seen: set[tuple[int, float, float]] = set()
+            for row in recent_rows:
+                if not isinstance(row, dict):
+                    continue
+                key = (int(row["time_msc"]), float(row["bid"]), float(row["ask"]))
+                if key in seen:
+                    continue
+                seen.add(key)
+                replay_ticks.append({
+                    "time_msc": key[0], "sequence": len(replay_ticks),
+                    "bid": key[1], "ask": key[2],
+                    "last": float(row.get("last") or 0),
+                    "volume": int(row.get("volume") or 0),
+                    "volume_real": float(row.get("volume_real") or 0),
+                    "flags": int(row.get("flags") or 0),
+                })
+            if replay_ticks:
+                self.advance_tick_shadow_trades(TickIngestRequest(
+                    collector_id="shadow-backfill", symbol=payload.symbol,
+                    point_size=payload.point_size, ticks=replay_ticks,
+                ))
+        return True
+
+    @staticmethod
+    def _advance_tick_shadow_row(
+        row: dict[str, object], batch: TickIngestRequest
+    ) -> dict[str, object]:
+        side = str(row["side"])
+        direction = 1 if side == "buy" else -1
+        entry = float(row["entry_price"])
+        pip_size = float(row["pip_size"])
+        stop = float(row["stop_price"])
+        best = float(row["best_price"])
+        target = float(row["target_price"]) if row.get("target_price") is not None else None
+        opened_msc = int(row["opened_time_msc"])
+        max_holding_msc = int(row["max_holding_seconds"]) * 1000
+        exit_price: float | None = None
+        exit_msc: int | None = None
+        exit_reason: str | None = None
+        for tick in batch.ticks:
+            if tick.time_msc < opened_msc:
+                continue
+            executable = tick.bid if side == "buy" else tick.ask
+            best = max(best, executable) if side == "buy" else min(best, executable)
+            favorable_pips = direction * (best - entry) / pip_size
+            if favorable_pips >= float(row["trailing_activation_pips"]):
+                trailing_stop = best - direction * float(row["trailing_distance_pips"]) * pip_size
+                stop = max(stop, trailing_stop) if side == "buy" else min(stop, trailing_stop)
+            if favorable_pips >= float(row["break_even_trigger_pips"]):
+                break_even = entry + direction * float(row["break_even_offset_pips"]) * pip_size
+                stop = max(stop, break_even) if side == "buy" else min(stop, break_even)
+            stopped = executable <= stop if side == "buy" else executable >= stop
+            targeted = target is not None and (executable >= target if side == "buy" else executable <= target)
+            expired = tick.time_msc - opened_msc >= max_holding_msc
+            if stopped or targeted or expired:
+                exit_price, exit_msc = executable, tick.time_msc
+                exit_reason = "stop" if stopped else "target" if targeted else "time"
+                break
+        patch: dict[str, object] = {
+            "stop_price": stop, "best_price": best,
+            "updated_at": datetime.now(timezone.utc).isoformat(),
+        }
+        if exit_price is not None and exit_msc is not None and exit_reason is not None:
+            pnl_pips = direction * (exit_price - entry) / pip_size
+            patch.update({
+                "status": "closed", "closed_time_msc": exit_msc,
+                "closed_at_utc": datetime.fromtimestamp(exit_msc / 1000, timezone.utc).isoformat(),
+                "exit_price": exit_price, "exit_reason": exit_reason,
+                "pnl_pips": pnl_pips,
+                "net_pnl": pnl_pips * float(row["value_per_pip"]),
+            })
+        return patch
+
+    def advance_tick_shadow_trades(self, batch: TickIngestRequest) -> None:
+        query = urlencode({
+            "symbol": f"eq.{batch.symbol}", "status": "eq.open", "select": "*",
+        })
+        rows = self._request(f"tick_shadow_trades?{query}")
+        for row in rows if isinstance(rows, list) else []:
+            if not isinstance(row, dict):
+                continue
+            patch = self._advance_tick_shadow_row(row, batch)
+            filters = urlencode({"signal_key": f"eq.{row['signal_key']}", "status": "eq.open"})
+            self._request(
+                f"tick_shadow_trades?{filters}", method="PATCH", payload=patch,
+                prefer="return=minimal",
+            )
 
     def advance_paper_trades(self, bot_id: str, candles: list[CandleSnapshot]) -> None:
         if not candles:
@@ -243,11 +481,12 @@ class SupabaseStore:
         setup = str(response.metadata.get("setup_type", "fimath"))
         suggested_action = str(response.metadata.get("suggested_action", ""))
         candle_timestamp = payload.candles[-1].timestamp_utc
-        signal_key = f"{payload.bot_id}:{payload.timeframe}:{candle_timestamp.isoformat()}:{suggested_action}:{setup}"
+        signal_timestamp = response.metadata.get("signal_timestamp_utc", candle_timestamp.isoformat())
+        signal_key = f"{payload.bot_id}:{payload.timeframe}:{signal_timestamp}:{suggested_action}:{setup}"
         candidate = {
             "signal_key": signal_key,
             "bot_id": payload.bot_id,
-            "candle_timestamp_utc": candle_timestamp.isoformat(),
+            "candle_timestamp_utc": signal_timestamp,
             "last_evaluated_at_utc": payload.timestamp_utc.isoformat(),
             "suggested_action": suggested_action,
             "setup_type": setup,
@@ -371,7 +610,11 @@ class SupabaseStore:
             }
         )
         trade_rows = self._request(f"trade_results?{trades_query}")
-        combined_rows = (trade_rows if isinstance(trade_rows, list) else []) + self._load_paper_results(bot.id)
+        combined_rows = (
+            (trade_rows if isinstance(trade_rows, list) else [])
+            + self._load_paper_results(bot.id)
+            + self._load_tick_shadow_results(bot.id)
+        )
         trades = [TradeResult.model_validate(row) for row in combined_rows if isinstance(row, dict)]
         return MarketChartResponse(bot_id=bot.id, symbol=bot.symbol, timeframe=bot.timeframe, candles=candles, trades=trades)
 
@@ -379,11 +622,7 @@ class SupabaseStore:
         candle_rows: list[object] = []
         for offset in range(0, limit, 1000):
             query = urlencode({"symbol": f"eq.{bot.symbol}", "timeframe": f"eq.{bot.timeframe}", "select": "timestamp_utc,open,high,low,close,volume", "order": "timestamp_utc.desc", "limit": "1000", "offset": str(offset)})
-            try:
-                page = self._request(f"market_history?{query}")
-            except RuntimeError:
-                legacy_query = urlencode({"bot_id": f"eq.{source_bot_id or bot.id}", "symbol": f"eq.{bot.symbol}", "timeframe": f"eq.{bot.timeframe}", "select": "timestamp_utc,open,high,low,close,volume", "order": "timestamp_utc.desc", "limit": "1000", "offset": str(offset)})
-                page = self._request(f"market_candles?{legacy_query}")
+            page = self._request(f"market_history?{query}")
             if not isinstance(page, list) or not page:
                 break
             candle_rows.extend(page)
@@ -395,9 +634,44 @@ class SupabaseStore:
         self._request(
             "bot_runtime_status?on_conflict=bot_id",
             method="POST",
-            payload={"bot_id": bot_id, "last_request_at_utc": request_at.isoformat(), "last_candle_at_utc": candle_at.isoformat() if candle_at else None, "last_action": action, "last_reason": reason, "last_latency_ms": round(latency_ms, 2), "consecutive_errors": 0, "last_error": None},
+            payload={"bot_id": bot_id, "last_request_at_utc": request_at.isoformat(), "last_attempt_at_utc": datetime.now(timezone.utc).isoformat(), "last_success_at_utc": datetime.now(timezone.utc).isoformat(), "last_candle_at_utc": candle_at.isoformat() if candle_at else None, "last_action": action, "last_reason": reason, "last_latency_ms": round(latency_ms, 2), "consecutive_errors": 0, "last_error": None, "last_error_code": None},
             prefer="resolution=merge-duplicates,return=minimal",
         )
+
+    def record_runtime_failure(self, bot_id: str, *, error_code: str, error_message: str) -> None:
+        rows = self._request(f"bot_runtime_status?bot_id=eq.{bot_id}&select=consecutive_errors&limit=1")
+        previous = int(rows[0].get("consecutive_errors") or 0) if isinstance(rows, list) and rows else 0
+        self._request(
+            "bot_runtime_status?on_conflict=bot_id",
+            method="POST",
+            payload={
+                "bot_id": bot_id,
+                "last_attempt_at_utc": datetime.now(timezone.utc).isoformat(),
+                "consecutive_errors": previous + 1,
+                "last_error": error_message[:500],
+                "last_error_code": error_code,
+            },
+            prefer="resolution=merge-duplicates,return=minimal",
+        )
+
+    def load_decision_response(self, bot_id: str, request_id: str) -> DecisionResponse | None:
+        query = urlencode({"bot_id": f"eq.{bot_id}", "request_id": f"eq.{request_id}", "select": "response", "limit": "1"})
+        rows = self._request(f"decision_requests?{query}")
+        if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+            return None
+        response = rows[0].get("response")
+        return DecisionResponse.model_validate(response) if isinstance(response, dict) else None
+
+    def save_decision_response(self, bot_id: str, request_id: str, response: DecisionResponse) -> None:
+        self._request(
+            "decision_requests?on_conflict=bot_id,request_id",
+            method="POST",
+            payload={"bot_id": bot_id, "request_id": request_id, "response": response.model_dump(mode="json")},
+            prefer="resolution=merge-duplicates,return=minimal",
+        )
+
+    def readiness(self) -> None:
+        self._request("bots?select=id&limit=1")
 
     def load_operations(self) -> tuple[list[dict[str, object]], list[dict[str, object]]]:
         statuses = self._request("bot_runtime_status?select=*&order=bot_id")

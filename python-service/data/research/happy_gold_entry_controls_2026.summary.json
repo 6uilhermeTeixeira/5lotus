@@ -1,0 +1,171 @@
+{
+  "method": "Same-day paired controls using the matched trade direction",
+  "control_offsets_minutes": [
+    -55,
+    -37,
+    -19,
+    19,
+    37,
+    55
+  ],
+  "exclusion_minutes_around_any_entry": 3,
+  "entries": 95,
+  "controls": 470,
+  "controls_per_entry_median": 5,
+  "comparisons": {
+    "pre_1s_directional_move_pips": {
+      "entry_median": 10.0,
+      "control_median": -0.0,
+      "auc": 0.66224,
+      "best_exploratory_rule": {
+        "threshold": 5.0,
+        "sensitivity": 0.610526,
+        "specificity": 0.8,
+        "balanced_accuracy": 0.705263
+      },
+      "leave_one_day_out": {
+        "folds": 48,
+        "sensitivity": 0.568421,
+        "specificity": 0.802128,
+        "balanced_accuracy": 0.685274
+      }
+    },
+    "pre_3s_directional_move_pips": {
+      "entry_median": 29.15,
+      "control_median": 0.0,
+      "auc": 0.674434,
+      "best_exploratory_rule": {
+        "threshold": 9.5,
+        "sensitivity": 0.663158,
+        "specificity": 0.691489,
+        "balanced_accuracy": 0.677324
+      },
+      "leave_one_day_out": {
+        "folds": 48,
+        "sensitivity": 0.568421,
+        "specificity": 0.697872,
+        "balanced_accuracy": 0.633147
+      }
+    },
+    "pre_5s_directional_move_pips": {
+      "entry_median": 55.0,
+      "control_median": 0.5,
+      "auc": 0.729978,
+      "best_exploratory_rule": {
+        "threshold": 15.0,
+        "sensitivity": 0.726316,
+        "specificity": 0.674468,
+        "balanced_accuracy": 0.700392
+      },
+      "leave_one_day_out": {
+        "folds": 48,
+        "sensitivity": 0.610526,
+        "specificity": 0.685106,
+        "balanced_accuracy": 0.647816
+      }
+    },
+    "pre_10s_directional_move_pips": {
+      "entry_median": 81.5,
+      "control_median": 2.575,
+      "auc": 0.744031,
+      "best_exploratory_rule": {
+        "threshold": 32.5,
+        "sensitivity": 0.715789,
+        "specificity": 0.702128,
+        "balanced_accuracy": 0.708959
+      },
+      "leave_one_day_out": {
+        "folds": 48,
+        "sensitivity": 0.663158,
+        "specificity": 0.704255,
+        "balanced_accuracy": 0.683707
+      }
+    },
+    "pre_30s_directional_move_pips": {
+      "entry_median": 145.5,
+      "control_median": 11.5,
+      "auc": 0.807984,
+      "best_exploratory_rule": {
+        "threshold": 76.0,
+        "sensitivity": 0.726316,
+        "specificity": 0.742553,
+        "balanced_accuracy": 0.734434
+      },
+      "leave_one_day_out": {
+        "folds": 48,
+        "sensitivity": 0.684211,
+        "specificity": 0.734043,
+        "balanced_accuracy": 0.709127
+      }
+    },
+    "pre_60s_directional_move_pips": {
+      "entry_median": 234.0,
+      "control_median": -5.0,
+      "auc": 0.853427,
+      "best_exploratory_rule": {
+        "threshold": 79.0,
+        "sensitivity": 0.884211,
+        "specificity": 0.691489,
+        "balanced_accuracy": 0.78785
+      },
+      "leave_one_day_out": {
+        "folds": 48,
+        "sensitivity": 0.821053,
+        "specificity": 0.680851,
+        "balanced_accuracy": 0.750952
+      }
+    },
+    "pre_300s_directional_move_pips": {
+      "entry_median": 589.0,
+      "control_median": -7.5,
+      "auc": 0.866495,
+      "best_exploratory_rule": {
+        "threshold": 324.5,
+        "sensitivity": 0.873684,
+        "specificity": 0.793617,
+        "balanced_accuracy": 0.833651
+      },
+      "leave_one_day_out": {
+        "folds": 48,
+        "sensitivity": 0.852632,
+        "specificity": 0.782979,
+        "balanced_accuracy": 0.817805
+      }
+    },
+    "pre_900s_directional_move_pips": {
+      "entry_median": 858.5,
+      "control_median": 60.75,
+      "auc": 0.833964,
+      "best_exploratory_rule": {
+        "threshold": 372.35,
+        "sensitivity": 0.884211,
+        "specificity": 0.708511,
+        "balanced_accuracy": 0.796361
+      },
+      "leave_one_day_out": {
+        "folds": 48,
+        "sensitivity": 0.852632,
+        "specificity": 0.712766,
+        "balanced_accuracy": 0.782699
+      }
+    },
+    "pre_3600s_directional_move_pips": {
+      "entry_median": 1123.65,
+      "control_median": 447.9,
+      "auc": 0.704099,
+      "best_exploratory_rule": {
+        "threshold": 519.0,
+        "sensitivity": 0.810526,
+        "specificity": 0.534043,
+        "balanced_accuracy": 0.672284
+      },
+      "leave_one_day_out": {
+        "folds": 48,
+        "sensitivity": 0.778947,
+        "specificity": 0.525532,
+        "balanced_accuracy": 0.65224
+      }
+    }
+  },
+  "limitation": "Thresholds are exploratory and in-sample; controls from the same day are correlated and require out-of-sample validation."
+}

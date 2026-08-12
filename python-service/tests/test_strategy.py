@@ -398,7 +398,7 @@ class DecisionTests(unittest.TestCase):
         self.assertIsNotNone(response.entry_price)
         self.assertIsNotNone(response.stop_loss_price)
 
-    def retired_setup_is_evaluated_once_per_closed_candle(self) -> None:
+    def setup_uses_current_quote_instead_of_stale_candle_cache(self) -> None:
         candle_time = datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc)
         first = evaluate_decision(bullish_request(candle_time, ask=102.1), settings())
         second_request = bullish_request(candle_time, ask=105.0)
@@ -407,7 +407,7 @@ class DecisionTests(unittest.TestCase):
         second = evaluate_decision(second_request, settings())
 
         self.assertEqual(first.entry_price, 102.1)
-        self.assertEqual(second.entry_price, first.entry_price)
+        self.assertEqual(second.entry_price, 105.0)
 
     def retired_momentum_profile_records_shadow_breakout_candidate(self) -> None:
         request = momentum_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
@@ -899,6 +899,223 @@ class DecisionTests(unittest.TestCase):
 
         self.assertEqual(response.action, DecisionAction.HOLD)
         self.assertEqual(response.reason, "unsupported_strategy_profile")
+
+    def test_happy_gold_tick_impulse_requires_a_warmed_window(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-17"
+        request.indicators = {"impulse_30s_ready": 0, "impulse_30s_move_points": 150}
+
+        response = evaluate_decision(request, settings(), "happy_gold_tick_impulse_shadow")
+
+        self.assertEqual(response.reason, "happy_gold_tick_impulse_filter_block")
+        self.assertFalse(response.metadata["candidate"])
+
+    def test_happy_gold_tick_impulse_emits_isolated_buy_shadow_candidate(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-17"
+        request.indicators = {"impulse_30s_ready": 1, "impulse_30s_move_points": 110}
+
+        response = evaluate_decision(request, settings(), "happy_gold_tick_impulse_shadow")
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.reason, "happy_gold_tick_impulse_shadow_signal")
+        self.assertEqual(response.metadata["suggested_action"], "buy")
+        self.assertEqual(response.metadata["suggested_size"], .10)
+        self.assertEqual(response.stop_loss_points, 240)
+        self.assertEqual(response.take_profit_points, 1000)
+        self.assertFalse(response.metadata["record_paper_trade"])
+        self.assertTrue(response.metadata["experimental_shadow_lock"])
+
+    def test_happy_gold_tick_impulse_uses_negative_move_for_sell(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-17"
+        request.indicators = {"impulse_30s_ready": 1, "impulse_30s_move_points": -95.5}
+
+        response = evaluate_decision(request, settings(), "happy_gold_tick_impulse_shadow")
+
+        self.assertEqual(response.reason, "happy_gold_tick_impulse_shadow_signal")
+        self.assertEqual(response.metadata["suggested_action"], "sell")
+        self.assertGreater(float(response.stop_loss_price), float(response.entry_price))
+        self.assertLess(float(response.take_profit_price), float(response.entry_price))
+
+    def test_happy_gold_tick_impulse_normalizes_three_digit_broker_points(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-17"
+        request.point_size = .001
+        request.indicators = {"impulse_30s_ready": 1, "impulse_30s_move_points": 955}
+
+        response = evaluate_decision(request, settings(), "happy_gold_tick_impulse_shadow")
+
+        self.assertEqual(response.reason, "happy_gold_tick_impulse_shadow_signal")
+        self.assertAlmostEqual(response.metadata["impulse_30s_move_pips"], 95.5)
+        self.assertAlmostEqual(float(response.entry_price) - float(response.stop_loss_price), 2.4)
+        self.assertEqual(response.stop_loss_points, 2400)
+
+    def test_happy_gold_zigzag_tick_context_requires_aligned_900s_move(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-18"
+        request.indicators = {"impulse_900s_ready": 1, "impulse_900s_move_points": 799}
+
+        response = evaluate_decision(request, settings(), "happy_gold_zigzag_tick_context_shadow")
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.reason, "happy_gold_zigzag_tick_context_filter_block")
+        self.assertFalse(response.metadata["candidate"])
+
+    def test_happy_gold_zigzag_tick_context_emits_isolated_shadow_candidate(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-18"
+        request.indicators = {"impulse_900s_ready": 1, "impulse_900s_move_points": 800}
+
+        response = evaluate_decision(request, settings(), "happy_gold_zigzag_tick_context_shadow")
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.reason, "happy_gold_zigzag_tick_context_shadow_signal")
+        self.assertEqual(response.metadata["suggested_action"], "buy")
+        self.assertEqual(response.metadata["suggested_size"], .10)
+        self.assertEqual(response.metadata["impulse_900s_aligned_move_pips"], 800)
+        self.assertTrue(response.metadata["experimental_shadow_lock"])
+
+    def test_happy_gold_structural_tick_emits_shadow_candidate_with_fixed_filters(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 30, 10, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-19"
+        request.indicators = {"impulse_900s_ready": 1, "impulse_900s_move_points": 800}
+        research_settings = settings(
+            happy_gold_structural_context_900s_threshold_pips=800,
+            happy_gold_structural_ema20_gap_pips=0,
+            happy_gold_structural_max_pivot_extension_pips=1000,
+        )
+
+        response = evaluate_decision(request, research_settings, "happy_gold_zigzag_structural_tick_shadow")
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.reason, "happy_gold_zigzag_structural_tick_shadow_signal")
+        self.assertEqual(response.metadata["suggested_action"], "buy")
+        self.assertEqual(response.metadata["annual_replay_signals"], 27)
+        self.assertEqual(response.stop_loss_points, 60)
+        self.assertEqual(response.metadata["break_even_trigger_pips"], 40)
+        self.assertEqual(response.metadata["trailing_distance_pips"], 20)
+        self.assertEqual(response.metadata["max_holding_seconds"], 60)
+        self.assertTrue(response.metadata["experimental_shadow_lock"])
+
+    def test_happy_gold_structural_tick_blocks_friday(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+        request.indicators = {"impulse_900s_ready": 1, "impulse_900s_move_points": 2000}
+
+        response = evaluate_decision(request, settings(), "happy_gold_zigzag_structural_tick_shadow")
+
+        self.assertEqual(response.reason, "happy_gold_zigzag_structural_tick_filter_block")
+        weekday_check = next(check for check in response.risk_checks if check.name == "weekday_filter")
+        self.assertFalse(weekday_check.passed)
+
+    def test_happy_gold_normalized_range_emits_isolated_shadow_candidate(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 30, 10, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-21"
+        request.indicators = {"impulse_900s_ready": 1, "impulse_900s_move_points": 800}
+        research_settings = settings(
+            happy_gold_structural_context_900s_threshold_pips=800,
+            happy_gold_structural_ema20_gap_pips=0,
+            happy_gold_structural_max_pivot_extension_pips=1000,
+            happy_gold_normalized_range_max=100,
+        )
+
+        response = evaluate_decision(request, research_settings, "happy_gold_zigzag_normalized_range_shadow")
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.reason, "happy_gold_zigzag_normalized_range_shadow_signal")
+        self.assertEqual(response.metadata["strategy_profile"], "happy_gold_zigzag_normalized_range_shadow")
+        self.assertEqual(response.metadata["oos_2026_trades"], 75)
+        self.assertTrue(response.metadata["tick_shadow_lifecycle"])
+        self.assertTrue(response.metadata["experimental_shadow_lock"])
+
+    def test_happy_gold_normalized_range_blocks_expanded_previous_candle(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 30, 10, 0, tzinfo=timezone.utc))
+        request.indicators = {"impulse_900s_ready": 1, "impulse_900s_move_points": 800}
+        research_settings = settings(
+            happy_gold_structural_context_900s_threshold_pips=800,
+            happy_gold_structural_ema20_gap_pips=0,
+            happy_gold_structural_max_pivot_extension_pips=1000,
+            happy_gold_normalized_range_max=0,
+        )
+
+        response = evaluate_decision(request, research_settings, "happy_gold_zigzag_normalized_range_shadow")
+
+        self.assertEqual(response.reason, "happy_gold_zigzag_normalized_range_shadow_filter_block")
+        range_check = next(check for check in response.risk_checks if check.name == "normalized_prior_m5_range")
+        self.assertFalse(range_check.passed)
+
+    def test_happy_gold_normalized_range_blocks_spread_above_stress_limit(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 30, 10, 0, tzinfo=timezone.utc))
+        request.spread_points = 16
+        request.indicators = {"impulse_900s_ready": 1, "impulse_900s_move_points": 800}
+        research_settings = settings(
+            happy_gold_structural_context_900s_threshold_pips=800,
+            happy_gold_structural_ema20_gap_pips=0,
+            happy_gold_structural_max_pivot_extension_pips=1000,
+            happy_gold_normalized_range_max=100,
+            happy_gold_normalized_range_max_spread_points=15,
+        )
+
+        response = evaluate_decision(request, research_settings, "happy_gold_zigzag_normalized_range_shadow")
+
+        self.assertEqual(response.reason, "happy_gold_zigzag_normalized_range_shadow_filter_block")
+        spread_check = next(check for check in response.risk_checks if check.name == "normalized_range_spread_limit")
+        self.assertFalse(spread_check.passed)
+
+    def test_happy_gold_multiwindow_tick_score_emits_isolated_shadow_candidate(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 30, 10, 0, tzinfo=timezone.utc))
+        request.bot_id = "bot-20"
+        request.indicators = {
+            "impulse_5s_ready": 1, "impulse_5s_move_points": 20,
+            "impulse_10s_ready": 1, "impulse_10s_move_points": 40,
+            "impulse_30s_ready": 1, "impulse_30s_move_points": 80,
+            "impulse_60s_ready": 1, "impulse_60s_move_points": 100,
+            "impulse_300s_ready": 1, "impulse_300s_move_points": 350,
+            "impulse_900s_ready": 1, "impulse_900s_move_points": 400,
+        }
+
+        response = evaluate_decision(
+            request, settings(happy_gold_multiwindow_shadow_enabled=True),
+            "happy_gold_multiwindow_tick_score_shadow",
+        )
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.reason, "happy_gold_multiwindow_tick_score_shadow_signal")
+        self.assertEqual(response.metadata["suggested_action"], "buy")
+        self.assertEqual(response.metadata["multiwindow_score"], 6)
+        self.assertEqual(response.stop_loss_points, 60)
+        self.assertTrue(response.metadata["tick_shadow_lifecycle"])
+        self.assertTrue(response.metadata["experimental_shadow_lock"])
+
+    def test_happy_gold_multiwindow_tick_score_requires_aligned_core_windows(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 30, 10, 0, tzinfo=timezone.utc))
+        request.indicators = {
+            "impulse_5s_ready": 1, "impulse_5s_move_points": 20,
+            "impulse_10s_ready": 1, "impulse_10s_move_points": 40,
+            "impulse_30s_ready": 1, "impulse_30s_move_points": 80,
+            "impulse_60s_ready": 1, "impulse_60s_move_points": 100,
+            "impulse_300s_ready": 1, "impulse_300s_move_points": -350,
+            "impulse_900s_ready": 1, "impulse_900s_move_points": 400,
+        }
+
+        response = evaluate_decision(request, settings(), "happy_gold_multiwindow_tick_score_shadow")
+
+        self.assertEqual(response.reason, "happy_gold_multiwindow_tick_score_block")
+        self.assertFalse(response.metadata["candidate"])
+
+    def test_happy_gold_multiwindow_tick_score_is_locked_after_exhaustive_replay(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 30, 10, 0, tzinfo=timezone.utc))
+        request.indicators = {
+            f"impulse_{seconds}s_{name}": value
+            for seconds, move in ((5, 20), (10, 40), (30, 80), (60, 100), (300, 350), (900, 400))
+            for name, value in (("ready", 1), ("move_points", move))
+        }
+
+        response = evaluate_decision(request, settings(), "happy_gold_multiwindow_tick_score_shadow")
+
+        self.assertEqual(response.reason, "happy_gold_multiwindow_tick_score_block")
+        replay_gate = next(check for check in response.risk_checks if check.name == "exhaustive_replay_gate")
+        self.assertFalse(replay_gate.passed)
 
 
 if __name__ == "__main__":

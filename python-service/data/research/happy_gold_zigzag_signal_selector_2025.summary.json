@@ -1,0 +1,152 @@
+{
+  "method": "One-to-one same-side nearest matching using only high/medium reconstructed entries.",
+  "coverage_start_utc": "2025-10-15T01:02:34.271000+00:00",
+  "coverage_end_utc": "2025-12-31T16:05:03.121000+00:00",
+  "match_tolerance_seconds": 60,
+  "signals_in_coverage": 154,
+  "matched_signals": 26,
+  "unmatched_signals": 128,
+  "baseline_precision_pct": 16.883,
+  "matched_entry_coverage_pct": 21.138,
+  "matched_source_win_rate_pct": 76.923,
+  "feature_medians": {
+    "matched_context_move_pips": 1058.325,
+    "unmatched_context_move_pips": 915.35,
+    "matched_pivot_extension_pips": 17.4,
+    "unmatched_pivot_extension_pips": 30.775
+  },
+  "by_month": {
+    "2025-10": {
+      "signals": 44,
+      "matched": 13,
+      "precision_pct": 29.545
+    },
+    "2025-11": {
+      "signals": 55,
+      "matched": 7,
+      "precision_pct": 12.727
+    },
+    "2025-12": {
+      "signals": 55,
+      "matched": 6,
+      "precision_pct": 10.909
+    }
+  },
+  "single_feature_sensitivity": {
+    "context_gte_800": {
+      "signals": 154,
+      "matched": 26,
+      "precision_pct": 16.883,
+      "matched_recall_pct": 100.0
+    },
+    "context_gte_900": {
+      "signals": 83,
+      "matched": 14,
+      "precision_pct": 16.867,
+      "matched_recall_pct": 53.846
+    },
+    "context_gte_1000": {
+      "signals": 68,
+      "matched": 14,
+      "precision_pct": 20.588,
+      "matched_recall_pct": 53.846
+    },
+    "context_gte_1200": {
+      "signals": 44,
+      "matched": 10,
+      "precision_pct": 22.727,
+      "matched_recall_pct": 38.462
+    },
+    "context_gte_1500": {
+      "signals": 19,
+      "matched": 2,
+      "precision_pct": 10.526,
+      "matched_recall_pct": 7.692
+    },
+    "context_gte_2000": {
+      "signals": 10,
+      "matched": 1,
+      "precision_pct": 10.0,
+      "matched_recall_pct": 3.846
+    },
+    "extension_lte_25": {
+      "signals": 74,
+      "matched": 15,
+      "precision_pct": 20.27,
+      "matched_recall_pct": 57.692
+    },
+    "extension_lte_50": {
+      "signals": 93,
+      "matched": 18,
+      "precision_pct": 19.355,
+      "matched_recall_pct": 69.231
+    },
+    "extension_lte_100": {
+      "signals": 105,
+      "matched": 19,
+      "precision_pct": 18.095,
+      "matched_recall_pct": 73.077
+    },
+    "extension_lte_200": {
+      "signals": 125,
+      "matched": 20,
+      "precision_pct": 16.0,
+      "matched_recall_pct": 76.923
+    }
+  },
+  "causal_feature_discrimination": {
+    "context_move_pips": {
+      "auc": 0.5925,
+      "preferred_direction": "higher",
+      "matched_median": 1058.325,
+      "unmatched_median": 915.35
+    },
+    "pivot_extension_pips": {
+      "auc": 0.5297,
+      "preferred_direction": "lower",
+      "matched_median": 17.4,
+      "unmatched_median": 30.775
+    },
+    "atr14_pips": {
+      "auc": 0.54,
+      "preferred_direction": "higher",
+      "matched_median": 492.418,
+      "unmatched_median": 462.596
+    },
+    "directional_ema20_gap_pips": {
+      "auc": 0.6268,
+      "preferred_direction": "higher",
+      "matched_median": 613.173,
+      "unmatched_median": 466.665
+    },
+    "directional_ema20_slope_pips": {
+      "auc": 0.5373,
+      "preferred_direction": "higher",
+      "matched_median": 58.621,
+      "unmatched_median": 51.495
+    },
+    "directional_30m_return_pips": {
+      "auc": 0.5631,
+      "preferred_direction": "higher",
+      "matched_median": 867.0,
+      "unmatched_median": 656.0
+    },
+    "directional_60m_return_pips": {
+      "auc": 0.591,
+      "preferred_direction": "higher",
+      "matched_median": 841.675,
+      "unmatched_median": 622.25
+    },
+    "prior_m5_range_pips": {
+      "auc": 0.5074,
+      "preferred_direction": "higher",
+      "matched_median": 512.875,
+      "unmatched_median": 510.5
+    }
+  },
+  "limitations": [
+    "Unmatched signals are not proven losing trades; they are only absent from the published history.",
+    "Coverage starts and ends inside partial trading days.",
+    "Threshold tables are descriptive and must not be promoted without walk-forward replay."
+  ]
+}

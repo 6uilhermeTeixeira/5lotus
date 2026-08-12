@@ -17,6 +17,10 @@ nomes públicos do produto e não devem ser alterados sem migrar as variáveis d
 3. Iniciar todo o runtime persistente com `./scripts/run-2lotus-demo.sh`.
 4. Verificar o estado a qualquer momento com `./scripts/check-2lotus-runtime.sh`.
 
+Para não manter a senha do dashboard em texto puro, gere o valor scrypt com
+`python-service/.venv/bin/python python-service/scripts/hash_dashboard_password.py` e salve a saída em
+`DAYTRADE_DASHBOARD_PASSWORD`. O formato antigo permanece aceito apenas para migração.
+
 O noVNC fica em `http://127.0.0.1:6080/vnc.html?host=127.0.0.1&port=6080` no próprio servidor.
 As portas não devem ser expostas diretamente à internet.
 
@@ -53,10 +57,24 @@ Preencha os inputs:
 - `HappyGoldResearchBotId`: `bot-12` (força o polling da reconstrução ZigZag M30 sempre sem execução)
 - `HappyGoldConfirmedResearchBotId`: `bot-13` (variante ZigZag com confirmação seletiva de regime, sempre sem execução)
 - `HappyGoldCombinedPortfolioBotId`: `bot-16` (meta-portfólio da confirmação de regime com 7/6 100/100, sempre sem execução)
+- `HappyGoldTickImpulseBotId`: `bot-17` (filtro experimental de impulso curto, sempre sem execução)
+- `HappyGoldZigZagTickContextBotId`: `bot-18` (ZigZag com contexto de ticks, sempre sem execução)
+- `HappyGoldZigZagStructuralTickBotId`: `bot-19` (ZigZag estrutural com lifecycle shadow por tick, sempre sem execução)
+- `HappyGoldMultiwindowTickScoreBotId`: `bot-20` (score de aceleração em 5/10/30/60/300/900 segundos, sempre sem execução)
+- `HappyGoldNormalizedRangeBotId`: `bot-21` (Bot 19 com compressão M5/ATR validada em walk-forward, sempre sem execução)
 - `HistoryCacheBars`: `100000` somente no bot canônico, visando aproximadamente um ano de M5 quando a corretora disponibilizar essa profundidade
 - `RefreshDeepHistoryOnInit`: `false` por padrão; ative somente para um bootstrap explícito dos 100 mil candles
 - `LotusIngestApiKey`: valor de `DAYTRADE_INGEST_API_KEY`
 - `EnableOrderExecution`: `false`
+
+Em um segundo gráfico `XAUUSD`, anexe `TickCollectorEA.mq5` com:
+
+- `CollectorId`: `2lotus-forward-01`
+- `CaptureSymbol`: `XAUUSD`
+- `RotateEverySeconds`: `5`
+
+O `tick-uploader` aceita exclusivamente arquivos desse collector. Arquivos históricos, incluindo
+os de `2lotus-history-01`, permanecem fora do fluxo forward e não devem ser enviados por esse serviço.
 
 Depois de atualizar o EA, recompile-o e remova/anexe novamente ao gráfico. A versão atual converte
 os horários do servidor da corretora para UTC antes de persistir candles e negócios; dados antigos
@@ -88,7 +106,8 @@ O resultado deve indicar `"status":"ok"`. Após o fechamento de um trade demo, o
 `POST /api/trades` com a chave no header `X-2Lotus-Ingest-Key`; o painel 2Lotus passa a mostrar a
 operação gravada no Supabase.
 
-Durante shadow, confirme também nos logs que `bot-6`, `bot-7`, `bot-11`, `bot-12`, `bot-13` e `bot-16` recebem HTTP 200. `strategy_signals`
+Durante shadow, confirme também nos logs que `bot-6`, `bot-7`, `bot-11`, `bot-12`, `bot-13`,
+`bot-16`, `bot-17`, `bot-18`, `bot-19`, `bot-20` e `bot-21` recebem HTTP 200. `strategy_signals`
 recebe os candidatos quando cada setup ocorre e `paper_trades` mantém o variant `technical`;
 o Bot 1 também acompanha `flow_confirmed`. As chaves de sinal e as consultas de posição são
 segmentadas por bot. A execução real só pode ser avaliada depois da
@@ -117,6 +136,19 @@ bloqueio ao atingir -2R no dia. O status `promising_not_live` mantém o bot some
 
 O catálogo final acompanha somente XAUUSD/M5. O histórico profundo fica em `market_history` e é
 reutilizado pelas seis estratégias selecionadas.
+
+## Verificação operacional
+
+- Use `/health` para confirmar que o processo responde.
+- Use `/ready` para confirmar que configuração e Supabase estão disponíveis.
+- No portal, `/operations` diferencia última tentativa de último sucesso e mostra erros consecutivos.
+- `/api/metrics` expõe, com autenticação, contagens e p95 por etapa para diagnóstico rápido.
+- Alertar quando um bot ficar mais de 15 minutos sem sucesso em mercado aberto, quando o atraso do
+  candle exceder 15 minutos ou quando houver erro consecutivo.
+
+Antes de publicar código que usa `decision_requests` ou os novos campos de runtime, aplique a migration
+`20260804210000_add_decision_idempotency_and_runtime_telemetry.sql`. O deploy do banco precede o deploy
+da API.
 
 ## Segurança e recuperação
 

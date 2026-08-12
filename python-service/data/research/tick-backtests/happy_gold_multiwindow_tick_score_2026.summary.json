@@ -1,0 +1,74 @@
+{
+  "strategy_profile": "happy_gold_multiwindow_tick_score_shadow",
+  "source": "Dukascopy XAUUSD ticks 2026-01-01 through 2026-04-14",
+  "ticks_scanned": 28926579,
+  "poll_seconds": 5,
+  "modeled_spread_pips": 10,
+  "cooldown_seconds": 0,
+  "rearm_required": true,
+  "thresholds_pips": {
+    "5": 15.0,
+    "10": 32.5,
+    "30": 76.0,
+    "60": 79.0,
+    "300": 324.5,
+    "900": 372.35
+  },
+  "full_period": {
+    "trades_count": 43610,
+    "wins": 20048,
+    "losses": 23518,
+    "breakevens": 44,
+    "win_rate_pct": 45.971,
+    "net_pnl": -34047.5,
+    "profit_factor": 0.806,
+    "max_drawdown_amount": 34066.77
+  },
+  "by_month": {
+    "2026-01": {
+      "trades_count": 10073,
+      "wins": 4760,
+      "losses": 5307,
+      "breakevens": 6,
+      "win_rate_pct": 47.255,
+      "net_pnl": -7368.61,
+      "profit_factor": 0.809,
+      "max_drawdown_amount": 7407.84
+    },
+    "2026-02": {
+      "trades_count": 12735,
+      "wins": 5687,
+      "losses": 7036,
+      "breakevens": 12,
+      "win_rate_pct": 44.656,
+      "net_pnl": -10402.93,
+      "profit_factor": 0.81,
+      "max_drawdown_amount": 10542.37
+    },
+    "2026-03": {
+      "trades_count": 15453,
+      "wins": 7104,
+      "losses": 8329,
+      "breakevens": 20,
+      "win_rate_pct": 45.972,
+      "net_pnl": -11255.66,
+      "profit_factor": 0.816,
+      "max_drawdown_amount": 11318.68
+    },
+    "2026-04": {
+      "trades_count": 5349,
+      "wins": 2497,
+      "losses": 2846,
+      "breakevens": 6,
+      "win_rate_pct": 46.682,
+      "net_pnl": -5020.3,
+      "profit_factor": 0.755,
+      "max_drawdown_amount": 5074.46
+    }
+  },
+  "limitations": [
+    "Dukascopy is a proxy for the undisclosed original broker.",
+    "Thresholds were derived from paired controls within this period; this replay measures false positives but is not an independent holdout.",
+    "Signals are evaluated every five seconds, matching the EA timer configuration."
+  ]
+}

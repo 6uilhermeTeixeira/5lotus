@@ -1,0 +1,145 @@
+{
+  "method": "Existing strategies evaluated at reconstructed entry and paired control timestamps using causal Dukascopy M5 candles.",
+  "entries": 95,
+  "controls": 470,
+  "wins": 75,
+  "losses": 16,
+  "strategies": {
+    "zigzag": {
+      "entries": {
+        "samples": 95,
+        "candidate_count": 36,
+        "candidate_pct": 37.895,
+        "direction_match_count": 36,
+        "direction_match_pct": 37.895
+      },
+      "controls": {
+        "samples": 470,
+        "candidate_count": 14,
+        "candidate_pct": 2.979,
+        "direction_match_count": 13,
+        "direction_match_pct": 2.766
+      },
+      "wins": {
+        "samples": 75,
+        "candidate_count": 29,
+        "candidate_pct": 38.667,
+        "direction_match_count": 29,
+        "direction_match_pct": 38.667
+      },
+      "losses": {
+        "samples": 16,
+        "candidate_count": 5,
+        "candidate_pct": 31.25,
+        "direction_match_count": 5,
+        "direction_match_pct": 31.25
+      }
+    },
+    "stochastic": {
+      "entries": {
+        "samples": 95,
+        "candidate_count": 3,
+        "candidate_pct": 3.158,
+        "direction_match_count": 3,
+        "direction_match_pct": 3.158
+      },
+      "controls": {
+        "samples": 470,
+        "candidate_count": 9,
+        "candidate_pct": 1.915,
+        "direction_match_count": 7,
+        "direction_match_pct": 1.489
+      },
+      "wins": {
+        "samples": 75,
+        "candidate_count": 3,
+        "candidate_pct": 4.0,
+        "direction_match_count": 3,
+        "direction_match_pct": 4.0
+      },
+      "losses": {
+        "samples": 16,
+        "candidate_count": 0,
+        "candidate_pct": 0.0,
+        "direction_match_count": 0,
+        "direction_match_pct": 0.0
+      }
+    },
+    "multitimeframe": {
+      "entries": {
+        "samples": 95,
+        "candidate_count": 3,
+        "candidate_pct": 3.158,
+        "direction_match_count": 3,
+        "direction_match_pct": 3.158
+      },
+      "controls": {
+        "samples": 470,
+        "candidate_count": 5,
+        "candidate_pct": 1.064,
+        "direction_match_count": 5,
+        "direction_match_pct": 1.064
+      },
+      "wins": {
+        "samples": 75,
+        "candidate_count": 2,
+        "candidate_pct": 2.667,
+        "direction_match_count": 2,
+        "direction_match_pct": 2.667
+      },
+      "losses": {
+        "samples": 16,
+        "candidate_count": 1,
+        "candidate_pct": 6.25,
+        "direction_match_count": 1,
+        "direction_match_pct": 6.25
+      }
+    }
+  },
+  "limitations": [
+    "Dukascopy mid-price candles proxy the unknown original broker feed.",
+    "Reconstructed timestamps are limited to high/medium-confidence 2025 trades.",
+    "A direction match is contextual evidence, not proof that the original bot used that indicator."
+  ],
+  "any_direction_match": {
+    "entries": 41,
+    "controls": 23
+  },
+  "hybrid_hypotheses": {
+    "zigzag_and_60s_move_gte_160": {
+      "entries": 29,
+      "controls": 3,
+      "wins": 22,
+      "losses": 5,
+      "win_rate_pct_excluding_breakeven": 81.481
+    },
+    "zigzag_and_60s_move_gte_300": {
+      "entries": 21,
+      "controls": 1,
+      "wins": 18,
+      "losses": 2,
+      "win_rate_pct_excluding_breakeven": 90.0
+    },
+    "zigzag_and_900s_move_gte_500": {
+      "entries": 30,
+      "controls": 5,
+      "wins": 24,
+      "losses": 4,
+      "win_rate_pct_excluding_breakeven": 85.714
+    },
+    "zigzag_and_900s_move_gte_800": {
+      "entries": 23,
+      "controls": 5,
+      "wins": 17,
+      "losses": 4,
+      "win_rate_pct_excluding_breakeven": 80.952
+    },
+    "zigzag_and_900s_move_gte_1000": {
+      "entries": 16,
+      "controls": 5,
+      "wins": 12,
+      "losses": 2,
+      "win_rate_pct_excluding_breakeven": 85.714
+    }
+  }
+}

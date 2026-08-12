@@ -42,4 +42,12 @@ async def read_login_password(request: Request) -> str:
 
 
 def password_matches(password: str, settings: Settings) -> bool:
-    return bool(settings.dashboard_password) and hmac.compare_digest(password, settings.dashboard_password)
+    configured = settings.dashboard_password or ""
+    if configured.startswith("scrypt$"):
+        try:
+            _, salt_hex, digest_hex = configured.split("$", maxsplit=2)
+            actual = hashlib.scrypt(password.encode(), salt=bytes.fromhex(salt_hex), n=2**14, r=8, p=1).hex()
+        except (ValueError, TypeError):
+            return False
+        return hmac.compare_digest(actual, digest_hex)
+    return bool(configured) and hmac.compare_digest(password, configured)

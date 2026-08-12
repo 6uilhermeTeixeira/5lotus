@@ -18,6 +18,7 @@ wine-prefix/
 .runtime/
 .artifacts/
 .env
+.coverage
 .env.*
 !.env.example
 supabase/.temp/

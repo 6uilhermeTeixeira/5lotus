@@ -52,11 +52,26 @@ Payload de referencia:
     "margin_free": 10000.0,
     "leverage": 20
   },
-  "indicators": {}
+  "indicators": {
+    "impulse_5s_ready": 1,
+    "impulse_5s_move_points": 18.5,
+    "impulse_5s_tick_count": 34,
+    "impulse_5s_tick_rate_per_second": 6.8,
+    "impulse_30s_ready": 1,
+    "impulse_30s_move_points": 104.2,
+    "impulse_30s_tick_count": 181,
+    "impulse_30s_tick_rate_per_second": 6.033333
+  }
 }
 ```
 
 No exemplo acima a lista de `candles` foi truncada so para leitura. O arquivo de amostra no repositorio contem a serie completa usada no teste local.
+
+O EA calcula as métricas `impulse_{5,10,30,60}s_*` a partir de mids Bid/Ask mantidos em uma janela
+móvel com timestamps em milissegundos. `move_points` é assinado, positivo para alta e negativo para
+queda. `ready=0` significa que ainda não existe cobertura integral da janela; nesse estado movimento,
+contagem e taxa não podem ser usados como sinal. Todos os valores de `indicators` precisam ser
+finitos.
 
 Resposta minima:
 
@@ -111,7 +126,7 @@ Resposta minima:
 
 - `GET /api/bots` retorna somente estratégias ativas.
 - `GET /api/bots?archived=true` retorna `410`; estratégias aposentadas não fazem parte do catálogo.
-- `GET /api/bots/{bot_id}/results`, `/chart` e `/historical-replay` aceitam somente os seis IDs selecionados.
+- `GET /api/bots/{bot_id}/results`, `/chart` e `/historical-replay` aceitam somente IDs ativos do catálogo.
 - O campo `active` explicita o estado operacional. O campo `name` contém apenas o título público; o identificador `bot-N` permanece no campo `id`.
 
 ## Decisao atual
@@ -120,7 +135,7 @@ O serviço trabalha com estes pressupostos:
 
 - ativos de pesquisa: `XAUUSD` e `EURUSD`
 - timeframe base: `M5`
-- perfis ativos: Bot 11 usa `portfolio_6_7_100_100` e Bot 16 usa `happy_gold_portfolio_100_100`; os demais ativos são Bots 6, 7, 12, 13 e 15, todos em XAUUSD/M5
+- perfis ativos: Bot 11 usa `portfolio_6_7_100_100`, Bot 16 usa `happy_gold_portfolio_100_100`, Bot 17 usa `happy_gold_tick_impulse_shadow`, Bot 18 usa `happy_gold_zigzag_tick_context_shadow` e Bot 19 usa `happy_gold_zigzag_structural_tick_shadow`; os demais ativos são Bots 6, 7, 12 e 13, todos em XAUUSD/M5
 - no Bot 7, `risk_amount`, `suggested_size` e `effective_risk_pct` já incorporam o multiplicador experimental de risco `0,5`; o alvo é `0,75R` e somente sinais de compra entre 13:00 e 15:59 UTC são candidatos
 - no Bot 8, esses campos incorporam a alocação do componente selecionado: `0,75` para o Bot 7 e `0,25` para o Bot 6; `portfolio_component`, `portfolio_weight_pct` e a prioridade aplicada são retornados em `metadata`
 - no Bot 9, `adaptive_component_health_json` registra a janela causal de 120 dias e `adaptive_active_component` permanece congelado durante o dia UTC; somente o componente selecionado recebe 100% do risco-base do candidato, sempre em shadow
@@ -128,6 +143,10 @@ O serviço trabalha com estes pressupostos:
 - no Bot 12, `signal_timeframe=M30`, `fixed_stop_points=240`, `fixed_target_points=1000`, `suggested_size=0.10`, `break_even_trigger_points=40`, `trailing_activation_points=120` e `trailing_distance_points=60` documentam a assinatura reconstruída; `experimental_shadow_lock=true` impede execução
 - no Bot 13, `selective_regime_confirmation=true` preserva o Bot 12 em `range/trend`; `zigzag_close_confirmed` e `zigzag_direction_aligned` precisam ser verdadeiros em `transition/high_volatility`
 - no Bot 16, `combined_component`, `combined_priority` e os flags de candidato identificam a fonte selecionada; conflitos ficam em `hold`, `combined_daily_trade_cap=unlimited`, a sessão é 06:00–19:00 UTC e o risco total nunca ultrapassa 100% do risco-base
+- no Bot 17, `impulse_30s_move_points` é normalizado pelo `point_size` para pips XAUUSD de 0,01 e precisa atingir 95,5 pips absolutos; o lote sugerido é 0,10, SL/TP são 240/1.000 pips e `record_paper_trade=false` impede uma simulação M5 inadequada
+- no Bot 18, o rompimento causal ZigZag M30 precisa estar alinhado a `impulse_900s_move_points` normalizado de pelo menos 800 pips; o perfil permanece em shadow com `experimental_shadow_lock=true` porque o replay anual não confirmou rentabilidade
+- no Bot 19, o mesmo contexto de 900 segundos é combinado com distância direcional da EMA20, extensão máxima além do pivô e exclusão de sexta-feira; a telemetria sugere stop 60, breakeven 40/+1, trailing 40/20 e máximo 60 segundos; `record_paper_trade=false` e `experimental_shadow_lock=true` permanecem obrigatórios devido à amostra pequena
+- candidatos do Bot 19 abrem somente um registro em `tick_shadow_trades`; lotes autenticados em `POST /api/ticks` avançam a simulação por Bid/Ask e fazem backfill de ticks já ingeridos desde o sinal, sem qualquer integração com envio de ordens
 - risco máximo por operação: `1%` da banca
 - gatilho: pullback/rejeição da MME20 ou padrão fora-dentro
 - stop: estrutura da rejeição com buffer de ATR(14)
@@ -149,7 +168,7 @@ Quando existe candidato, `metadata` inclui:
 
 ## Travas de execucao
 
-Para disparar ordens automaticamente, todas as travas precisam estar liberadas:
+As travas abaixo são preservadas como defesa em profundidade:
 
 1. no servico Python:
    `DAYTRADE_FIMATH_MODE=live`
@@ -160,16 +179,36 @@ Para disparar ordens automaticamente, todas as travas precisam estar liberadas:
 4. no EA:
    `EnableOrderExecution=true`
 
+Na versão atual, os sete bots selecionados são chamados pelo EA com `allowExecution=false`. Portanto,
+alterar essas flags não habilita ordens e não existe caminho operacional suportado para execução real.
+
 ## Fluxo de teste
 
 O roteiro operacional completo de teste em demo esta em:
 
 - `docs/demo-test-playbook.md`
 
+## Saúde e idempotência
+
+- `GET /health` é liveness e responde sem consultar dependências.
+- `GET /ready` valida a configuração e a conexão com o Supabase; retorna `503` quando indisponível.
+- `GET /api/metrics` exige sessão e retorna contadores e latências agregadas por etapa.
+- `request_id` é obrigatório em `/decision`; repetir o mesmo `bot_id + request_id` retorna a resposta
+  persistida sem repetir os efeitos da decisão concluída.
+
+## Ingestão de ticks
+
+- `POST /api/ticks` usa `X-2Lotus-Ingest-Key` e exige Supabase.
+- Cada lote contém `collector_id`, `symbol`, `point_size` e de 1 a 2.000 ticks.
+- Cada tick contém `time_msc`, `sequence`, Bid, Ask, Last, volume e flags do `MqlTick`.
+- O lote deve estar ordenado e não pode repetir `time_msc + sequence`.
+- Reenvios são idempotentes pela chave `collector_id + symbol + time_msc + sequence`.
+- O endpoint apenas persiste dados para pesquisa; não avalia estratégia nem envia ordens.
+
 ## Replay histórico autenticado
 
 - `GET /api/bots/{bot_id}/historical-replay?days=120`
-- `days` aceita valores de `1` a `30`
+- `days` aceita valores de `1` a `365`
 - requer a mesma sessão autenticada do portal
 - requer candles em `market_history` e `DAYTRADE_RESULTS_STORE=SUPABASE`
 

@@ -19,9 +19,9 @@ Estratégias rejeitadas e arquivadas foram exportadas para backup de auditoria e
 MT5 / EA MQL5
   -> POST /decision, /api/candles e /api/trades
 Python / FastAPI
-  -> regras, risco shadow, paper tracking e replay
+  -> regras, risco shadow, idempotência, paper tracking e replay
 Supabase
-  -> market_history, sinais, paper trades, snapshots e saúde
+  -> market_history, ticks, sinais, paper trades, snapshots e saúde
 Vercel
   -> catálogo, comparação, resultados, simulador e operações
 ```
@@ -33,7 +33,13 @@ O histórico pertence ao mercado (`symbol + timeframe + timestamp`) e não a um 
 ```bash
 cd python-service
 .venv/bin/python -m unittest discover -s tests
+.venv/bin/coverage run -m unittest discover -s tests && .venv/bin/coverage report
+.venv/bin/ruff check app tests
 PATH="$PWD/.venv/bin:$PATH" vercel build --prod --yes
 ```
 
 Consulte `docs/architecture.md`, `docs/http-contract.md` e `docs/2lotus-operational-setup.md` para operação e contratos.
+A coleta de ticks para reconstruções de estratégias de segundos está em `docs/tick-research.md`.
+
+`GET /health` verifica somente o processo. `GET /ready` confirma também configuração e acesso ao
+Supabase. Métricas diagnósticas agregadas ficam em `GET /api/metrics`, protegido pela sessão do portal.

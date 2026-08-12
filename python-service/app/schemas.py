@@ -1,7 +1,8 @@
 from datetime import date, datetime
 from enum import Enum
+from math import isfinite
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class DecisionAction(str, Enum):
@@ -33,6 +34,45 @@ class CandleSnapshot(BaseModel):
     low: float
     close: float
     volume: float
+
+    @model_validator(mode="after")
+    def validate_ohlc(self) -> "CandleSnapshot":
+        if self.volume < 0:
+            raise ValueError("volume cannot be negative")
+        return self
+
+
+class TickSnapshot(BaseModel):
+    time_msc: int = Field(..., gt=0)
+    sequence: int = Field(..., ge=0)
+    bid: float = Field(..., gt=0)
+    ask: float = Field(..., gt=0)
+    last: float = Field(default=0.0, ge=0)
+    volume: int = Field(default=0, ge=0)
+    volume_real: float = Field(default=0.0, ge=0)
+    flags: int = Field(default=0, ge=0)
+
+    @model_validator(mode="after")
+    def validate_quote(self) -> "TickSnapshot":
+        if self.ask < self.bid:
+            raise ValueError("tick ask cannot be below bid")
+        return self
+
+
+class TickIngestRequest(BaseModel):
+    collector_id: str = Field(..., min_length=3, max_length=80, pattern=r"^[A-Za-z0-9._-]+$")
+    symbol: str = Field(..., min_length=1, max_length=32, pattern=r"^[A-Za-z0-9._-]+$")
+    point_size: float = Field(..., gt=0)
+    ticks: list[TickSnapshot] = Field(..., min_length=1, max_length=2000)
+
+    @model_validator(mode="after")
+    def validate_order(self) -> "TickIngestRequest":
+        keys = [(tick.time_msc, tick.sequence) for tick in self.ticks]
+        if keys != sorted(keys):
+            raise ValueError("ticks must be ordered by time_msc and sequence")
+        if len(keys) != len(set(keys)):
+            raise ValueError("tick keys must be unique inside a batch")
+        return self
 
 
 class OrderBookLevel(BaseModel):
@@ -66,6 +106,18 @@ class DecisionRequest(BaseModel):
     account: AccountSnapshot
     indicators: dict[str, float] = Field(default_factory=dict)
     flow: FlowSnapshot | None = None
+
+    @model_validator(mode="after")
+    def validate_market_snapshot(self) -> "DecisionRequest":
+        if self.bid <= 0 or self.ask <= 0 or self.ask < self.bid:
+            raise ValueError("bid and ask are inconsistent")
+        if self.spread_points < 0 or self.point_size <= 0 or self.value_per_point_per_lot <= 0:
+            raise ValueError("market sizing fields must be positive")
+        if any(current.timestamp_utc < previous.timestamp_utc for previous, current in zip(self.candles, self.candles[1:])):
+            raise ValueError("candles must be ordered by timestamp")
+        if any(not isfinite(value) for value in self.indicators.values()):
+            raise ValueError("indicator values must be finite")
+        return self
 
 
 class RiskCheck(BaseModel):
@@ -298,12 +350,16 @@ class RuntimeStatusItem(BaseModel):
     bot_id: str
     name: str
     last_request_at_utc: datetime | None = None
+    last_attempt_at_utc: datetime | None = None
+    last_success_at_utc: datetime | None = None
     last_candle_at_utc: datetime | None = None
     last_action: str | None = None
     last_reason: str | None = None
     last_latency_ms: float | None = None
     consecutive_errors: int = 0
     last_error: str | None = None
+    last_error_code: str | None = None
+    market_lag_seconds: float | None = None
     snapshot_updated_at_utc: datetime | None = None
     market_data_through_utc: datetime | None = None
     status: str = "no_data"

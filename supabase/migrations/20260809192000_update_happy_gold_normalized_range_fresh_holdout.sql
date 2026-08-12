@@ -1,0 +1,4 @@
+update public.bots
+set description = 'Variante shadow do seletor estrutural com filtro de compressão M5 normalizado por ATR, positiva em dois holdouts posteriores.',
+    strategy_description = E'- Status: pesquisa shadow; execução permanentemente bloqueada.\n- Base: todos os filtros e a gestão tick do Bot 19.\n- Filtro adicional: range do M5 anterior / ATR14 <= 1,876955.\n- Origem do limiar: percentil 90 das 26 entradas correspondentes de 2025.\n- Holdout 2025 anterior aos rótulos: PF 2,291.\n- Primeiro holdout 2026: 75 sinais, 57,33% de acerto, PF 2,485 e drawdown US$ 34,22.\n- Holdout novo 15/04 a 08/08/2026: 39 sinais, 51,28% de acerto, PF 1,613, PnL US$ 80,24 e drawdown US$ 37,51.\n- Sessão 03:00-11:00 UTC rejeitada no holdout novo.\n- Promoção: exige forward test independente nos ticks da corretora real.'
+where id = 'bot-21';

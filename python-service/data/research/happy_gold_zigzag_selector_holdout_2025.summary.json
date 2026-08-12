@@ -1,0 +1,194 @@
+{
+  "method": "Fixed selector rules derived from entry matching, financially evaluated before the labeled period.",
+  "replay_geometry": "modeled spread 10 pips; fixed stop 60 pips; maximum hold 30 seconds",
+  "holdout_period": "2025-01-02T13:56:01.904000+00:00 to 2025-10-15T01:02:34.271000+00:00",
+  "rules": {
+    "baseline": {
+      "holdout_jan_to_pre_label": {
+        "trades": 236,
+        "wins": 68,
+        "losses": 168,
+        "win_rate_pct": 28.814,
+        "net_pnl": -193.79,
+        "profit_factor": 0.83
+      },
+      "labeled_period": {
+        "trades": 154,
+        "wins": 43,
+        "losses": 111,
+        "win_rate_pct": 27.922,
+        "net_pnl": 91.65,
+        "profit_factor": 1.123
+      },
+      "full_year": {
+        "trades": 390,
+        "wins": 111,
+        "losses": 279,
+        "win_rate_pct": 28.462,
+        "net_pnl": -102.14,
+        "profit_factor": 0.946
+      }
+    },
+    "balanced": {
+      "holdout_jan_to_pre_label": {
+        "trades": 49,
+        "wins": 16,
+        "losses": 33,
+        "win_rate_pct": 32.653,
+        "net_pnl": 2.79,
+        "profit_factor": 1.013
+      },
+      "labeled_period": {
+        "trades": 44,
+        "wins": 17,
+        "losses": 27,
+        "win_rate_pct": 38.636,
+        "net_pnl": 125.08,
+        "profit_factor": 1.699
+      },
+      "full_year": {
+        "trades": 93,
+        "wins": 33,
+        "losses": 60,
+        "win_rate_pct": 35.484,
+        "net_pnl": 127.87,
+        "profit_factor": 1.319
+      }
+    },
+    "balanced_context_1000": {
+      "holdout_jan_to_pre_label": {
+        "trades": 27,
+        "wins": 8,
+        "losses": 19,
+        "win_rate_pct": 29.63,
+        "net_pnl": -6.73,
+        "profit_factor": 0.949
+      },
+      "labeled_period": {
+        "trades": 29,
+        "wins": 12,
+        "losses": 17,
+        "win_rate_pct": 41.379,
+        "net_pnl": 95.15,
+        "profit_factor": 1.864
+      },
+      "full_year": {
+        "trades": 56,
+        "wins": 20,
+        "losses": 36,
+        "win_rate_pct": 35.714,
+        "net_pnl": 88.42,
+        "profit_factor": 1.364
+      }
+    },
+    "strict": {
+      "holdout_jan_to_pre_label": {
+        "trades": 14,
+        "wins": 6,
+        "losses": 8,
+        "win_rate_pct": 42.857,
+        "net_pnl": 44.25,
+        "profit_factor": 1.782
+      },
+      "labeled_period": {
+        "trades": 13,
+        "wins": 7,
+        "losses": 6,
+        "win_rate_pct": 53.846,
+        "net_pnl": 113.09,
+        "profit_factor": 3.931
+      },
+      "full_year": {
+        "trades": 27,
+        "wins": 13,
+        "losses": 14,
+        "win_rate_pct": 48.148,
+        "net_pnl": 157.34,
+        "profit_factor": 2.653
+      }
+    }
+  },
+  "caution": "The holdout predates the labeled period; it tests temporal portability but is not a future walk-forward test.",
+  "strict_rule_management_robustness": {
+    "fixed_stop240_hold30.trades": {
+      "trades": 27,
+      "wins": 18,
+      "losses": 9,
+      "win_rate_pct": 66.667,
+      "net_pnl": 149.79,
+      "profit_factor": 1.958
+    },
+    "fixed_stop240_hold60.trades": {
+      "trades": 27,
+      "wins": 19,
+      "losses": 8,
+      "win_rate_pct": 70.37,
+      "net_pnl": 344.2,
+      "profit_factor": 2.917
+    },
+    "fixed_stop30_hold30.trades": {
+      "trades": 27,
+      "wins": 6,
+      "losses": 21,
+      "win_rate_pct": 22.222,
+      "net_pnl": -26.04,
+      "profit_factor": 0.7
+    },
+    "fixed_stop30_hold60.trades": {
+      "trades": 27,
+      "wins": 6,
+      "losses": 21,
+      "win_rate_pct": 22.222,
+      "net_pnl": 26.83,
+      "profit_factor": 1.309
+    },
+    "fixed_stop60_hold30.trades": {
+      "trades": 27,
+      "wins": 13,
+      "losses": 14,
+      "win_rate_pct": 48.148,
+      "net_pnl": 157.34,
+      "profit_factor": 2.653
+    },
+    "fixed_stop60_hold60.trades": {
+      "trades": 27,
+      "wins": 11,
+      "losses": 16,
+      "win_rate_pct": 40.741,
+      "net_pnl": 218.39,
+      "profit_factor": 3.027
+    },
+    "managed_stop240_hold30.trades": {
+      "trades": 27,
+      "wins": 15,
+      "losses": 12,
+      "win_rate_pct": 55.556,
+      "net_pnl": 79.19,
+      "profit_factor": 1.579
+    },
+    "managed_stop240_hold60.trades": {
+      "trades": 27,
+      "wins": 16,
+      "losses": 11,
+      "win_rate_pct": 59.259,
+      "net_pnl": 97.39,
+      "profit_factor": 1.726
+    },
+    "managed_stop60_hold30.trades": {
+      "trades": 27,
+      "wins": 14,
+      "losses": 13,
+      "win_rate_pct": 51.852,
+      "net_pnl": 131.59,
+      "profit_factor": 2.943
+    },
+    "managed_stop60_hold60.trades": {
+      "trades": 27,
+      "wins": 14,
+      "losses": 13,
+      "win_rate_pct": 51.852,
+      "net_pnl": 139.79,
+      "profit_factor": 3.065
+    }
+  }
+}

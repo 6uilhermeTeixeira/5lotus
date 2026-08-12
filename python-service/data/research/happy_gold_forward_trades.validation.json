@@ -1,0 +1,24 @@
+{
+  "source": "Myfxbook HappyForex 3.1.1 strategy 372813, pasted history",
+  "source_url": "https://www.myfxbook.com/strategies/happyforex-311/372813",
+  "source_sha256": "fd81ad246dcc2b792207dfd2a543464ac6f7efd003721ea71b5ce542e3ca734d",
+  "timezone": "Europe/Helsinki",
+  "trade_count": 773,
+  "actions": {
+    "buy": 398,
+    "sell": 375
+  },
+  "symbols": {
+    "XAUUSD": 773
+  },
+  "lots_total": "77.30",
+  "winning_trades": 643,
+  "non_losing_trades": 654,
+  "losing_trades": 119,
+  "flat_trades": 11,
+  "profit_total_usd": "15251.80",
+  "first_open_time_local": "2025-10-15T04:02",
+  "last_open_time_local": "2026-04-14T16:34",
+  "output_sha256": "9c0bf03a7a0bd7459f8cb69978c51474d677dc971598b4c28400662533593274",
+  "published_totals_match": true
+}

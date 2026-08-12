@@ -1,6 +1,9 @@
 #property strict
 #include <Trade/Trade.mqh>
 
+#define IMPULSE_TICK_CAPACITY 65536
+#define IMPULSE_RETENTION_MSC 905000
+
 input string StrategyServiceUrl = "http://127.0.0.1:8000/decision";
 input string HealthcheckUrl = "http://127.0.0.1:8000/health";
 input string TradeResultsUrl = "http://127.0.0.1:8000/api/trades";
@@ -13,6 +16,11 @@ input string AggressivePortfolioResearchBotId = "bot-11";
 input string HappyGoldResearchBotId = "bot-12";
 input string HappyGoldConfirmedResearchBotId = "bot-13";
 input string HappyGoldCombinedPortfolioBotId = "bot-16";
+input string HappyGoldTickImpulseBotId = "bot-17";
+input string HappyGoldZigZagTickContextBotId = "bot-18";
+input string HappyGoldZigZagStructuralTickBotId = "bot-19";
+input string HappyGoldMultiwindowTickScoreBotId = "bot-20";
+input string HappyGoldNormalizedRangeBotId = "bot-21";
 input string StrategySymbol = "XAUUSD";
 input string StrategyTimeframe = "M5";
 input int HistoryBars = 60;
@@ -28,6 +36,10 @@ CTrade trade;
 double lastBid = 0.0;
 int upTicks = 0, downTicks = 0, neutralTicks = 0;
 double upVolume = 0.0, downVolume = 0.0;
+long impulseTimesMsc[IMPULSE_TICK_CAPACITY];
+double impulseMids[IMPULSE_TICK_CAPACITY];
+int impulseHead = 0;
+int impulseCount = 0;
 
 int OnInit()
 {
@@ -60,6 +72,7 @@ void OnTick()
 {
    MqlTick tick;
    if(!SymbolInfoTick(_Symbol, tick)) return;
+   RecordImpulseTick(tick);
    double volume = tick.volume_real > 0.0 ? tick.volume_real : 1.0;
    if(lastBid == 0.0 || tick.bid == lastBid) neutralTicks++;
    else if(tick.bid > lastBid) { upTicks++; upVolume += volume; }
@@ -84,7 +97,7 @@ void OnTimer()
       return;
    }
 
-   // The shadow portfolio is intentionally restricted to Bots 6, 7, 11, 12, 13 and 16.
+   // Every configured research bot is polled in shadow; execution remains disabled per call.
    if(ExperimentalBotId != "")
       PollDecision(tick, ExperimentalBotId, false);
    if(MultitimeframeResearchBotId != "" && MultitimeframeResearchBotId != ExperimentalBotId)
@@ -97,6 +110,16 @@ void OnTimer()
       PollDecision(tick, HappyGoldConfirmedResearchBotId, false);
    if(HappyGoldCombinedPortfolioBotId != "" && HappyGoldCombinedPortfolioBotId != ExperimentalBotId && HappyGoldCombinedPortfolioBotId != MultitimeframeResearchBotId && HappyGoldCombinedPortfolioBotId != AggressivePortfolioResearchBotId && HappyGoldCombinedPortfolioBotId != HappyGoldResearchBotId && HappyGoldCombinedPortfolioBotId != HappyGoldConfirmedResearchBotId)
       PollDecision(tick, HappyGoldCombinedPortfolioBotId, false);
+   if(HappyGoldTickImpulseBotId != "" && HappyGoldTickImpulseBotId != ExperimentalBotId && HappyGoldTickImpulseBotId != MultitimeframeResearchBotId && HappyGoldTickImpulseBotId != AggressivePortfolioResearchBotId && HappyGoldTickImpulseBotId != HappyGoldResearchBotId && HappyGoldTickImpulseBotId != HappyGoldConfirmedResearchBotId && HappyGoldTickImpulseBotId != HappyGoldCombinedPortfolioBotId)
+      PollDecision(tick, HappyGoldTickImpulseBotId, false);
+   if(HappyGoldZigZagTickContextBotId != "" && HappyGoldZigZagTickContextBotId != HappyGoldTickImpulseBotId)
+      PollDecision(tick, HappyGoldZigZagTickContextBotId, false);
+   if(HappyGoldZigZagStructuralTickBotId != "" && HappyGoldZigZagStructuralTickBotId != HappyGoldZigZagTickContextBotId)
+      PollDecision(tick, HappyGoldZigZagStructuralTickBotId, false);
+   if(HappyGoldMultiwindowTickScoreBotId != "" && HappyGoldMultiwindowTickScoreBotId != HappyGoldZigZagStructuralTickBotId)
+      PollDecision(tick, HappyGoldMultiwindowTickScoreBotId, false);
+   if(HappyGoldNormalizedRangeBotId != "" && HappyGoldNormalizedRangeBotId != HappyGoldZigZagStructuralTickBotId)
+      PollDecision(tick, HappyGoldNormalizedRangeBotId, false);
 
    upTicks = downTicks = neutralTicks = 0;
    upVolume = downVolume = 0.0;
@@ -117,7 +140,7 @@ void PollDecision(const MqlTick &tick, const string botId, const bool allowExecu
 string BuildDecisionPayload(const MqlTick &tick, const string botId)
 {
    MqlRates rates[];
-   string request_id = StringFormat("%s-%s-%u", botId, _Symbol, GetTickCount());
+   string request_id = StringFormat("%s-%s-%I64d-%u", botId, _Symbol, (long)TimeGMT(), GetTickCount());
    string timestamp_utc = ToIsoUtc(TimeGMT());
    double spread_points = (tick.ask - tick.bid) / _Point;
    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
@@ -156,7 +179,7 @@ string BuildDecisionPayload(const MqlTick &tick, const string botId)
          "\"margin_free\":" + DoubleToString(margin_free, 2) + ","
          "\"leverage\":" + IntegerToString((int)leverage) +
       "},"
-      "\"indicators\":{}" +
+      "\"indicators\":" + SerializeImpulseIndicators(tick) +
       ",\"flow\":{"
          "\"book\":" + SerializeBook() + ","
          "\"up_ticks\":" + IntegerToString(upTicks) + ","
@@ -168,6 +191,89 @@ string BuildDecisionPayload(const MqlTick &tick, const string botId)
       "}";
 
    return json;
+}
+
+void RecordImpulseTick(const MqlTick &tick)
+{
+   long timeMsc = tick.time_msc;
+   double mid = (tick.bid + tick.ask) / 2.0;
+   int writeIndex = (impulseHead + impulseCount) % IMPULSE_TICK_CAPACITY;
+   if(impulseCount == IMPULSE_TICK_CAPACITY)
+   {
+      writeIndex = impulseHead;
+      impulseHead = (impulseHead + 1) % IMPULSE_TICK_CAPACITY;
+   }
+   else
+      impulseCount++;
+
+   impulseTimesMsc[writeIndex] = timeMsc;
+   impulseMids[writeIndex] = mid;
+
+   long cutoff = timeMsc - IMPULSE_RETENTION_MSC;
+   while(impulseCount > 0 && impulseTimesMsc[impulseHead] < cutoff)
+   {
+      impulseHead = (impulseHead + 1) % IMPULSE_TICK_CAPACITY;
+      impulseCount--;
+   }
+}
+
+bool GetImpulseWindow(const MqlTick &tick, const int seconds, double &movePoints, int &tickCount, double &tickRate)
+{
+   movePoints = 0.0;
+   tickCount = 0;
+   tickRate = 0.0;
+   if(impulseCount < 2 || _Point <= 0.0)
+      return false;
+
+   long targetMsc = tick.time_msc - (long)seconds * 1000;
+   if(impulseTimesMsc[impulseHead] > targetMsc)
+      return false;
+
+   int referenceOffset = -1;
+   for(int offset = 0; offset < impulseCount; offset++)
+   {
+      int index = (impulseHead + offset) % IMPULSE_TICK_CAPACITY;
+      if(impulseTimesMsc[index] >= targetMsc)
+      {
+         referenceOffset = offset;
+         break;
+      }
+   }
+   if(referenceOffset < 0)
+      return false;
+
+   int referenceIndex = (impulseHead + referenceOffset) % IMPULSE_TICK_CAPACITY;
+   double currentMid = (tick.bid + tick.ask) / 2.0;
+   movePoints = (currentMid - impulseMids[referenceIndex]) / _Point;
+   tickCount = impulseCount - referenceOffset;
+   tickRate = (double)tickCount / seconds;
+   return true;
+}
+
+string SerializeImpulseWindow(const MqlTick &tick, const int seconds)
+{
+   double movePoints = 0.0, tickRate = 0.0;
+   int tickCount = 0;
+   bool ready = GetImpulseWindow(tick, seconds, movePoints, tickCount, tickRate);
+   string prefix = "impulse_" + IntegerToString(seconds) + "s_";
+   return
+      "\"" + prefix + "ready\":" + (ready ? "1" : "0") + "," +
+      "\"" + prefix + "move_points\":" + DoubleToString(movePoints, 6) + "," +
+      "\"" + prefix + "tick_count\":" + IntegerToString(tickCount) + "," +
+      "\"" + prefix + "tick_rate_per_second\":" + DoubleToString(tickRate, 6);
+}
+
+string SerializeImpulseIndicators(const MqlTick &tick)
+{
+   return
+      "{" +
+      SerializeImpulseWindow(tick, 5) + "," +
+      SerializeImpulseWindow(tick, 10) + "," +
+      SerializeImpulseWindow(tick, 30) + "," +
+      SerializeImpulseWindow(tick, 60) + "," +
+      SerializeImpulseWindow(tick, 300) + "," +
+      SerializeImpulseWindow(tick, 900) +
+      "}";
 }
 
 void CacheConfiguredBots()

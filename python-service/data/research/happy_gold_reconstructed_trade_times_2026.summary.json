@@ -1,0 +1,18 @@
+{
+  "timezone": "Europe/Helsinki",
+  "duration_tolerance_milliseconds": 1500,
+  "total_trades": 773,
+  "eligible_trades_with_tick_day": 425,
+  "entry_reconstructed_trades": 424,
+  "entry_exit_reconstructed_trades": 367,
+  "confidence": {
+    "entry_only": 57,
+    "high": 34,
+    "low": 272,
+    "medium": 61
+  },
+  "median_entry_absolute_error": 0.008,
+  "median_exit_absolute_error": 0.745,
+  "max_entry_absolute_error": 6.435,
+  "max_exit_absolute_error": 9.002
+}

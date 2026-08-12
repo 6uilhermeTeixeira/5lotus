@@ -1,0 +1,244 @@
+{
+  "method": "Tick microstructure immediately before reconstructed entries",
+  "gold_pip_size": 0.01,
+  "selected_confidence": [
+    "high",
+    "medium"
+  ],
+  "feature_rows": 123,
+  "groups": {
+    "all": {
+      "trades": 123,
+      "pre_1s": {
+        "median_directional_move_pips": 2.0,
+        "directional_move_positive_percent": 53.659,
+        "median_tick_rate_per_second": 7.0,
+        "median_spread_pips": 61.0
+      },
+      "pre_3s": {
+        "median_directional_move_pips": 19.0,
+        "directional_move_positive_percent": 69.106,
+        "median_tick_rate_per_second": 6.333333,
+        "median_spread_pips": 61.0
+      },
+      "pre_5s": {
+        "median_directional_move_pips": 24.5,
+        "directional_move_positive_percent": 77.236,
+        "median_tick_rate_per_second": 6.0,
+        "median_spread_pips": 61.0
+      },
+      "pre_10s": {
+        "median_directional_move_pips": 51.5,
+        "directional_move_positive_percent": 82.114,
+        "median_tick_rate_per_second": 5.7,
+        "median_spread_pips": 61.3
+      },
+      "pre_30s": {
+        "median_directional_move_pips": 120.15,
+        "directional_move_positive_percent": 97.561,
+        "median_tick_rate_per_second": 5.1,
+        "median_spread_pips": 61.0
+      },
+      "pre_60s": {
+        "median_directional_move_pips": 167.15,
+        "directional_move_positive_percent": 99.187,
+        "median_tick_rate_per_second": 4.983333,
+        "median_spread_pips": 61.7
+      },
+      "pre_300s": {
+        "median_directional_move_pips": 353.5,
+        "directional_move_positive_percent": 97.561,
+        "median_tick_rate_per_second": 4.243333,
+        "median_spread_pips": 63.0
+      },
+      "pre_900s": {
+        "median_directional_move_pips": 535.0,
+        "directional_move_positive_percent": 96.748,
+        "median_tick_rate_per_second": 3.726667,
+        "median_spread_pips": 62.0
+      },
+      "pre_3600s": {
+        "median_directional_move_pips": 841.85,
+        "directional_move_positive_percent": 99.187,
+        "median_tick_rate_per_second": 3.570556,
+        "median_spread_pips": 61.0
+      },
+      "median_tick_rate_acceleration_5s_vs_10s": 1.039216
+    },
+    "buy": {
+      "trades": 69,
+      "pre_1s": {
+        "median_directional_move_pips": 1.0,
+        "directional_move_positive_percent": 52.174,
+        "median_tick_rate_per_second": 7.0,
+        "median_spread_pips": 61.0
+      },
+      "pre_3s": {
+        "median_directional_move_pips": 14.0,
+        "directional_move_positive_percent": 68.116,
+        "median_tick_rate_per_second": 5.0,
+        "median_spread_pips": 61.0
+      },
+      "pre_5s": {
+        "median_directional_move_pips": 22.5,
+        "directional_move_positive_percent": 76.812,
+        "median_tick_rate_per_second": 5.2,
+        "median_spread_pips": 61.0
+      },
+      "pre_10s": {
+        "median_directional_move_pips": 47.0,
+        "directional_move_positive_percent": 81.159,
+        "median_tick_rate_per_second": 4.8,
+        "median_spread_pips": 61.0
+      },
+      "pre_30s": {
+        "median_directional_move_pips": 110.0,
+        "directional_move_positive_percent": 97.101,
+        "median_tick_rate_per_second": 4.066667,
+        "median_spread_pips": 62.0
+      },
+      "pre_60s": {
+        "median_directional_move_pips": 145.0,
+        "directional_move_positive_percent": 98.551,
+        "median_tick_rate_per_second": 4.266667,
+        "median_spread_pips": 61.7
+      },
+      "pre_300s": {
+        "median_directional_move_pips": 295.0,
+        "directional_move_positive_percent": 95.652,
+        "median_tick_rate_per_second": 3.683333,
+        "median_spread_pips": 63.0
+      },
+      "pre_900s": {
+        "median_directional_move_pips": 436.5,
+        "directional_move_positive_percent": 95.652,
+        "median_tick_rate_per_second": 3.368889,
+        "median_spread_pips": 62.7
+      },
+      "pre_3600s": {
+        "median_directional_move_pips": 664.0,
+        "directional_move_positive_percent": 98.551,
+        "median_tick_rate_per_second": 3.6,
+        "median_spread_pips": 62.0
+      },
+      "median_tick_rate_acceleration_5s_vs_10s": 1.04
+    },
+    "sell": {
+      "trades": 54,
+      "pre_1s": {
+        "median_directional_move_pips": 6.175,
+        "directional_move_positive_percent": 55.556,
+        "median_tick_rate_per_second": 7.0,
+        "median_spread_pips": 61.0
+      },
+      "pre_3s": {
+        "median_directional_move_pips": 27.25,
+        "directional_move_positive_percent": 70.37,
+        "median_tick_rate_per_second": 6.666667,
+        "median_spread_pips": 61.0
+      },
+      "pre_5s": {
+        "median_directional_move_pips": 29.25,
+        "directional_move_positive_percent": 77.778,
+        "median_tick_rate_per_second": 6.6,
+        "median_spread_pips": 61.5
+      },
+      "pre_10s": {
+        "median_directional_move_pips": 55.825,
+        "directional_move_positive_percent": 83.333,
+        "median_tick_rate_per_second": 6.45,
+        "median_spread_pips": 62.0
+      },
+      "pre_30s": {
+        "median_directional_move_pips": 149.25,
+        "directional_move_positive_percent": 98.148,
+        "median_tick_rate_per_second": 6.0166664999999995,
+        "median_spread_pips": 61.0
+      },
+      "pre_60s": {
+        "median_directional_move_pips": 191.25,
+        "directional_move_positive_percent": 100.0,
+        "median_tick_rate_per_second": 5.4916665,
+        "median_spread_pips": 61.5
+      },
+      "pre_300s": {
+        "median_directional_move_pips": 471.0,
+        "directional_move_positive_percent": 100.0,
+        "median_tick_rate_per_second": 4.9566665,
+        "median_spread_pips": 62.5
+      },
+      "pre_900s": {
+        "median_directional_move_pips": 679.5,
+        "directional_move_positive_percent": 98.148,
+        "median_tick_rate_per_second": 4.0694444999999995,
+        "median_spread_pips": 61.0
+      },
+      "pre_3600s": {
+        "median_directional_move_pips": 925.0,
+        "directional_move_positive_percent": 100.0,
+        "median_tick_rate_per_second": 3.5354165,
+        "median_spread_pips": 61.0
+      },
+      "median_tick_rate_acceleration_5s_vs_10s": 1.0368495
+    },
+    "high": {
+      "trades": 40,
+      "pre_1s": {
+        "median_directional_move_pips": 0.0,
+        "directional_move_positive_percent": 47.5,
+        "median_tick_rate_per_second": 7.0,
+        "median_spread_pips": 61.0
+      },
+      "pre_3s": {
+        "median_directional_move_pips": 20.175,
+        "directional_move_positive_percent": 72.5,
+        "median_tick_rate_per_second": 5.6666665,
+        "median_spread_pips": 61.0
+      },
+      "pre_5s": {
+        "median_directional_move_pips": 37.25,
+        "directional_move_positive_percent": 77.5,
+        "median_tick_rate_per_second": 6.1,
+        "median_spread_pips": 61.0
+      },
+      "pre_10s": {
+        "median_directional_move_pips": 59.0,
+        "directional_move_positive_percent": 82.5,
+        "median_tick_rate_per_second": 5.85,
+        "median_spread_pips": 61.0
+      },
+      "pre_30s": {
+        "median_directional_move_pips": 147.075,
+        "directional_move_positive_percent": 97.5,
+        "median_tick_rate_per_second": 5.8166665,
+        "median_spread_pips": 61.5
+      },
+      "pre_60s": {
+        "median_directional_move_pips": 172.75,
+        "directional_move_positive_percent": 100.0,
+        "median_tick_rate_per_second": 5.25,
+        "median_spread_pips": 61.5
+      },
+      "pre_300s": {
+        "median_directional_move_pips": 419.25,
+        "directional_move_positive_percent": 95.0,
+        "median_tick_rate_per_second": 4.283333000000001,
+        "median_spread_pips": 62.5
+      },
+      "pre_900s": {
+        "median_directional_move_pips": 704.25,
+        "directional_move_positive_percent": 97.5,
+        "median_tick_rate_per_second": 4.178889,
+        "median_spread_pips": 63.0
+      },
+      "pre_3600s": {
+        "median_directional_move_pips": 732.75,
+        "directional_move_positive_percent": 100.0,
+        "median_tick_rate_per_second": 3.7390280000000002,
+        "median_spread_pips": 63.0
+      },
+      "median_tick_rate_acceleration_5s_vs_10s": 1.020967
+    }
+  },
+  "limitation": "Entry cases alone describe the signal but do not establish discrimination versus non-entry controls."
+}

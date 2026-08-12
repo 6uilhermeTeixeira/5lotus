@@ -2,7 +2,7 @@ import unittest
 from datetime import datetime, timedelta, timezone
 
 from app.backtest import _OpenTrade, _advance_trade
-from app.schemas import BotCatalogItem, CandleSnapshot
+from app.schemas import CandleSnapshot
 from tests.test_strategy import settings
 
 

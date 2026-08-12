@@ -8,5 +8,55 @@
     "symbol": "XAUUSD",
     "timeframe": "M5",
     "results_file": "bots/bot-1.json"
+  },
+  {
+    "id": "bot-17",
+    "name": "Happy Gold · Impulso Tick 30s",
+    "description": "Variante shadow isolada para validar o impulso direcional de 30 segundos.",
+    "strategy_profile": "happy_gold_tick_impulse_shadow",
+    "strategy_description": "Gatilho exploratório de 95,5 pips XAUUSD em 30 segundos, com direção pelo sinal do movimento e execução permanentemente bloqueada.",
+    "symbol": "XAUUSD",
+    "timeframe": "M5",
+    "results_file": "bots/bot-17.json"
+  },
+  {
+    "id": "bot-18",
+    "name": "Happy Gold · ZigZag + Contexto Tick 15m",
+    "description": "Variante shadow isolada que combina o rompimento ZigZag M30 com impulso direcional de ticks em 15 minutos.",
+    "strategy_profile": "happy_gold_zigzag_tick_context_shadow",
+    "strategy_description": "Rompimento causal de pivô ZigZag M30 confirmado por movimento de ticks de 900 segundos alinhado e mínimo de 800 pips. Execução permanentemente bloqueada enquanto passa por replay anual e forward test.",
+    "symbol": "XAUUSD",
+    "timeframe": "M5",
+    "results_file": "bots/bot-18.json"
+  },
+  {
+    "id": "bot-19",
+    "name": "Happy Gold · Seletor Estrutural Tick",
+    "description": "Hipótese shadow seletiva para rompimentos ZigZag com tendência M5 e contexto de ticks.",
+    "strategy_profile": "happy_gold_zigzag_structural_tick_shadow",
+    "strategy_description": "Rompimento ZigZag M30 fora de sexta-feira, com movimento direcional de 15 minutos ≥ 1.000 pips, distância direcional da EMA20 ≥ 900 pips e extensão máxima de 50 pips além do pivô. Gestão shadow sugerida: stop 60 pips, breakeven 40/+1, trailing 40/20 e máximo 60 segundos. Execução bloqueada até forward validation.",
+    "symbol": "XAUUSD",
+    "timeframe": "M5",
+    "results_file": "bots/bot-19.json"
+  },
+  {
+    "id": "bot-20",
+    "name": "Happy Gold · Score Tick Multijanela",
+    "description": "Reconstrução shadow baseada na assinatura de aceleração observada nas entradas originais.",
+    "strategy_profile": "happy_gold_multiwindow_tick_score_shadow",
+    "strategy_description": "Score causal de movimentos alinhados em 5, 10, 30, 60, 300 e 900 segundos, com 60/300/900 obrigatórios. Execução permanentemente bloqueada.",
+    "symbol": "XAUUSD",
+    "timeframe": "M5",
+    "results_file": "bots/bot-20.json"
+  },
+  {
+    "id": "bot-21",
+    "name": "Happy Gold · ZigZag Range Normalizado",
+    "description": "Variante shadow do seletor estrutural com filtro de compressão M5 normalizado por ATR, positiva em dois holdouts posteriores.",
+    "strategy_profile": "happy_gold_zigzag_normalized_range_shadow",
+    "strategy_description": "Mantém integralmente o Bot 19 e exige range do M5 anterior dividido pelo ATR14 ≤ 1,876955. Primeiro holdout: 75 sinais, PF 2,485. Holdout posterior até agosto: 39 sinais, PF 1,613. Guardrail de spread máximo 15 e meta de latência até 500 ms. Execução permanentemente bloqueada.",
+    "symbol": "XAUUSD",
+    "timeframe": "M5",
+    "results_file": "bots/bot-21.json"
   }
 ]

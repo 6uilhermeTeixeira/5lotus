@@ -51,6 +51,28 @@ class Settings:
         self.happy_gold_max_holding_bars = int(getenv("DAYTRADE_HAPPY_GOLD_MAX_HOLDING_BARS", "2"))
         self.happy_gold_combined_session_start_utc = getenv("DAYTRADE_HAPPY_GOLD_COMBINED_SESSION_START_UTC", "06:00")
         self.happy_gold_combined_session_end_utc = getenv("DAYTRADE_HAPPY_GOLD_COMBINED_SESSION_END_UTC", "19:00")
+        self.happy_gold_impulse_30s_threshold_pips = float(getenv("DAYTRADE_HAPPY_GOLD_IMPULSE_30S_THRESHOLD_PIPS", "95.5"))
+        self.happy_gold_zigzag_tick_context_900s_threshold_pips = float(
+            getenv("DAYTRADE_HAPPY_GOLD_ZIGZAG_TICK_CONTEXT_900S_THRESHOLD_PIPS", "800")
+        )
+        self.happy_gold_structural_context_900s_threshold_pips = float(
+            getenv("DAYTRADE_HAPPY_GOLD_STRUCTURAL_CONTEXT_900S_THRESHOLD_PIPS", "1000")
+        )
+        self.happy_gold_structural_ema20_gap_pips = float(
+            getenv("DAYTRADE_HAPPY_GOLD_STRUCTURAL_EMA20_GAP_PIPS", "900")
+        )
+        self.happy_gold_structural_max_pivot_extension_pips = float(
+            getenv("DAYTRADE_HAPPY_GOLD_STRUCTURAL_MAX_PIVOT_EXTENSION_PIPS", "50")
+        )
+        self.happy_gold_normalized_range_max = float(
+            getenv("DAYTRADE_HAPPY_GOLD_NORMALIZED_RANGE_MAX", "1.876955192")
+        )
+        self.happy_gold_normalized_range_max_spread_points = float(
+            getenv("DAYTRADE_HAPPY_GOLD_NORMALIZED_RANGE_MAX_SPREAD_POINTS", "15")
+        )
+        self.happy_gold_impulse_session_start_utc = getenv("DAYTRADE_HAPPY_GOLD_IMPULSE_SESSION_START_UTC", "00:00")
+        self.happy_gold_impulse_session_end_utc = getenv("DAYTRADE_HAPPY_GOLD_IMPULSE_SESSION_END_UTC", "17:00")
+        self.happy_gold_multiwindow_shadow_enabled = getenv("DAYTRADE_HAPPY_GOLD_MULTIWINDOW_SHADOW_ENABLED", "false").lower() == "true"
         self.results_store_path = Path(
             getenv("DAYTRADE_RESULTS_STORE_PATH", str(service_root / "data" / "trade-results.json"))
         )
@@ -62,6 +84,30 @@ class Settings:
         self.supabase_url = getenv("DAYTRADE_SUPABASE_URL")
         self.supabase_service_role_key = getenv("DAYTRADE_SUPABASE_SERVICE_ROLE_KEY")
         self.ingest_api_key = getenv("DAYTRADE_INGEST_API_KEY")
+        self.supabase_timeout_seconds = float(getenv("DAYTRADE_SUPABASE_TIMEOUT_SECONDS", "2.0"))
+        self.supabase_retry_attempts = int(getenv("DAYTRADE_SUPABASE_RETRY_ATTEMPTS", "2"))
+        self.login_rate_limit_attempts = int(getenv("DAYTRADE_LOGIN_RATE_LIMIT_ATTEMPTS", "5"))
+        self.ingest_rate_limit_per_minute = int(getenv("DAYTRADE_INGEST_RATE_LIMIT_PER_MINUTE", "180"))
+        self.tick_ingest_rate_limit_per_minute = int(getenv("DAYTRADE_TICK_INGEST_RATE_LIMIT_PER_MINUTE", "120"))
+        self._validate()
+
+    def _validate(self) -> None:
+        if self.results_store not in {"JSON", "SUPABASE"}:
+            raise ValueError("DAYTRADE_RESULTS_STORE must be JSON or SUPABASE")
+        if self.fimath_mode not in {"shadow", "live"}:
+            raise ValueError("DAYTRADE_FIMATH_MODE must be shadow or live")
+        if not 0 < self.risk_per_trade_pct <= 10:
+            raise ValueError("DAYTRADE_RISK_PER_TRADE_PCT must be between 0 and 10")
+        if not 0 < self.backtest_risk_per_trade_pct <= 10:
+            raise ValueError("DAYTRADE_BACKTEST_RISK_PER_TRADE_PCT must be between 0 and 10")
+        if self.session_max_age_seconds <= 0:
+            raise ValueError("DAYTRADE_SESSION_MAX_AGE_SECONDS must be positive")
+        if self.supabase_timeout_seconds <= 0 or not 1 <= self.supabase_retry_attempts <= 5:
+            raise ValueError("Supabase timeout/retry settings are invalid")
+        if self.tick_ingest_rate_limit_per_minute <= 0:
+            raise ValueError("DAYTRADE_TICK_INGEST_RATE_LIMIT_PER_MINUTE must be positive")
+        if self.session_secret and len(self.session_secret) < 32:
+            raise ValueError("DAYTRADE_SESSION_SECRET must contain at least 32 characters")
 
     @property
     def dashboard_auth_configured(self) -> bool:

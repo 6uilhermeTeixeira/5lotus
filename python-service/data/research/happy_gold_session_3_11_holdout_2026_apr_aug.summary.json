@@ -1,0 +1,33 @@
+{
+  "method": "Fresh 2026-04-15 through 2026-08-08 tick holdout with frozen filters and lifecycle.",
+  "range_max": 1.876955192,
+  "session_utc": "03:00-11:00",
+  "bot19_structural_baseline": {
+    "trades": 46,
+    "wins": 24,
+    "losses": 22,
+    "win_rate_pct": 52.174,
+    "net_pnl": 92.53,
+    "profit_factor": 1.601,
+    "max_drawdown": 36.99
+  },
+  "bot21_normalized_range": {
+    "trades": 39,
+    "wins": 20,
+    "losses": 19,
+    "win_rate_pct": 51.282,
+    "net_pnl": 80.24,
+    "profit_factor": 1.613,
+    "max_drawdown": 37.51
+  },
+  "session_candidate": {
+    "trades": 12,
+    "wins": 5,
+    "losses": 7,
+    "win_rate_pct": 41.667,
+    "net_pnl": 28.33,
+    "profit_factor": 1.594,
+    "max_drawdown": 23.3
+  },
+  "decision": "rejected_fresh_holdout"
+}

@@ -4,9 +4,16 @@ from dataclasses import dataclass
 from datetime import datetime, time, timedelta, timezone
 import json
 from statistics import fmean, pstdev
+from threading import Lock
 
 from .adaptive import ADAPTIVE_MIN_CLOSED_TRADES, ADAPTIVE_MIN_PROFIT_FACTOR, ADAPTIVE_WINDOW_DAYS, select_adaptive_component
 from .config import Settings
+from .indicators import atr as _atr
+from .indicators import ema as _ema
+from .indicators import ema_series as _ema_series
+from .indicators import rsi as _rsi
+from .indicators import stochastic_series as _stochastic_series
+from .indicators import z_score as _z
 from .regime import RegimeSnapshot, classify_regime
 from .schemas import CandleSnapshot, DecisionAction, DecisionRequest, DecisionResponse, FlowSnapshot, RiskCheck
 
@@ -63,57 +70,7 @@ class FlowAnalysis:
 
 
 _flow_windows: dict[str, deque[FlowSample]] = defaultdict(deque)
-_setup_cache: dict[str, tuple[datetime, Setup | None]] = {}
-
-
-def _ema(values: list[float], period: int = 20) -> float:
-    result = values[0]
-    alpha = 2 / (period + 1)
-    for value in values[1:]:
-        result += alpha * (value - result)
-    return result
-
-
-def _ema_series(values: list[float], period: int) -> list[float]:
-    if not values:
-        return []
-    alpha = 2 / (period + 1)
-    result = [values[0]]
-    for value in values[1:]:
-        result.append(result[-1] + alpha * (value - result[-1]))
-    return result
-
-
-def _atr(candles: list[CandleSnapshot], period: int = 14) -> float:
-    ranges = [max(c.high - c.low, abs(c.high - candles[i - 1].close), abs(c.low - candles[i - 1].close)) for i, c in enumerate(candles[-period:], len(candles) - period)]
-    return fmean(ranges)
-
-
-def _z(value: float, values: list[float]) -> float:
-    deviation = pstdev(values)
-    return 0.0 if deviation == 0 else (value - fmean(values)) / deviation
-
-
-def _rsi(values: list[float], period: int = 14) -> float:
-    changes = [current - previous for previous, current in zip(values[-period - 1:-1], values[-period:])]
-    average_gain = fmean(max(change, 0.0) for change in changes)
-    average_loss = fmean(max(-change, 0.0) for change in changes)
-    if average_loss == 0:
-        return 100.0
-    relative_strength = average_gain / average_loss
-    return 100 - (100 / (1 + relative_strength))
-
-
-def _stochastic_series(candles: list[CandleSnapshot], period: int = 14, smooth: int = 3) -> tuple[list[float], list[float]]:
-    raw_k: list[float] = []
-    for index in range(period - 1, len(candles)):
-        window = candles[index - period + 1:index + 1]
-        lowest = min(candle.low for candle in window)
-        highest = max(candle.high for candle in window)
-        raw_k.append(50.0 if highest == lowest else (candles[index].close - lowest) / (highest - lowest) * 100)
-    smooth_k = [fmean(raw_k[max(0, index - smooth + 1):index + 1]) for index in range(len(raw_k))]
-    signal_d = [fmean(smooth_k[max(0, index - smooth + 1):index + 1]) for index in range(len(smooth_k))]
-    return smooth_k, signal_d
+_flow_lock = Lock()
 
 
 def _flow_metrics(flow: FlowSnapshot) -> tuple[float, float] | None:
@@ -133,12 +90,13 @@ def _record_flow(request: DecisionRequest, window_seconds: int) -> deque[FlowSam
     if metrics is None:
         return None
     key = request.bot_id or request.symbol
-    window = _flow_windows[key]
-    window.append(FlowSample(request.timestamp_utc, metrics[0], metrics[1]))
-    cutoff = request.timestamp_utc - timedelta(seconds=window_seconds)
-    while window and window[0].timestamp_utc < cutoff:
-        window.popleft()
-    return window
+    with _flow_lock:
+        window = _flow_windows[key]
+        window.append(FlowSample(request.timestamp_utc, metrics[0], metrics[1]))
+        cutoff = request.timestamp_utc - timedelta(seconds=window_seconds)
+        while window and window[0].timestamp_utc < cutoff:
+            window.popleft()
+        return deque(window)
 
 
 def _flow_analysis(
@@ -343,16 +301,7 @@ def _setup(request: DecisionRequest) -> Setup | None:
 
 
 def _setup_for_candle(request: DecisionRequest) -> Setup | None:
-    if not request.candles:
-        return None
-    key = f"{request.bot_id or request.symbol}:{request.symbol}:{request.timeframe}"
-    candle_timestamp = request.candles[-1].timestamp_utc
-    cached = _setup_cache.get(key)
-    if cached and cached[0] == candle_timestamp:
-        return cached[1]
-    setup = _setup(request)
-    _setup_cache[key] = (candle_timestamp, setup)
-    return setup
+    return _setup(request) if request.candles else None
 
 
 def _momentum_atr_setup(request: DecisionRequest) -> Setup | None:
@@ -398,16 +347,7 @@ def _momentum_atr_setup(request: DecisionRequest) -> Setup | None:
 
 
 def _momentum_setup_for_candle(request: DecisionRequest) -> Setup | None:
-    if not request.candles:
-        return None
-    key = f"momentum:{request.bot_id or request.symbol}:{request.symbol}:{request.timeframe}"
-    candle_timestamp = request.candles[-1].timestamp_utc
-    cached = _setup_cache.get(key)
-    if cached and cached[0] == candle_timestamp:
-        return cached[1]
-    setup = _momentum_atr_setup(request)
-    _setup_cache[key] = (candle_timestamp, setup)
-    return setup
+    return _momentum_atr_setup(request) if request.candles else None
 
 
 def _rsi_bollinger_setup(request: DecisionRequest) -> Setup | None:
@@ -454,16 +394,7 @@ def _rsi_bollinger_setup(request: DecisionRequest) -> Setup | None:
 
 
 def _rsi_bollinger_setup_for_candle(request: DecisionRequest) -> Setup | None:
-    if not request.candles:
-        return None
-    key = f"rsi_bollinger:{request.bot_id or request.symbol}:{request.symbol}:{request.timeframe}"
-    candle_timestamp = request.candles[-1].timestamp_utc
-    cached = _setup_cache.get(key)
-    if cached and cached[0] == candle_timestamp:
-        return cached[1]
-    setup = _rsi_bollinger_setup(request)
-    _setup_cache[key] = (candle_timestamp, setup)
-    return setup
+    return _rsi_bollinger_setup(request) if request.candles else None
 
 
 def _macd_trend_setup(request: DecisionRequest) -> Setup | None:
@@ -509,16 +440,7 @@ def _macd_trend_setup(request: DecisionRequest) -> Setup | None:
 
 
 def _macd_trend_setup_for_candle(request: DecisionRequest) -> Setup | None:
-    if not request.candles:
-        return None
-    key = f"macd_trend:{request.bot_id or request.symbol}:{request.symbol}:{request.timeframe}"
-    candle_timestamp = request.candles[-1].timestamp_utc
-    cached = _setup_cache.get(key)
-    if cached and cached[0] == candle_timestamp:
-        return cached[1]
-    setup = _macd_trend_setup(request)
-    _setup_cache[key] = (candle_timestamp, setup)
-    return setup
+    return _macd_trend_setup(request) if request.candles else None
 
 
 def _stochastic_pullback_setup(request: DecisionRequest) -> Setup | None:
@@ -571,16 +493,7 @@ def _stochastic_pullback_setup(request: DecisionRequest) -> Setup | None:
 
 
 def _stochastic_pullback_setup_for_candle(request: DecisionRequest) -> Setup | None:
-    if not request.candles:
-        return None
-    key = f"stochastic_pullback:{request.bot_id or request.symbol}:{request.symbol}:{request.timeframe}"
-    candle_timestamp = request.candles[-1].timestamp_utc
-    cached = _setup_cache.get(key)
-    if cached and cached[0] == candle_timestamp:
-        return cached[1]
-    setup = _stochastic_pullback_setup(request)
-    _setup_cache[key] = (candle_timestamp, setup)
-    return setup
+    return _stochastic_pullback_setup(request) if request.candles else None
 
 
 def _aggregate_complete(candles: list[CandleSnapshot], minutes: int) -> list[CandleSnapshot]:
@@ -685,16 +598,7 @@ def _multitimeframe_trend_pullback_setup(request: DecisionRequest) -> Setup | No
 
 
 def _multitimeframe_setup_for_candle(request: DecisionRequest) -> Setup | None:
-    if not request.candles:
-        return None
-    key = f"multitimeframe:{request.bot_id or request.symbol}:{request.symbol}:{request.timeframe}"
-    candle_timestamp = request.candles[-1].timestamp_utc
-    cached = _setup_cache.get(key)
-    if cached and cached[0] == candle_timestamp:
-        return cached[1]
-    setup = _multitimeframe_trend_pullback_setup(request)
-    _setup_cache[key] = (candle_timestamp, setup)
-    return setup
+    return _multitimeframe_trend_pullback_setup(request) if request.candles else None
 
 
 def _candidate_response(
@@ -1190,6 +1094,401 @@ def _evaluate_happy_gold_zigzag_retest_atr(request: DecisionRequest, settings: S
     return response
 
 
+HAPPY_GOLD_TICK_IMPULSE_PROFILE = "happy_gold_tick_impulse_shadow"
+HAPPY_GOLD_ZIGZAG_TICK_CONTEXT_PROFILE = "happy_gold_zigzag_tick_context_shadow"
+HAPPY_GOLD_ZIGZAG_STRUCTURAL_TICK_PROFILE = "happy_gold_zigzag_structural_tick_shadow"
+HAPPY_GOLD_ZIGZAG_NORMALIZED_RANGE_PROFILE = "happy_gold_zigzag_normalized_range_shadow"
+HAPPY_GOLD_MULTIWINDOW_TICK_SCORE_PROFILE = "happy_gold_multiwindow_tick_score_shadow"
+HAPPY_GOLD_PIP_SIZE = 0.01
+
+
+def _evaluate_happy_gold_tick_impulse(request: DecisionRequest, settings: Settings) -> DecisionResponse:
+    threshold_pips = float(getattr(settings, "happy_gold_impulse_30s_threshold_pips", 95.5))
+    ready = request.indicators.get("impulse_30s_ready") == 1
+    move_points = float(request.indicators.get("impulse_30s_move_points", 0))
+    move_pips = move_points * request.point_size / HAPPY_GOLD_PIP_SIZE
+    session_start = time.fromisoformat(str(getattr(settings, "happy_gold_impulse_session_start_utc", "00:00")))
+    session_end = time.fromisoformat(str(getattr(settings, "happy_gold_impulse_session_end_utc", "17:00")))
+    session_time = request.timestamp_utc.astimezone(timezone.utc).time()
+    in_session = session_start <= session_time < session_end
+    same_symbol_positions = [position for position in request.positions if position.symbol.upper() == request.symbol.upper()]
+    checks = [
+        RiskCheck(name="symbol_match", passed=request.symbol.upper() == "XAUUSD", detail="expected=XAUUSD"),
+        RiskCheck(name="timeframe_match", passed=request.timeframe.upper() == "M5", detail="expected=M5; signal=ticks_30s"),
+        RiskCheck(name="spread_limit", passed=request.spread_points <= settings.max_spread_points, detail=f"max={settings.max_spread_points}"),
+        RiskCheck(name="impulse_window_ready", passed=ready, detail="window=30s"),
+        RiskCheck(name="impulse_threshold", passed=ready and abs(move_pips) >= threshold_pips, detail=f"absolute_min_pips={threshold_pips}"),
+        RiskCheck(name="research_session", passed=in_session, detail=f"{session_start.isoformat()}-{session_end.isoformat()}_UTC"),
+        RiskCheck(name="single_position", passed=not same_symbol_positions, detail="max_positions_for_symbol=1"),
+    ]
+    if not all(check.passed for check in checks):
+        return DecisionResponse(
+            action=DecisionAction.HOLD,
+            reason="happy_gold_tick_impulse_filter_block",
+            risk_checks=checks,
+            metadata={
+                "strategy_profile": HAPPY_GOLD_TICK_IMPULSE_PROFILE,
+                "candidate": False,
+                "impulse_30s_move_points": round(move_points, 6),
+                "impulse_30s_move_pips": round(move_pips, 6),
+                "impulse_30s_threshold_pips": threshold_pips,
+                "experimental_shadow_lock": True,
+            },
+        )
+
+    action = DecisionAction.BUY if move_pips > 0 else DecisionAction.SELL
+    entry = request.ask if action == DecisionAction.BUY else request.bid
+    stop_pips = 240.0
+    target_pips = 1000.0
+    stop_distance = stop_pips * HAPPY_GOLD_PIP_SIZE
+    target_distance = target_pips * HAPPY_GOLD_PIP_SIZE
+    stop_points = stop_distance / request.point_size
+    direction = 1 if action == DecisionAction.BUY else -1
+    setup = Setup(
+        action=action,
+        setup_type="happy_gold_tick_impulse_30s",
+        entry=entry,
+        stop=entry - direction * stop_distance,
+        partial=entry + direction * target_distance,
+        target=entry + direction * target_distance,
+        stop_points=stop_points,
+        flow_mode="not_applicable",
+        ema20=(request.bid + request.ask) / 2,
+        atr14=0.0,
+        partial_close_pct=100.0,
+        move_stop_to_breakeven=False,
+    )
+    response = _candidate_response(
+        request,
+        settings,
+        setup,
+        checks,
+        FlowAnalysis(True, False, False, "not_applicable"),
+        executable=False,
+        reason="happy_gold_tick_impulse_shadow_signal",
+        strategy_profile=HAPPY_GOLD_TICK_IMPULSE_PROFILE,
+    )
+    fixed_lot = 0.10
+    signal_timestamp = request.timestamp_utc.astimezone(timezone.utc).replace(second=0, microsecond=0)
+    response.risk_amount = round(stop_points * request.value_per_point_per_lot * fixed_lot, 2)
+    response.metadata.update(
+        {
+            "suggested_size": fixed_lot,
+            "signal_timeframe": "T30S",
+            "impulse_30s_move_points": round(move_points, 6),
+            "impulse_30s_move_pips": round(move_pips, 6),
+            "impulse_30s_threshold_pips": threshold_pips,
+            "signal_timestamp_utc": signal_timestamp.isoformat(),
+            "fixed_stop_pips": int(stop_pips),
+            "fixed_target_pips": int(target_pips),
+            "record_paper_trade": False,
+            "experimental_shadow_lock": True,
+            "research_status": "tick_forward_validation_required",
+            "source_entry_sample": 30,
+            "source_control_sample": 146,
+        }
+    )
+    response.risk_checks.append(RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled"))
+    return response
+
+
+def _evaluate_happy_gold_zigzag_tick_context(
+    request: DecisionRequest, settings: Settings
+) -> DecisionResponse:
+    setup = _happy_gold_zigzag_setup(request)
+    ready = request.indicators.get("impulse_900s_ready") == 1
+    move_points = float(request.indicators.get("impulse_900s_move_points", 0))
+    move_pips = move_points * request.point_size / HAPPY_GOLD_PIP_SIZE
+    threshold_pips = float(
+        getattr(settings, "happy_gold_zigzag_tick_context_900s_threshold_pips", 800)
+    )
+    setup_direction = 0 if setup is None else (1 if setup.action == DecisionAction.BUY else -1)
+    aligned_move_pips = move_pips * setup_direction
+    session_time = request.timestamp_utc.astimezone(timezone.utc).time()
+    in_session = time(3, 0) <= session_time < time(19, 0)
+    same_symbol_positions = [
+        position for position in request.positions
+        if position.symbol.upper() == request.symbol.upper()
+    ]
+    checks = [
+        RiskCheck(name="symbol_match", passed=request.symbol.upper() == "XAUUSD", detail="expected=XAUUSD"),
+        RiskCheck(name="timeframe_match", passed=request.timeframe.upper() == "M5", detail="expected=M5; signal=M30+ticks_900s"),
+        RiskCheck(name="spread_limit", passed=request.spread_points <= settings.max_spread_points, detail=f"max={settings.max_spread_points}"),
+        RiskCheck(name="research_session", passed=in_session, detail="03:00-19:00_UTC_proxy"),
+        RiskCheck(name="single_position", passed=not same_symbol_positions, detail="max_positions_for_symbol=1"),
+        RiskCheck(name="zigzag_breakout", passed=setup is not None, detail="confirmed_M30_fractal_breakout"),
+        RiskCheck(name="tick_context_window_ready", passed=ready, detail="window=900s"),
+        RiskCheck(
+            name="tick_context_directional_threshold",
+            passed=setup is not None and ready and aligned_move_pips >= threshold_pips,
+            detail=f"aligned_min_pips={threshold_pips}",
+        ),
+    ]
+    metadata = {
+        "strategy_profile": HAPPY_GOLD_ZIGZAG_TICK_CONTEXT_PROFILE,
+        "candidate": False,
+        "impulse_900s_move_points": round(move_points, 6),
+        "impulse_900s_move_pips": round(move_pips, 6),
+        "impulse_900s_aligned_move_pips": round(aligned_move_pips, 6),
+        "impulse_900s_threshold_pips": threshold_pips,
+        "experimental_shadow_lock": True,
+    }
+    if not all(check.passed for check in checks):
+        return DecisionResponse(
+            action=DecisionAction.HOLD,
+            reason="happy_gold_zigzag_tick_context_filter_block",
+            risk_checks=checks,
+            metadata=metadata,
+        )
+
+    assert setup is not None
+    response = _candidate_response(
+        request,
+        settings,
+        setup,
+        checks,
+        FlowAnalysis(True, False, False, "not_applicable"),
+        executable=False,
+        reason="happy_gold_zigzag_tick_context_shadow_signal",
+        strategy_profile=HAPPY_GOLD_ZIGZAG_TICK_CONTEXT_PROFILE,
+    )
+    response.risk_amount = round(setup.stop_points * request.value_per_point_per_lot * .10, 2)
+    response.metadata.update(metadata | {
+        "candidate": True,
+        "suggested_size": .10,
+        "signal_timeframe": "M30+T900S",
+        "fixed_stop_pips": 240,
+        "fixed_target_pips": 1000,
+        "record_paper_trade": False,
+        "research_status": "retrospective_candidate_requires_full_tick_replay_and_forward_validation",
+        "source_entry_sample": 123,
+        "source_hybrid_sample": 15,
+    })
+    response.risk_checks.append(
+        RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled")
+    )
+    return response
+
+
+def _evaluate_happy_gold_zigzag_structural_tick(
+    request: DecisionRequest,
+    settings: Settings,
+    strategy_profile: str = HAPPY_GOLD_ZIGZAG_STRUCTURAL_TICK_PROFILE,
+    normalized_range_max: float | None = None,
+) -> DecisionResponse:
+    setup = _happy_gold_zigzag_setup(request)
+    ready = request.indicators.get("impulse_900s_ready") == 1
+    move_points = float(request.indicators.get("impulse_900s_move_points", 0))
+    move_pips = move_points * request.point_size / HAPPY_GOLD_PIP_SIZE
+    direction = 0 if setup is None else (1 if setup.action == DecisionAction.BUY else -1)
+    aligned_context_pips = direction * move_pips
+    closes = [candle.close for candle in request.candles]
+    ema20 = _ema(closes[-20:]) if len(closes) >= 20 else closes[-1]
+    directional_ema20_gap_pips = direction * (closes[-1] - ema20) / HAPPY_GOLD_PIP_SIZE
+    pivot_extension_pips = (
+        direction * (setup.entry - float(setup.breakout_level)) / HAPPY_GOLD_PIP_SIZE
+        if setup is not None and setup.breakout_level is not None else 0.0
+    )
+    context_threshold = float(getattr(settings, "happy_gold_structural_context_900s_threshold_pips", 1000))
+    ema_gap_threshold = float(getattr(settings, "happy_gold_structural_ema20_gap_pips", 900))
+    max_extension = float(getattr(settings, "happy_gold_structural_max_pivot_extension_pips", 50))
+    completed = request.candles[:-1]
+    normalized_prior_m5_range: float | None = None
+    if len(completed) >= 15:
+        history = completed[-15:]
+        true_ranges = [
+            max(
+                candle.high - candle.low,
+                abs(candle.high - previous.close),
+                abs(candle.low - previous.close),
+            )
+            for previous, candle in zip(history[-15:-1], history[-14:])
+        ]
+        atr14 = fmean(true_ranges) if true_ranges else 0.0
+        if atr14:
+            normalized_prior_m5_range = (history[-1].high - history[-1].low) / atr14
+    timestamp = request.timestamp_utc.astimezone(timezone.utc)
+    same_symbol_positions = [position for position in request.positions if position.symbol.upper() == request.symbol.upper()]
+    checks = [
+        RiskCheck(name="symbol_match", passed=request.symbol.upper() == "XAUUSD", detail="expected=XAUUSD"),
+        RiskCheck(name="timeframe_match", passed=request.timeframe.upper() == "M5", detail="expected=M5; signal=M30+M5+ticks_900s"),
+        RiskCheck(name="spread_limit", passed=request.spread_points <= settings.max_spread_points, detail=f"max={settings.max_spread_points}"),
+        RiskCheck(name="research_session", passed=time(3, 0) <= timestamp.time() < time(19, 0), detail="03:00-19:00_UTC_proxy"),
+        RiskCheck(name="weekday_filter", passed=timestamp.weekday() != 4, detail="friday_excluded_by_holdout_selector"),
+        RiskCheck(name="single_position", passed=not same_symbol_positions, detail="max_positions_for_symbol=1"),
+        RiskCheck(name="zigzag_breakout", passed=setup is not None, detail="confirmed_M30_fractal_breakout"),
+        RiskCheck(name="tick_context_window_ready", passed=ready, detail="window=900s"),
+        RiskCheck(name="tick_context_directional_threshold", passed=ready and aligned_context_pips >= context_threshold, detail=f"aligned_min_pips={context_threshold}"),
+        RiskCheck(name="ema20_directional_gap", passed=setup is not None and directional_ema20_gap_pips >= ema_gap_threshold, detail=f"aligned_min_pips={ema_gap_threshold}"),
+        RiskCheck(name="pivot_extension", passed=setup is not None and pivot_extension_pips <= max_extension, detail=f"max_pips={max_extension}"),
+    ]
+    if normalized_range_max is not None:
+        normalized_max_spread = float(
+            getattr(settings, "happy_gold_normalized_range_max_spread_points", 15)
+        )
+        checks.append(RiskCheck(
+            name="normalized_prior_m5_range",
+            passed=normalized_prior_m5_range is not None and normalized_prior_m5_range <= normalized_range_max,
+            detail=f"max={normalized_range_max}",
+        ))
+        checks.append(RiskCheck(
+            name="normalized_range_spread_limit",
+            passed=request.spread_points <= normalized_max_spread,
+            detail=f"max={normalized_max_spread}",
+        ))
+    metadata = {
+        "strategy_profile": strategy_profile,
+        "candidate": False,
+        "impulse_900s_move_pips": round(move_pips, 6),
+        "impulse_900s_aligned_move_pips": round(aligned_context_pips, 6),
+        "directional_ema20_gap_pips": round(directional_ema20_gap_pips, 6),
+        "pivot_extension_pips": round(pivot_extension_pips, 6),
+        "normalized_prior_m5_range": (
+            round(normalized_prior_m5_range, 6) if normalized_prior_m5_range is not None else None
+        ),
+        "experimental_shadow_lock": True,
+    }
+    reason_prefix = (
+        "happy_gold_zigzag_structural_tick"
+        if strategy_profile == HAPPY_GOLD_ZIGZAG_STRUCTURAL_TICK_PROFILE
+        else strategy_profile
+    )
+    if not all(check.passed for check in checks):
+        return DecisionResponse(
+            action=DecisionAction.HOLD,
+            reason=f"{reason_prefix}_filter_block",
+            risk_checks=checks,
+            metadata=metadata,
+        )
+    assert setup is not None
+    research_stop_pips = 60.0
+    setup.stop_points = research_stop_pips * HAPPY_GOLD_PIP_SIZE / request.point_size
+    setup.stop = setup.entry - direction * research_stop_pips * HAPPY_GOLD_PIP_SIZE
+    response = _candidate_response(
+        request, settings, setup, checks,
+        FlowAnalysis(True, False, False, "not_applicable"),
+        executable=False,
+        reason=f"{reason_prefix}_shadow_signal" if strategy_profile == HAPPY_GOLD_ZIGZAG_STRUCTURAL_TICK_PROFILE else f"{reason_prefix}_signal",
+        strategy_profile=strategy_profile,
+    )
+    response.risk_amount = round(setup.stop_points * request.value_per_point_per_lot * .10, 2)
+    response.metadata.update(metadata | {
+        "candidate": True,
+        "suggested_size": .10,
+        "signal_timeframe": "M30+M5+T900S",
+        "fixed_stop_pips": int(research_stop_pips),
+        "fixed_target_pips": 1000,
+        "break_even_trigger_pips": 40,
+        "break_even_offset_pips": 1,
+        "trailing_activation_pips": 40,
+        "trailing_distance_pips": 20,
+        "max_holding_seconds": 60,
+        "exit_research_win_rate_pct": 66.667,
+        "exit_research_profit_factor": 3.092,
+        "tick_shadow_lifecycle": True,
+        "record_paper_trade": False,
+        "research_status": "small_sample_holdout_candidate_requires_forward_validation",
+        "annual_replay_signals": 27,
+    })
+    if normalized_range_max is not None:
+        response.metadata.update({
+            "normalized_range_max": normalized_range_max,
+            "oos_2026_trades": 75,
+            "oos_2026_win_rate_pct": 57.333,
+            "oos_2026_profit_factor": 2.485,
+            "oos_2026_max_drawdown": 34.22,
+            "fresh_oos_2026_apr_aug_trades": 39,
+            "fresh_oos_2026_apr_aug_win_rate_pct": 51.282,
+            "fresh_oos_2026_apr_aug_profit_factor": 1.613,
+            "fresh_oos_2026_apr_aug_max_drawdown": 37.51,
+            "execution_stress_profitable_scenarios": 16,
+            "execution_stress_total_scenarios": 16,
+            "operational_max_spread_points": normalized_max_spread,
+            "operational_latency_target_ms": 500,
+            "research_status": "walk_forward_candidate_requires_live_broker_tick_forward_validation",
+        })
+    response.risk_checks.append(RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled"))
+    return response
+
+
+def _evaluate_happy_gold_multiwindow_tick_score(
+    request: DecisionRequest, settings: Settings
+) -> DecisionResponse:
+    thresholds = {5: 15.0, 10: 32.5, 30: 76.0, 60: 79.0, 300: 324.5, 900: 372.35}
+    ready = {seconds: request.indicators.get(f"impulse_{seconds}s_ready") == 1 for seconds in thresholds}
+    moves = {
+        seconds: float(request.indicators.get(f"impulse_{seconds}s_move_points", 0)) * request.point_size / HAPPY_GOLD_PIP_SIZE
+        for seconds in thresholds
+    }
+    direction = 1 if moves[60] > 0 else -1
+    aligned = {seconds: direction * move for seconds, move in moves.items()}
+    passed = {seconds: ready[seconds] and aligned[seconds] >= threshold for seconds, threshold in thresholds.items()}
+    score = sum(passed.values())
+    timestamp = request.timestamp_utc.astimezone(timezone.utc)
+    same_symbol_positions = [position for position in request.positions if position.symbol.upper() == request.symbol.upper()]
+    core_passed = all(passed[seconds] for seconds in (60, 300, 900))
+    checks = [
+        RiskCheck(name="symbol_match", passed=request.symbol.upper() == "XAUUSD", detail="expected=XAUUSD"),
+        RiskCheck(name="timeframe_match", passed=request.timeframe.upper() == "M5", detail="expected=M5; signal=ticks_5_10_30_60_300_900s"),
+        RiskCheck(name="spread_limit", passed=request.spread_points <= settings.max_spread_points, detail=f"max={settings.max_spread_points}"),
+        RiskCheck(name="research_session", passed=time(0, 0) <= timestamp.time() < time(19, 0), detail="00:00-19:00_UTC"),
+        RiskCheck(name="single_position", passed=not same_symbol_positions, detail="max_positions_for_symbol=1"),
+        RiskCheck(name="core_windows", passed=core_passed, detail="aligned_60s_300s_900s"),
+        RiskCheck(name="multiwindow_score", passed=score >= 4, detail=f"score={score}/6; min=4"),
+        RiskCheck(
+            name="exhaustive_replay_gate",
+            passed=bool(getattr(settings, "happy_gold_multiwindow_shadow_enabled", False)),
+            detail="disabled_after_2026_tick_replay_pf_0.806",
+        ),
+    ]
+    metadata = {
+        "strategy_profile": HAPPY_GOLD_MULTIWINDOW_TICK_SCORE_PROFILE,
+        "candidate": False,
+        "multiwindow_score": score,
+        "experimental_shadow_lock": True,
+    }
+    for seconds, threshold in thresholds.items():
+        metadata[f"impulse_{seconds}s_threshold_pips"] = threshold
+        metadata[f"impulse_{seconds}s_aligned_move_pips"] = round(aligned[seconds], 6)
+    if not all(check.passed for check in checks):
+        return DecisionResponse(action=DecisionAction.HOLD, reason="happy_gold_multiwindow_tick_score_block", risk_checks=checks, metadata=metadata)
+
+    action = DecisionAction.BUY if direction > 0 else DecisionAction.SELL
+    entry = request.ask if action == DecisionAction.BUY else request.bid
+    stop_pips = 60.0
+    target_pips = 1000.0
+    stop_points = stop_pips * HAPPY_GOLD_PIP_SIZE / request.point_size
+    setup = Setup(
+        action=action, setup_type="happy_gold_multiwindow_tick_score", entry=entry,
+        stop=entry - direction * stop_pips * HAPPY_GOLD_PIP_SIZE,
+        partial=entry + direction * target_pips * HAPPY_GOLD_PIP_SIZE,
+        target=entry + direction * target_pips * HAPPY_GOLD_PIP_SIZE,
+        stop_points=stop_points, flow_mode="not_applicable", ema20=(request.bid + request.ask) / 2,
+        atr14=0.0, partial_close_pct=100.0, move_stop_to_breakeven=False,
+    )
+    response = _candidate_response(
+        request, settings, setup, checks, FlowAnalysis(True, False, False, "not_applicable"),
+        executable=False, reason="happy_gold_multiwindow_tick_score_shadow_signal",
+        strategy_profile=HAPPY_GOLD_MULTIWINDOW_TICK_SCORE_PROFILE,
+    )
+    response.risk_amount = round(stop_points * request.value_per_point_per_lot * .10, 2)
+    response.metadata.update(metadata | {
+        "candidate": True, "suggested_size": .10, "signal_timeframe": "T5S-T900S",
+        "fixed_stop_pips": 60, "fixed_target_pips": 1000,
+        "break_even_trigger_pips": 40, "break_even_offset_pips": 1,
+        "trailing_activation_pips": 40, "trailing_distance_pips": 20,
+        "max_holding_seconds": 60, "tick_shadow_lifecycle": True,
+        "record_paper_trade": False,
+        "research_status": "rejected_by_exhaustive_tick_replay",
+        "exhaustive_replay_trades": 43610,
+        "exhaustive_replay_win_rate_pct": 45.971,
+        "exhaustive_replay_profit_factor": 0.806,
+        "paired_entry_sample": 95, "paired_control_sample": 470,
+    })
+    response.risk_checks.append(RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled"))
+    return response
+
+
 def _apply_portfolio_allocation(
     response: DecisionResponse,
     request: DecisionRequest,
@@ -1645,6 +1944,21 @@ def evaluate_decision(request: DecisionRequest, settings: Settings, strategy_pro
         return _evaluate_weighted_portfolio_6_7(request, settings, profile)
     if profile == HAPPY_GOLD_COMBINED_PROFILE:
         return _evaluate_happy_gold_combined_portfolio(request, settings)
+    if profile == HAPPY_GOLD_TICK_IMPULSE_PROFILE:
+        return _evaluate_happy_gold_tick_impulse(request, settings)
+    if profile == HAPPY_GOLD_ZIGZAG_TICK_CONTEXT_PROFILE:
+        return _evaluate_happy_gold_zigzag_tick_context(request, settings)
+    if profile == HAPPY_GOLD_ZIGZAG_STRUCTURAL_TICK_PROFILE:
+        return _evaluate_happy_gold_zigzag_structural_tick(request, settings)
+    if profile == HAPPY_GOLD_ZIGZAG_NORMALIZED_RANGE_PROFILE:
+        return _evaluate_happy_gold_zigzag_structural_tick(
+            request,
+            settings,
+            strategy_profile=profile,
+            normalized_range_max=float(getattr(settings, "happy_gold_normalized_range_max", 1.876955192)),
+        )
+    if profile == HAPPY_GOLD_MULTIWINDOW_TICK_SCORE_PROFILE:
+        return _evaluate_happy_gold_multiwindow_tick_score(request, settings)
     return DecisionResponse(
         action=DecisionAction.HOLD,
         reason="unsupported_strategy_profile",
@@ -1654,6 +1968,6 @@ def evaluate_decision(request: DecisionRequest, settings: Settings, strategy_pro
 
 
 def reset_strategy_state() -> None:
-    """Clear in-memory windows and candle caches for deterministic tests."""
-    _flow_windows.clear()
-    _setup_cache.clear()
+    """Clear per-process flow windows for deterministic tests."""
+    with _flow_lock:
+        _flow_windows.clear()

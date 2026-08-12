@@ -6,7 +6,7 @@ from pathlib import Path
 from time import monotonic
 
 from fastapi import FastAPI, Header, HTTPException, Request
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from .auth import SESSION_COOKIE_NAME, create_session_value, has_valid_session, password_matches, read_login_password
@@ -14,10 +14,12 @@ from .backtest import replay_settings_fingerprint
 from .config import get_settings
 from .growth import simulate_growth, simulate_tiered_growth
 from .pages import render_catalog_page, render_comparison_page, render_growth_simulator_page, render_login_page, render_operations_page, render_results_page
-from .results_store import get_bot, load_bots_catalog, load_results_snapshot, resolve_bot_results_file
-from .schemas import BotCatalogItem, CandleIngestRequest, DecisionAction, DecisionRequest, DecisionResponse, EquityComparisonResponse, EquityPoint, EquitySeries, GrowthSimulationRequest, GrowthSimulationResponse, HealthResponse, HistoricalReplayResponse, MarketChartResponse, OperationsResponse, ResultsResponse, ResultsSummary, RuntimeStatusItem, TradeIngestRequest
+from .results_store import load_bots_catalog, load_results_snapshot, resolve_bot_results_file
+from .security import RateLimit, client_key, rate_limiter, require_same_origin
+from .schemas import BotCatalogItem, CandleIngestRequest, CandleSnapshot, DecisionAction, DecisionRequest, DecisionResponse, EquityComparisonResponse, EquityPoint, EquitySeries, GrowthSimulationRequest, GrowthSimulationResponse, HealthResponse, HistoricalReplayResponse, MarketChartResponse, OperationsResponse, ResultsResponse, ResultsSummary, RuntimeStatusItem, TickIngestRequest, TradeIngestRequest
 from .strategy import HAPPY_GOLD_COMBINED_PROFILE, WEIGHTED_PORTFOLIO_PROFILES, evaluate_decision
-from .supabase_store import SupabaseStore
+from .supabase_store import SupabaseRequestError, SupabaseStore
+from .telemetry import StepTimer, emit_event, metrics_snapshot
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s %(message)s")
 
@@ -30,11 +32,16 @@ BRAND_ICON_PATH = Path(__file__).resolve().parent / "static" / "brand" / "icon-1
 
 @app.middleware("http")
 async def security_headers(request: Request, call_next):
+    try:
+        require_same_origin(request)
+    except HTTPException as error:
+        return JSONResponse(status_code=error.status_code, content={"detail": error.detail})
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+    response.headers["Content-Security-Policy"] = "default-src 'self'; img-src 'self'; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'; object-src 'none'; base-uri 'self'; form-action 'self'"
     return response
 
 
@@ -148,6 +155,15 @@ def _require_ingest_key(provided_key: str | None) -> None:
         raise HTTPException(status_code=401, detail="invalid trade ingestion key")
 
 
+def _validate_ingested_candles(candles: list[CandleSnapshot]) -> None:
+    for candle in candles:
+        prices = (candle.open, candle.high, candle.low, candle.close)
+        if min(prices) <= 0:
+            raise HTTPException(status_code=422, detail="OHLC prices must be positive")
+        if candle.low > min(candle.open, candle.close) or candle.high < max(candle.open, candle.close) or candle.low > candle.high:
+            raise HTTPException(status_code=422, detail="OHLC values are inconsistent")
+
+
 @app.get("/", include_in_schema=False)
 def root(request: Request) -> RedirectResponse:
     return RedirectResponse(url="/bots" if has_valid_session(request, settings) else "/login", status_code=303)
@@ -166,8 +182,11 @@ def login_page(request: Request, error: str | None = None) -> HTMLResponse | Red
 async def login(request: Request) -> RedirectResponse | HTMLResponse:
     if not settings.dashboard_auth_configured:
         return render_login_page("O acesso ainda nao foi configurado neste ambiente.", status_code=503)
+    rate_key = client_key(request, "login")
+    rate_limiter.check(rate_key, RateLimit(settings.login_rate_limit_attempts, 300))
     if not password_matches(await read_login_password(request), settings):
         return render_login_page("Senha invalida.", status_code=401)
+    rate_limiter.reset(rate_key)
     response = RedirectResponse(url="/bots", status_code=303)
     response.set_cookie(
         SESSION_COOKIE_NAME,
@@ -362,18 +381,25 @@ def read_operations(request: Request) -> OperationsResponse:
         state = status_by_bot.get(bot.id, {})
         snapshot = snapshot_by_bot.get(bot.id, {})
         last_request = datetime.fromisoformat(str(state["last_request_at_utc"])) if state.get("last_request_at_utc") else None
-        if now.weekday() >= 5:
+        last_success = datetime.fromisoformat(str(state["last_success_at_utc"])) if state.get("last_success_at_utc") else last_request
+        last_candle = datetime.fromisoformat(str(state["last_candle_at_utc"])) if state.get("last_candle_at_utc") else None
+        consecutive_errors = int(state.get("consecutive_errors") or 0)
+        if consecutive_errors:
+            health = "degraded"
+        elif now.weekday() >= 5:
             health = "market_closed"
-        elif last_request is None:
+        elif last_success is None:
             health = "no_data"
         else:
-            age_minutes = (now - last_request).total_seconds() / 60
+            age_minutes = (now - last_success).total_seconds() / 60
             health = "healthy" if age_minutes <= 15 else "delayed" if age_minutes <= 30 else "stale"
+        market_lag = max(0.0, (now - last_candle).total_seconds()) if last_candle else None
         items.append(RuntimeStatusItem(
             bot_id=bot.id, name=bot.name, status=health,
             last_request_at_utc=last_request,
+            last_attempt_at_utc=state.get("last_attempt_at_utc"), last_success_at_utc=last_success,
             last_candle_at_utc=state.get("last_candle_at_utc"), last_action=state.get("last_action"), last_reason=state.get("last_reason"),
-            last_latency_ms=state.get("last_latency_ms"), consecutive_errors=int(state.get("consecutive_errors") or 0), last_error=state.get("last_error"),
+            last_latency_ms=state.get("last_latency_ms"), consecutive_errors=consecutive_errors, last_error=state.get("last_error"), last_error_code=state.get("last_error_code"), market_lag_seconds=market_lag,
             snapshot_updated_at_utc=snapshot.get("updated_at"), market_data_through_utc=snapshot.get("market_data_through_utc"),
         ))
     return OperationsResponse(updated_at_utc=now, bots=items)
@@ -419,7 +445,8 @@ def read_legacy_results(request: Request) -> ResultsResponse:
 
 
 @app.post("/api/trades", status_code=204)
-def ingest_trade(payload: TradeIngestRequest, x_2lotus_ingest_key: str | None = Header(default=None)) -> None:
+def ingest_trade(payload: TradeIngestRequest, request: Request, x_2lotus_ingest_key: str | None = Header(default=None)) -> None:
+    rate_limiter.check(client_key(request, "ingest"), RateLimit(settings.ingest_rate_limit_per_minute, 60))
     _require_ingest_key(x_2lotus_ingest_key)
     if not _uses_supabase_results():
         raise HTTPException(status_code=503, detail="trade ingestion requires DAYTRADE_RESULTS_STORE=SUPABASE")
@@ -428,8 +455,10 @@ def ingest_trade(payload: TradeIngestRequest, x_2lotus_ingest_key: str | None = 
 
 
 @app.post("/api/candles", status_code=204)
-def ingest_candles(payload: CandleIngestRequest, x_2lotus_ingest_key: str | None = Header(default=None)) -> None:
+def ingest_candles(payload: CandleIngestRequest, request: Request, x_2lotus_ingest_key: str | None = Header(default=None)) -> None:
+    rate_limiter.check(client_key(request, "ingest"), RateLimit(settings.ingest_rate_limit_per_minute, 60))
     _require_ingest_key(x_2lotus_ingest_key)
+    _validate_ingested_candles(payload.candles)
     if not _uses_supabase_results():
         raise HTTPException(status_code=503, detail="candle ingestion requires DAYTRADE_RESULTS_STORE=SUPABASE")
     bot = _find_bot(payload.bot_id)
@@ -438,9 +467,38 @@ def ingest_candles(payload: CandleIngestRequest, x_2lotus_ingest_key: str | None
     SupabaseStore(settings).upsert_candles(payload.bot_id, payload.symbol, payload.timeframe, payload.candles)
 
 
+@app.post("/api/ticks", status_code=204)
+def ingest_ticks(payload: TickIngestRequest, request: Request, x_2lotus_ingest_key: str | None = Header(default=None)) -> None:
+    rate_limiter.check(client_key(request, "tick_ingest"), RateLimit(settings.tick_ingest_rate_limit_per_minute, 60))
+    _require_ingest_key(x_2lotus_ingest_key)
+    if not _uses_supabase_results():
+        raise HTTPException(status_code=503, detail="tick ingestion requires DAYTRADE_RESULTS_STORE=SUPABASE")
+    store = SupabaseStore(settings)
+    store.upsert_ticks(payload)
+    store.advance_tick_shadow_trades(payload)
+
+
 @app.get("/health", response_model=HealthResponse)
 def healthcheck() -> HealthResponse:
     return HealthResponse(status="ok", service=settings.app_name, timestamp_utc=datetime.now(timezone.utc))
+
+
+@app.get("/ready")
+def readiness() -> JSONResponse:
+    if _uses_supabase_results():
+        if not settings.supabase_results_configured:
+            return JSONResponse(status_code=503, content={"status": "not_ready", "checks": {"configuration": "failed", "supabase": "not_checked"}})
+        try:
+            SupabaseStore(settings).readiness()
+        except SupabaseRequestError as error:
+            return JSONResponse(status_code=503, content={"status": "not_ready", "checks": {"configuration": "passed", "supabase": error.code}})
+    return JSONResponse(content={"status": "ready", "checks": {"configuration": "passed", "supabase": "passed" if _uses_supabase_results() else "disabled"}})
+
+
+@app.get("/api/metrics")
+def read_metrics(request: Request) -> dict[str, object]:
+    _require_api_session(request)
+    return metrics_snapshot()
 
 
 @app.get("/config")
@@ -488,63 +546,76 @@ def read_config(request: Request) -> dict[str, str | int | float | bool]:
 
 
 @app.post("/decision", response_model=DecisionResponse)
-def decision(payload: DecisionRequest, x_2lotus_ingest_key: str | None = Header(default=None)) -> DecisionResponse:
+def decision(payload: DecisionRequest, request: Request, x_2lotus_ingest_key: str | None = Header(default=None)) -> DecisionResponse:
+    run_id = payload.request_id
     started_at = monotonic()
+    run_timer = StepTimer(run_id, "decision_run")
+    rate_limiter.check(client_key(request, "ingest"), RateLimit(settings.ingest_rate_limit_per_minute, 60))
     _require_ingest_key(x_2lotus_ingest_key)
+    _validate_ingested_candles(payload.candles)
     store: SupabaseStore | None = None
     strategy_profile = settings.strategy_profile
-    if payload.bot_id and _uses_supabase_results():
-        bot = _find_bot(payload.bot_id)
-        strategy_profile = bot.strategy_profile
-        if bot.symbol != payload.symbol or bot.timeframe != payload.timeframe:
-            raise HTTPException(status_code=422, detail="decision symbol or timeframe does not match bot configuration")
-        store = SupabaseStore(settings)
-        store.upsert_candles(payload.bot_id, payload.symbol, payload.timeframe, payload.candles)
-        store.advance_paper_trades(payload.bot_id, payload.candles)
-        if strategy_profile in {"multitimeframe_trend_pullback", "happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed", HAPPY_GOLD_COMBINED_PROFILE, *WEIGHTED_PORTFOLIO_PROFILES}:
-            payload.candles = store.load_candles(
-                bot,
-                4000 if strategy_profile in {"happy_gold_zigzag_regime_confirmed", HAPPY_GOLD_COMBINED_PROFILE} or strategy_profile in WEIGHTED_PORTFOLIO_PROFILES else 1000,
-            )
-    strategy_settings = settings
-    if payload.bot_id:
-        strategy_settings = copy(settings)
-        strategy_settings.default_symbol = payload.symbol
-        strategy_settings.default_timeframe = payload.timeframe
-        if (strategy_profile in WEIGHTED_PORTFOLIO_PROFILES or strategy_profile == HAPPY_GOLD_COMBINED_PROFILE) and store:
-            strategy_settings.portfolio_risk_state = store.load_portfolio_risk_state(payload.bot_id, payload.timestamp_utc)
-    response = evaluate_decision(payload, strategy_settings, strategy_profile)
-    if payload.bot_id and store:
-        try:
-            store.record_runtime_status(payload.bot_id, request_at=payload.timestamp_utc, candle_at=payload.candles[-1].timestamp_utc if payload.candles else None, action=response.action.value, reason=response.reason, latency_ms=(monotonic() - started_at) * 1000)
-        except RuntimeError:
-            logger.warning("runtime status could not be persisted bot_id=%s", payload.bot_id)
-    if payload.bot_id and store and response.metadata.get("candidate"):
-        signal_key = store.record_strategy_candidate(payload, response)
-        if signal_key:
-            store.record_paper_trade(signal_key, payload, response, "technical")
-            if response.metadata.get("flow_confirmed"):
-                store.record_paper_trade(signal_key, payload, response, "flow_confirmed")
-    if payload.bot_id and store and response.action.value in {"buy", "sell"}:
-        validation_variant = "flow_confirmed" if strategy_profile == "fimath_ema20_flow" and settings.fimath_flow_policy == "required" else "technical"
-        closed_count = store.closed_paper_trade_count(payload.bot_id, validation_variant)
-        response.metadata["validation_variant"] = validation_variant
-        response.metadata["closed_paper_trades"] = closed_count
-        if closed_count < settings.fimath_min_closed_paper_trades:
-            response.action = DecisionAction.HOLD
-            response.reason = "shadow_minimum_not_reached"
-            response.size = 0.0
-    logger.info(
-        "decision request_id=%s symbol=%s timeframe=%s action=%s reason=%s candidate=%s flow_status=%s book_z=%s tick_z=%s flow_score=%s",
-        payload.request_id,
-        payload.symbol,
-        payload.timeframe,
-        response.action.value,
-        response.reason,
-        response.metadata.get("candidate", False),
-        response.metadata.get("flow_status"),
-        response.metadata.get("book_z"),
-        response.metadata.get("tick_z"),
-        response.metadata.get("flow_score"),
-    )
-    return response
+    try:
+        if payload.bot_id and _uses_supabase_results():
+            bot = _find_bot(payload.bot_id)
+            strategy_profile = bot.strategy_profile
+            if bot.symbol != payload.symbol or bot.timeframe != payload.timeframe:
+                raise HTTPException(status_code=422, detail="decision symbol or timeframe does not match bot configuration")
+            store = SupabaseStore(settings)
+            cached_response = store.load_decision_response(payload.bot_id, payload.request_id)
+            if cached_response is not None:
+                emit_event(run_id=run_id, step="idempotency_lookup", status="replayed", bot_id=payload.bot_id)
+                try:
+                    store.record_runtime_status(payload.bot_id, request_at=payload.timestamp_utc, candle_at=payload.candles[-1].timestamp_utc if payload.candles else None, action=cached_response.action.value, reason=cached_response.reason, latency_ms=(monotonic() - started_at) * 1000)
+                except SupabaseRequestError as telemetry_error:
+                    emit_event(run_id=run_id, step="persist_runtime_status", status="failed", error_code=telemetry_error.code, bot_id=payload.bot_id)
+                run_timer.finish(status="passed", bot_id=payload.bot_id, outcome="idempotent_replay")
+                return cached_response
+            store.upsert_candles(payload.bot_id, payload.symbol, payload.timeframe, payload.candles)
+            store.advance_paper_trades(payload.bot_id, payload.candles)
+            if strategy_profile in {"multitimeframe_trend_pullback", "happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed", HAPPY_GOLD_COMBINED_PROFILE, *WEIGHTED_PORTFOLIO_PROFILES}:
+                payload.candles = store.load_candles(
+                    bot,
+                    4000 if strategy_profile in {"happy_gold_zigzag_regime_confirmed", HAPPY_GOLD_COMBINED_PROFILE} or strategy_profile in WEIGHTED_PORTFOLIO_PROFILES else 1000,
+                )
+        strategy_settings = settings
+        if payload.bot_id:
+            strategy_settings = copy(settings)
+            strategy_settings.default_symbol = payload.symbol
+            strategy_settings.default_timeframe = payload.timeframe
+            if (strategy_profile in WEIGHTED_PORTFOLIO_PROFILES or strategy_profile == HAPPY_GOLD_COMBINED_PROFILE) and store:
+                strategy_settings.portfolio_risk_state = store.load_portfolio_risk_state(payload.bot_id, payload.timestamp_utc)
+        response = evaluate_decision(payload, strategy_settings, strategy_profile)
+        if payload.bot_id and store and response.metadata.get("candidate"):
+            signal_key = store.record_strategy_candidate(payload, response)
+            if signal_key and response.metadata.get("tick_shadow_lifecycle"):
+                store.record_tick_shadow_trade(signal_key, payload, response)
+            if signal_key and response.metadata.get("record_paper_trade", True):
+                store.record_paper_trade(signal_key, payload, response, "technical")
+                if response.metadata.get("flow_confirmed"):
+                    store.record_paper_trade(signal_key, payload, response, "flow_confirmed")
+        if payload.bot_id and store and response.action.value in {"buy", "sell"}:
+            validation_variant = "flow_confirmed" if strategy_profile == "fimath_ema20_flow" and settings.fimath_flow_policy == "required" else "technical"
+            closed_count = store.closed_paper_trade_count(payload.bot_id, validation_variant)
+            response.metadata["validation_variant"] = validation_variant
+            response.metadata["closed_paper_trades"] = closed_count
+            if closed_count < settings.fimath_min_closed_paper_trades:
+                response.action = DecisionAction.HOLD
+                response.reason = "shadow_minimum_not_reached"
+                response.size = 0.0
+        if payload.bot_id and store:
+            store.save_decision_response(payload.bot_id, payload.request_id, response)
+            try:
+                store.record_runtime_status(payload.bot_id, request_at=payload.timestamp_utc, candle_at=payload.candles[-1].timestamp_utc if payload.candles else None, action=response.action.value, reason=response.reason, latency_ms=(monotonic() - started_at) * 1000)
+            except SupabaseRequestError as telemetry_error:
+                emit_event(run_id=run_id, step="persist_runtime_status", status="failed", error_code=telemetry_error.code, bot_id=payload.bot_id)
+        run_timer.finish(status="passed", bot_id=payload.bot_id, outcome=response.reason)
+        return response
+    except SupabaseRequestError as error:
+        run_timer.finish(status="failed", bot_id=payload.bot_id, error_code=error.code)
+        if payload.bot_id and store:
+            try:
+                store.record_runtime_failure(payload.bot_id, error_code=error.code, error_message=str(error))
+            except SupabaseRequestError:
+                pass
+        raise HTTPException(status_code=503, detail=f"decision dependency unavailable: {error.code}") from error
