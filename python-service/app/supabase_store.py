@@ -78,7 +78,10 @@ class SupabaseStore:
 
     def list_bots(self, active: bool | None = True) -> list[BotCatalogItem]:
         active_filter = "" if active is None else f"active=eq.{str(active).lower()}&"
-        rows = self._request(f"bots?{active_filter}select=id,name,description,strategy_profile,strategy_description,symbol,timeframe,active&order=id")
+        rows = self._request(
+            f"bots?{active_filter}select=id,name,subtitle,description,strategy_profile,"
+            "strategy_description,symbol,timeframe,results_file,active&order=id"
+        )
         return [BotCatalogItem.model_validate(row) for row in rows if isinstance(row, dict)]
 
     def load_results(self, bot_id: str) -> ResultsResponse:

@@ -42,13 +42,13 @@ REBUILD=1 ./scripts/run-2lotus-demo.sh
 No desktop remoto, abra **Tools → Options → Expert Advisors**. Marque **Allow WebRequest for listed URL**
 e adicione uma única origem:
 
-`http://127.0.0.1:8000`
+`http://127.0.0.1:1112`
 
 Depois, compile `SyncLeadBridgeEA.mq5` no MetaEditor e anexe-o a um gráfico `XAUUSD` em `M5`.
 Preencha os inputs:
 
-- `StrategyServiceUrl`: `http://127.0.0.1:8000/decision`
-- `TradeResultsUrl`: `http://127.0.0.1:8000/api/trades`
+- `StrategyServiceUrl`: `http://127.0.0.1:1112/decision`
+- `TradeResultsUrl`: `http://127.0.0.1:1112/api/trades`
 - `ResultsBotId`: `bot-6`
 - `ShadowBotIds`: `bot-2,bot-3,bot-4,bot-5` (aceita uma lista separada por vírgulas)
 - `ExperimentalBotId`: `bot-6` (força o polling do experimento mesmo em gráficos que preservam a lista shadow antiga)
@@ -90,7 +90,7 @@ reinicie nesta ordem e confirme a conectividade:
 ```bash
 docker restart 2lotus-mt5-desktop
 docker restart 2lotus-api
-docker exec 2lotus-mt5-desktop curl --fail http://127.0.0.1:8000/health
+docker exec 2lotus-mt5-desktop curl --fail http://127.0.0.1:1112/health
 ```
 
 O EA impõe internamente um piso de 100000 candles para o histórico canônico, mesmo quando um
@@ -99,7 +99,7 @@ gráfico antigo ainda preserva `HistoryCacheBars=2000` nos inputs salvos.
 ## Verificações antes do primeiro trade
 
 ```bash
-docker exec 2lotus-mt5-desktop curl http://127.0.0.1:8000/health
+docker exec 2lotus-mt5-desktop curl http://127.0.0.1:1112/health
 ```
 
 O resultado deve indicar `"status":"ok"`. Após o fechamento de um trade demo, o EA envia um
@@ -129,7 +129,7 @@ dois, dá prioridade ao Bot 7 quando houver conflito, aplica 75% do risco-base a
 25% ao componente 6, e mantém uma única posição. O replay limita o conjunto a duas entradas e
 2R de perda por dia. O EA consulta o Bot 8 sempre com execução falsa durante o forward test.
 
-O Bot 16 combina o portfólio 6/7 com risco 100/100 e o Happy Gold ZigZag. Seu replay usa 0,25% do
+O Bot 16 combina o portfólio 6/7 com risco 100/100 e o ZigZag Scalper. Seu replay usa 0,25% do
 saldo por risco-base, aceita entradas entre 06:00–18:59 UTC e não possui limite diário de
 operações. Permanecem ativos o limite de uma posição simultânea, o cooldown de 15 minutos e o
 bloqueio ao atingir -2R no dia. O status `promising_not_live` mantém o bot somente em shadow.

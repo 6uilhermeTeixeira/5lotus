@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 
 
 SPOOL_ROOT = Path(os.getenv("DAYTRADE_TICK_SPOOL_ROOT", "/data/mt5-prefix"))
-API_URL = os.getenv("DAYTRADE_TICK_API_URL", "http://127.0.0.1:8000/api/ticks")
+API_URL = os.getenv("DAYTRADE_TICK_API_URL", "http://127.0.0.1:1112/api/ticks")
 INGEST_KEY = os.getenv("DAYTRADE_INGEST_API_KEY", "")
 BATCH_SIZE = 1000
 POLL_SECONDS = float(os.getenv("DAYTRADE_TICK_UPLOAD_POLL_SECONDS", "2"))

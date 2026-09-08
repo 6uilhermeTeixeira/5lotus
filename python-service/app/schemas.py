@@ -25,6 +25,8 @@ class AccountSnapshot(BaseModel):
     equity: float
     margin_free: float
     leverage: int | None = None
+    trade_mode: str = Field(default="unknown", pattern="^(demo|contest|real|unknown)$")
+    server: str = Field(default="", max_length=120)
 
 
 class CandleSnapshot(BaseModel):
@@ -142,6 +144,7 @@ class DecisionResponse(BaseModel):
     move_stop_to_breakeven: bool = False
     risk_checks: list[RiskCheck] = Field(default_factory=list)
     metadata: dict[str, str | int | float | bool] = Field(default_factory=dict)
+    parallel_candidates: list["DecisionResponse"] = Field(default_factory=list)
 
 
 class HealthResponse(BaseModel):
@@ -218,6 +221,7 @@ class ResultsResponse(BaseModel):
 class BotCatalogItem(BaseModel):
     id: str = Field(..., pattern=r"^[a-z0-9-]+$")
     name: str
+    subtitle: str = ""
     description: str
     strategy_profile: str
     strategy_description: str = ""
@@ -301,6 +305,38 @@ class EquityComparisonResponse(BaseModel):
     missing_bot_ids: list[str] = Field(default_factory=list)
 
 
+class HistoryRefreshResponse(BaseModel):
+    dataset_version: str
+    symbol: str
+    timeframe: str
+    period_days: int
+    coverage_start: date
+    coverage_end: date
+    collection_progress_pct: float
+    candles_imported: int
+    snapshots_updated: int
+    updated_at_utc: datetime
+
+
+class MarketCandlePoint(BaseModel):
+    t: int
+    o: float
+    h: float
+    l: float  # noqa: E741 - compact OHLC wire format used by the chart
+    c: float
+    volume: float
+
+
+class BacktestMarketChartResponse(BaseModel):
+    symbol: str
+    resolution: str
+    period_days: int
+    dataset_version: str
+    candles: list[MarketCandlePoint] = Field(default_factory=list)
+    series: list[EquitySeries] = Field(default_factory=list)
+    missing_bot_ids: list[str] = Field(default_factory=list)
+
+
 class GrowthPoint(BaseModel):
     day: date
     balance: float
@@ -344,6 +380,26 @@ class RiskTier(BaseModel):
 class GrowthSimulationRequest(BaseModel):
     initial_balance: float = Field(10000, ge=1, le=100_000_000)
     risk_tiers: list[RiskTier] = Field(default_factory=lambda: [RiskTier(balance_threshold=0, risk_per_trade_pct=0.25)], min_length=1, max_length=12)
+
+
+class GrowthComparisonRequest(GrowthSimulationRequest):
+    bot_ids: list[str] = Field(default_factory=list, min_length=1, max_length=50)
+    mode: str = Field("normalized", pattern="^(normalized|operational)$")
+    days: int = Field(365, ge=1, le=365)
+
+
+class GrowthStrategySimulation(BaseModel):
+    bot_id: str
+    bot_name: str
+    strategy_profile: str
+    simulation: GrowthSimulationSeries
+
+
+class GrowthComparisonResponse(BaseModel):
+    mode: str
+    period_days: int
+    series: list[GrowthStrategySimulation] = Field(default_factory=list)
+    missing_bot_ids: list[str] = Field(default_factory=list)
 
 
 class RuntimeStatusItem(BaseModel):

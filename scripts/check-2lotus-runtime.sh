@@ -54,7 +54,7 @@ emit "check_mt5" "passed" "MT5 está ativo e saudável"
 
 [[ "$api_state" == "running/healthy" ]] || fail "check_api" "API não está saudável: ${api_state:-missing}" "api_unhealthy"
 
-config_json="$(docker exec 2lotus-mt5-desktop curl --fail --silent http://127.0.0.1:8000/config)" \
+config_json="$(docker exec 2lotus-mt5-desktop curl --fail --silent http://127.0.0.1:1112/config)" \
   || fail "check_api" "Endpoint /config da API não respondeu" "api_unreachable"
 
 CONFIG_JSON="$config_json" python3 - <<'PY' || fail "check_safety" "API não está travada em shadow mode" "unsafe_config"

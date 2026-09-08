@@ -3,7 +3,7 @@
 ## Princípios
 
 - MT5/MQL5 executa coleta e, futuramente, ordens; Python decide e audita.
-- Todas as seis estratégias permanecem em shadow e falham fechadas.
+- As três estratégias V3 e a combinação V3 permanecem em shadow e falham fechadas.
 - OHLCV pertence ao mercado, não ao catálogo de estratégias.
 - Replays são causais, versionados e produzidos fora das requisições web.
 - Supabase usa RLS sem privilégios para `anon` ou `authenticated`; somente o backend usa service role.
@@ -25,15 +25,20 @@ flowchart LR
   Job --> Cache
 ```
 
-O EA consulta apenas `bot-6`, `bot-7`, `bot-11`, `bot-12`, `bot-13` e `bot-16`. A decisão grava o histórico canônico por símbolo/timeframe, avança paper trades e atualiza o heartbeat operacional.
+O EA consulta `core-zigzag-v3`, `core-stochastic-v3`, `core-multitimeframe-v3` e
+`core-combined-v3`. A decisão grava o histórico canônico por símbolo/timeframe, avança paper trades e atualiza o heartbeat operacional.
 Cada chamada carrega `request_id` como chave de correlação. Respostas concluídas são persistidas por
 `bot_id + request_id`, tornando retries posteriores idempotentes.
+
+O executor MQL5 atual aceita uma única decisão por consulta. Portanto, a combinação V3, que retorna
+`parallel_candidates`, ainda não deve ser escolhida em `ExecutionBotId`. Também não se deve executar
+simultaneamente a combinação e as três estratégias individuais, pois isso duplicaria exposição.
 
 ## Persistência
 
 | Tabela | Responsabilidade |
 |---|---|
-| `bots` | seis perfis selecionados e seus textos públicos |
+| `bots` | quatro perfis V3 selecionados e seus textos públicos |
 | `market_history` | OHLCV canônico por mercado e timestamp |
 | `market_ticks` | Bid/Ask bruto por broker e milissegundo para pesquisa shadow |
 | `strategy_signals` | candidatos deduplicados e resposta do motor |

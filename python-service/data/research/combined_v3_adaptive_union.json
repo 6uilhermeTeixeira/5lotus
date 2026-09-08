@@ -1,0 +1,35 @@
+{
+  "strategy_profile": "portfolio_v3_adaptive_union_shadow",
+  "components": [
+    "zigzag_scalper_v3_adaptive_shadow",
+    "multitimeframe_trend_pullback_v3_adaptive_shadow",
+    "stochastic_sell_v3_adaptive_shadow"
+  ],
+  "execution": "three_independent_parallel_tracks",
+  "risk_pct_per_component_trade": 1.0,
+  "maximum_theoretical_simultaneous_risk_pct": 3.0,
+  "simultaneous_opposite_directions_allowed": true,
+  "initial_balance": 10000.0,
+  "annual_replay": {
+    "trades": 887,
+    "ending_balance": 142358.67,
+    "net_pnl": 132358.67,
+    "profit_factor": 1.64,
+    "expectancy_r": 0.3111,
+    "max_drawdown_r": 13.28,
+    "positive_populated_folds": 13,
+    "populated_folds": 13,
+    "validation_status": "promising_not_live"
+  },
+  "methodology": [
+    "All 736 ZigZag V3, 107 Multitimeframe V3 and 44 Stochastic V3 trades are retained.",
+    "At entry, each trade reserves 1% of the portfolio equity then available.",
+    "Overlapping trades remain open independently and settle using their original realized R.",
+    "No signal is removed because another component has an open or opposing position."
+  ],
+  "limitations": [
+    "Compounding makes monetary profit non-linear and substantially increases exposure after equity growth.",
+    "Maximum simultaneous loss can reach approximately 3% before slippage and gap risk.",
+    "The combined strategy remains shadow-only pending independent broker-tick forward validation."
+  ]
+}

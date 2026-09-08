@@ -6,14 +6,25 @@ from pathlib import Path
 class Settings:
     def __init__(self) -> None:
         service_root = Path(__file__).resolve().parent.parent
+        self.lotus_data_root = Path(getenv("LOTUS_DATA_ROOT", "/home/codexops/lotus-data"))
+        self.lotus_dataset_version = getenv("LOTUS_DATASET_VERSION", "CURRENT")
+        self.lotus_publisher_python = Path(
+            getenv("LOTUS_PUBLISHER_PYTHON", "/home/codexops/projects/2Lotus/market-data-pipeline/.venv/bin/python")
+        )
+        self.lotus_publisher_script = Path(
+            getenv("LOTUS_PUBLISHER_SCRIPT", "/home/codexops/projects/2Lotus/market-data-pipeline/scripts/publish-dataset.py")
+        )
+        self.lotus_publish_timeout_seconds = int(getenv("LOTUS_PUBLISH_TIMEOUT_SECONDS", "900"))
         self.app_name = getenv("DAYTRADE_APP_NAME", "2lotus-strategy-service")
         self.host = getenv("DAYTRADE_HOST", "127.0.0.1")
-        self.port = int(getenv("DAYTRADE_PORT", "8000"))
+        self.port = int(getenv("DAYTRADE_PORT", "1112"))
         self.strategy_profile = getenv("DAYTRADE_STRATEGY_PROFILE", "stochastic_sell_session")
         self.default_symbol = getenv("DAYTRADE_DEFAULT_SYMBOL", "XAUUSD")
         self.default_timeframe = getenv("DAYTRADE_DEFAULT_TIMEFRAME", "M5")
         self.max_spread_points = float(getenv("DAYTRADE_MAX_SPREAD_POINTS", "50.0"))
         self.risk_per_trade_pct = float(getenv("DAYTRADE_RISK_PER_TRADE_PCT", "1.0"))
+        self.min_execution_lot = float(getenv("DAYTRADE_MIN_EXECUTION_LOT", "0.01"))
+        self.execution_lot_step = float(getenv("DAYTRADE_EXECUTION_LOT_STEP", "0.01"))
         self.min_risk_reward = float(getenv("DAYTRADE_MIN_RISK_REWARD", "2.0"))
         self.enable_live_decisions = getenv("DAYTRADE_ENABLE_LIVE_DECISIONS", "false").lower() == "true"
         self.fimath_mode = getenv("DAYTRADE_FIMATH_MODE", "shadow").lower()
@@ -27,13 +38,13 @@ class Settings:
         self.fimath_min_closed_paper_trades = int(getenv("DAYTRADE_FIMATH_MIN_CLOSED_PAPER_TRADES", "30"))
         self.chart_cache_limit = int(getenv("DAYTRADE_CHART_CACHE_LIMIT", "5000"))
         self.backtest_balance = float(getenv("DAYTRADE_BACKTEST_BALANCE", "10000"))
-        self.backtest_spread_points = float(getenv("DAYTRADE_BACKTEST_SPREAD_POINTS", "10"))
+        self.backtest_spread_points = float(getenv("DAYTRADE_BACKTEST_SPREAD_POINTS", "0"))
         self.backtest_point_size = float(getenv("DAYTRADE_BACKTEST_POINT_SIZE", "0.01"))
         self.backtest_value_per_point_per_lot = float(getenv("DAYTRADE_BACKTEST_VALUE_PER_POINT_PER_LOT", "1"))
         self.backtest_candle_limit = int(getenv("DAYTRADE_BACKTEST_CANDLE_LIMIT", "100000"))
         self.backtest_risk_per_trade_pct = float(getenv("DAYTRADE_BACKTEST_RISK_PER_TRADE_PCT", "0.25"))
         self.backtest_slippage_points = float(getenv("DAYTRADE_BACKTEST_SLIPPAGE_POINTS", "2"))
-        self.backtest_commission_per_lot = float(getenv("DAYTRADE_BACKTEST_COMMISSION_PER_LOT", "0"))
+        self.backtest_commission_per_lot = float(getenv("DAYTRADE_BACKTEST_COMMISSION_PER_LOT", "4.50"))
         self.backtest_session_start_utc = getenv("DAYTRADE_BACKTEST_SESSION_START_UTC", "06:00")
         self.backtest_session_end_utc = getenv("DAYTRADE_BACKTEST_SESSION_END_UTC", "21:00")
         self.backtest_max_trades_per_day = int(getenv("DAYTRADE_BACKTEST_MAX_TRADES_PER_DAY", "4"))
@@ -70,13 +81,42 @@ class Settings:
         self.happy_gold_normalized_range_max_spread_points = float(
             getenv("DAYTRADE_HAPPY_GOLD_NORMALIZED_RANGE_MAX_SPREAD_POINTS", "15")
         )
+        self.zigzag_scalper_v3_expansion_threshold = float(
+            getenv("DAYTRADE_ZIGZAG_SCALPER_V3_EXPANSION_THRESHOLD", "6.0")
+        )
+        self.zigzag_scalper_v4_min_5s_move_pips = float(getenv("DAYTRADE_ZIGZAG_SCALPER_V4_MIN_5S_MOVE_PIPS", "20"))
+        self.zigzag_scalper_v4_min_30s_move_pips = float(getenv("DAYTRADE_ZIGZAG_SCALPER_V4_MIN_30S_MOVE_PIPS", "75"))
+        self.zigzag_scalper_v4_min_60s_move_pips = float(getenv("DAYTRADE_ZIGZAG_SCALPER_V4_MIN_60S_MOVE_PIPS", "120"))
+        self.zigzag_scalper_v4_min_efficiency = float(getenv("DAYTRADE_ZIGZAG_SCALPER_V4_MIN_EFFICIENCY", "0.18"))
+        self.zigzag_scalper_v4_min_tick_acceleration = float(getenv("DAYTRADE_ZIGZAG_SCALPER_V4_MIN_TICK_ACCELERATION", "0.85"))
+        self.zigzag_scalper_v4_max_spread_pips = float(getenv("DAYTRADE_ZIGZAG_SCALPER_V4_MAX_SPREAD_PIPS", "100"))
+        self.stochastic_sell_v2_threshold = float(getenv("DAYTRADE_STOCHASTIC_SELL_V2_THRESHOLD", "85"))
+        self.stochastic_sell_v2_target_rr = float(getenv("DAYTRADE_STOCHASTIC_SELL_V2_TARGET_RR", "1.25"))
+        self.stochastic_sell_v2_partial_pct = float(getenv("DAYTRADE_STOCHASTIC_SELL_V2_PARTIAL_PCT", "50"))
+        self.stochastic_sell_v2_cutoff_hour = int(getenv("DAYTRADE_STOCHASTIC_SELL_V2_CUTOFF_HOUR", "15"))
+        self.stochastic_sell_v3_cutoff_hour = int(getenv("DAYTRADE_STOCHASTIC_SELL_V3_CUTOFF_HOUR", "13"))
+        self.multitimeframe_v2_strength_min = float(getenv("DAYTRADE_MULTITIMEFRAME_V2_STRENGTH_MIN", "0.5"))
+        self.multitimeframe_v2_session_start_hour = int(getenv("DAYTRADE_MULTITIMEFRAME_V2_SESSION_START_HOUR", "13"))
+        self.multitimeframe_v2_session_end_hour = int(getenv("DAYTRADE_MULTITIMEFRAME_V2_SESSION_END_HOUR", "16"))
+        self.multitimeframe_v2_stop_atr = float(getenv("DAYTRADE_MULTITIMEFRAME_V2_STOP_ATR", "1.2"))
+        self.multitimeframe_v2_target_rr = float(getenv("DAYTRADE_MULTITIMEFRAME_V2_TARGET_RR", "1.25"))
+        self.multitimeframe_v2_max_holding_bars = int(getenv("DAYTRADE_MULTITIMEFRAME_V2_MAX_HOLDING_BARS", "6"))
         self.happy_gold_impulse_session_start_utc = getenv("DAYTRADE_HAPPY_GOLD_IMPULSE_SESSION_START_UTC", "00:00")
         self.happy_gold_impulse_session_end_utc = getenv("DAYTRADE_HAPPY_GOLD_IMPULSE_SESSION_END_UTC", "17:00")
         self.happy_gold_multiwindow_shadow_enabled = getenv("DAYTRADE_HAPPY_GOLD_MULTIWINDOW_SHADOW_ENABLED", "false").lower() == "true"
         self.results_store_path = Path(
             getenv("DAYTRADE_RESULTS_STORE_PATH", str(service_root / "data" / "trade-results.json"))
         )
+        self.backtest_cache_path = Path(
+            getenv("DAYTRADE_BACKTEST_CACHE_PATH", str(service_root / "data" / "backtests"))
+        )
+        self.legacy_backtest_cache_path = Path(
+            getenv("DAYTRADE_LEGACY_BACKTEST_PATH", str(service_root / "data" / "backtests-legacy"))
+        )
         self.bots_catalog_path = Path(getenv("DAYTRADE_BOTS_CATALOG_PATH", str(service_root / "data" / "bots.json")))
+        self.legacy_bots_catalog_path = Path(
+            getenv("DAYTRADE_LEGACY_BOTS_CATALOG_PATH", str(service_root / "data" / "legacy-bots.json"))
+        )
         self.dashboard_password = getenv("DAYTRADE_DASHBOARD_PASSWORD")
         self.session_secret = getenv("DAYTRADE_SESSION_SECRET")
         self.session_max_age_seconds = int(getenv("DAYTRADE_SESSION_MAX_AGE_SECONDS", "43200"))
@@ -98,6 +138,8 @@ class Settings:
             raise ValueError("DAYTRADE_FIMATH_MODE must be shadow or live")
         if not 0 < self.risk_per_trade_pct <= 10:
             raise ValueError("DAYTRADE_RISK_PER_TRADE_PCT must be between 0 and 10")
+        if self.min_execution_lot <= 0 or self.execution_lot_step <= 0:
+            raise ValueError("execution lot minimum and step must be positive")
         if not 0 < self.backtest_risk_per_trade_pct <= 10:
             raise ValueError("DAYTRADE_BACKTEST_RISK_PER_TRADE_PCT must be between 0 and 10")
         if self.session_max_age_seconds <= 0:
@@ -106,6 +148,10 @@ class Settings:
             raise ValueError("Supabase timeout/retry settings are invalid")
         if self.tick_ingest_rate_limit_per_minute <= 0:
             raise ValueError("DAYTRADE_TICK_INGEST_RATE_LIMIT_PER_MINUTE must be positive")
+        if self.lotus_publish_timeout_seconds <= 0:
+            raise ValueError("LOTUS_PUBLISH_TIMEOUT_SECONDS must be positive")
+        if not 1 <= self.stochastic_sell_v3_cutoff_hour <= 23:
+            raise ValueError("DAYTRADE_STOCHASTIC_SELL_V3_CUTOFF_HOUR must be between 1 and 23")
         if self.session_secret and len(self.session_secret) < 32:
             raise ValueError("DAYTRADE_SESSION_SECRET must contain at least 32 characters")
 

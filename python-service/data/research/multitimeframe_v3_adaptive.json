@@ -1,0 +1,38 @@
+{
+  "strategy_profile": "multitimeframe_trend_pullback_v3_adaptive_shadow",
+  "research_status": "walk_forward_candidate_requires_forward_validation",
+  "causal_policy": {
+    "range_or_transition": "v2_geometry",
+    "trend_buy_or_non_counter_high_volatility": "v1_geometry",
+    "trend_sell_or_insufficient_history": "blocked",
+    "calendar_features_used": false
+  },
+  "annual_replay": {
+    "trades": 107,
+    "win_rate_pct": 66.36,
+    "net_pnl": 324.94,
+    "profit_factor": 1.77,
+    "expectancy_r": 0.2396,
+    "max_drawdown_r": 4.52,
+    "positive_populated_folds": 9,
+    "populated_folds": 12,
+    "validation_status": "promising_not_live"
+  },
+  "january_to_may_2026_net_pnl": {
+    "v1": -62.13,
+    "v2": 21.99,
+    "v3": 124.93
+  },
+  "monthly_v3_net_pnl": {
+    "2026-01": 47.28,
+    "2026-02": 27.56,
+    "2026-03": -41.55,
+    "2026-04": 45.43,
+    "2026-05": 46.21
+  },
+  "limitations": [
+    "March 2026 remains negative and is not hidden by the aggregate result.",
+    "The selector was derived from the same historical sample and can be overfit.",
+    "Execution remains permanently disabled until independent forward validation."
+  ]
+}

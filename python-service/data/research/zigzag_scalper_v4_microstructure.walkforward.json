@@ -1,0 +1,233 @@
+{
+  "method": "Entry thresholds selected on Sep-Dec 2025; frozen on two 2026 holdouts.",
+  "selection_gate": "at least 20 training trades and PF >= 1.15",
+  "decision": "rejected_no_training_configuration_passed",
+  "dataset_version": "20260907T144325Z-6c2bb5876c51",
+  "base_zigzag_signals": 1463,
+  "execution_model": {
+    "resolution": "1s",
+    "stop_pips": 240.0,
+    "target_pips": 1000.0,
+    "max_hold_seconds": 60,
+    "lot": 0.2,
+    "commission_per_lot": 4.5
+  },
+  "selected": {
+    "parameters": {
+      "min_5s_move_pips": 20.0,
+      "min_30s_move_pips": 50.0,
+      "min_60s_move_pips": 100.0,
+      "min_efficiency": 0.18,
+      "min_tick_acceleration": 1.0
+    },
+    "training_2025_sep_dec": {
+      "trades": 20,
+      "wins": 6,
+      "win_rate_pct": 30.0,
+      "net_pnl": -71.45,
+      "profit_factor": 0.878,
+      "max_drawdown": 267.71
+    },
+    "holdout_2026_jan_apr": {
+      "trades": 24,
+      "wins": 7,
+      "win_rate_pct": 29.167,
+      "net_pnl": -610.49,
+      "profit_factor": 0.315,
+      "max_drawdown": 771.58
+    },
+    "fresh_holdout_2026_may_aug": {
+      "trades": 31,
+      "wins": 7,
+      "win_rate_pct": 22.581,
+      "net_pnl": -630.99,
+      "profit_factor": 0.194,
+      "max_drawdown": 643.35
+    },
+    "overall": {
+      "trades": 76,
+      "wins": 20,
+      "win_rate_pct": 26.316,
+      "net_pnl": -1366.57,
+      "profit_factor": 0.409,
+      "max_drawdown": 1555.18
+    }
+  },
+  "top_training_candidates": [
+    {
+      "parameters": {
+        "min_5s_move_pips": 20.0,
+        "min_30s_move_pips": 50.0,
+        "min_60s_move_pips": 100.0,
+        "min_efficiency": 0.18,
+        "min_tick_acceleration": 1.0
+      },
+      "training_2025_sep_dec": {
+        "trades": 20,
+        "wins": 6,
+        "win_rate_pct": 30.0,
+        "net_pnl": -71.45,
+        "profit_factor": 0.878,
+        "max_drawdown": 267.71
+      }
+    },
+    {
+      "parameters": {
+        "min_5s_move_pips": 20.0,
+        "min_30s_move_pips": 75.0,
+        "min_60s_move_pips": 100.0,
+        "min_efficiency": 0.12,
+        "min_tick_acceleration": 0.8
+      },
+      "training_2025_sep_dec": {
+        "trades": 32,
+        "wins": 11,
+        "win_rate_pct": 34.375,
+        "net_pnl": -107.51,
+        "profit_factor": 0.865,
+        "max_drawdown": 238.46
+      }
+    },
+    {
+      "parameters": {
+        "min_5s_move_pips": 10.0,
+        "min_30s_move_pips": 50.0,
+        "min_60s_move_pips": 100.0,
+        "min_efficiency": 0.18,
+        "min_tick_acceleration": 1.0
+      },
+      "training_2025_sep_dec": {
+        "trades": 24,
+        "wins": 8,
+        "win_rate_pct": 33.333,
+        "net_pnl": -89.54,
+        "profit_factor": 0.861,
+        "max_drawdown": 292.58
+      }
+    },
+    {
+      "parameters": {
+        "min_5s_move_pips": 10.0,
+        "min_30s_move_pips": 50.0,
+        "min_60s_move_pips": 120.0,
+        "min_efficiency": 0.18,
+        "min_tick_acceleration": 1.0
+      },
+      "training_2025_sep_dec": {
+        "trades": 22,
+        "wins": 7,
+        "win_rate_pct": 31.818,
+        "net_pnl": -88.35,
+        "profit_factor": 0.86,
+        "max_drawdown": 292.58
+      }
+    },
+    {
+      "parameters": {
+        "min_5s_move_pips": 20.0,
+        "min_30s_move_pips": 75.0,
+        "min_60s_move_pips": 120.0,
+        "min_efficiency": 0.12,
+        "min_tick_acceleration": 0.8
+      },
+      "training_2025_sep_dec": {
+        "trades": 31,
+        "wins": 10,
+        "win_rate_pct": 32.258,
+        "net_pnl": -118.21,
+        "profit_factor": 0.852,
+        "max_drawdown": 249.16
+      }
+    },
+    {
+      "parameters": {
+        "min_5s_move_pips": 20.0,
+        "min_30s_move_pips": 75.0,
+        "min_60s_move_pips": 100.0,
+        "min_efficiency": 0.18,
+        "min_tick_acceleration": 0.8
+      },
+      "training_2025_sep_dec": {
+        "trades": 31,
+        "wins": 10,
+        "win_rate_pct": 32.258,
+        "net_pnl": -119.59,
+        "profit_factor": 0.85,
+        "max_drawdown": 238.46
+      }
+    },
+    {
+      "parameters": {
+        "min_5s_move_pips": 20.0,
+        "min_30s_move_pips": 50.0,
+        "min_60s_move_pips": 100.0,
+        "min_efficiency": 0.12,
+        "min_tick_acceleration": 1.0
+      },
+      "training_2025_sep_dec": {
+        "trades": 21,
+        "wins": 6,
+        "win_rate_pct": 28.571,
+        "net_pnl": -91.27,
+        "profit_factor": 0.849,
+        "max_drawdown": 287.53
+      }
+    },
+    {
+      "parameters": {
+        "min_5s_move_pips": 10.0,
+        "min_30s_move_pips": 75.0,
+        "min_60s_move_pips": 100.0,
+        "min_efficiency": 0.12,
+        "min_tick_acceleration": 1.0
+      },
+      "training_2025_sep_dec": {
+        "trades": 21,
+        "wins": 7,
+        "win_rate_pct": 33.333,
+        "net_pnl": -94.45,
+        "profit_factor": 0.846,
+        "max_drawdown": 327.25
+      }
+    },
+    {
+      "parameters": {
+        "min_5s_move_pips": 10.0,
+        "min_30s_move_pips": 75.0,
+        "min_60s_move_pips": 100.0,
+        "min_efficiency": 0.18,
+        "min_tick_acceleration": 1.0
+      },
+      "training_2025_sep_dec": {
+        "trades": 21,
+        "wins": 7,
+        "win_rate_pct": 33.333,
+        "net_pnl": -94.45,
+        "profit_factor": 0.846,
+        "max_drawdown": 327.25
+      }
+    },
+    {
+      "parameters": {
+        "min_5s_move_pips": 10.0,
+        "min_30s_move_pips": 75.0,
+        "min_60s_move_pips": 100.0,
+        "min_efficiency": 0.12,
+        "min_tick_acceleration": 0.8
+      },
+      "training_2025_sep_dec": {
+        "trades": 36,
+        "wins": 13,
+        "win_rate_pct": 36.111,
+        "net_pnl": -134.65,
+        "profit_factor": 0.843,
+        "max_drawdown": 272.78
+      }
+    }
+  ],
+  "limitations": [
+    "One-second OHLC cannot resolve ordering inside the second.",
+    "Dukascopy spread may differ from the original broker.",
+    "Original entry history contains positive cases but no rejected-signal controls."
+  ]
+}

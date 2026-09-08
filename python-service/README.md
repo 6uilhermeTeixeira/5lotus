@@ -28,6 +28,7 @@ Perfis ativos, executados em paralelo:
 - timeframe base: `M5`
 - Bot 6: `stochastic_sell_session` — variante shadow somente vendida, com entradas antes das 18h UTC
 - Bot 7: `multitimeframe_trend_pullback` — tendência H1/M15, pullback M5 somente comprado entre 13h e 16h UTC, alvo de 0,75R e 50% do risco padrão, bloqueado em shadow
+- Tendência Multitemporal V3: `multitimeframe_trend_pullback_v3_adaptive_shadow` — seleciona causalmente a geometria V1/V2 pelo regime H1 e bloqueia tendência contrária; somente shadow
 - Bot 11: `portfolio_6_7_100_100` — variante com Bot 7 e Bot 6 em 100% do risco-base, sob posição e travas diárias compartilhadas. Replay anual: 171 trades, US$ 1.112,20, PF 1,80, expectativa +0,2477R, drawdown 6,10R e 12/12 janelas positivas; promising_not_live e sempre sem execução.
 - Bot 12: `happy_gold_zigzag_scalper` — reconstrução shadow da assinatura de 773 operações XAUUSD: pivô M30 confirmado, rompimento M5, lote 0,10, stop de 240 pontos, alvo de 1.000 pontos, break-even em +40, trailing em +120/60, expiração em dois M5 e uma posição
 - Bot 13: `happy_gold_zigzag_regime_confirmed` — preserva integralmente a geometria do Bot 12; em transição/alta volatilidade exige fechamento M5 além do pivô e direção H1 alinhada. O replay de 365 dias registrou US$ 2.655,40, PF 1,39, expectativa 0,181R e drawdown 15,66R, permanecendo em shadow paralelo.
@@ -115,13 +116,13 @@ DAYTRADE_FIMATH_FLOW_MIN_SAMPLES=30
 DAYTRADE_FIMATH_FLOW_Z_THRESHOLD=1.0
 DAYTRADE_FIMATH_MIN_CLOSED_PAPER_TRADES=30
 DAYTRADE_BACKTEST_BALANCE=10000
-DAYTRADE_BACKTEST_SPREAD_POINTS=10
+DAYTRADE_BACKTEST_SPREAD_POINTS=0
 DAYTRADE_BACKTEST_POINT_SIZE=0.01
 DAYTRADE_BACKTEST_VALUE_PER_POINT_PER_LOT=1
 DAYTRADE_BACKTEST_CANDLE_LIMIT=100000
 DAYTRADE_BACKTEST_RISK_PER_TRADE_PCT=0.25
 DAYTRADE_BACKTEST_SLIPPAGE_POINTS=2
-DAYTRADE_BACKTEST_COMMISSION_PER_LOT=0
+DAYTRADE_BACKTEST_COMMISSION_PER_LOT=4.50
 DAYTRADE_BACKTEST_SESSION_START_UTC=06:00
 DAYTRADE_BACKTEST_SESSION_END_UTC=21:00
 DAYTRADE_BACKTEST_MAX_TRADES_PER_DAY=4
@@ -144,10 +145,10 @@ DAYTRADE_FIMATH_MODE=live DAYTRADE_ENABLE_LIVE_DECISIONS=true ./run-local.sh
 ## Como testar
 
 ```bash
-curl http://127.0.0.1:8000/health
-curl http://127.0.0.1:8000/config
-curl http://127.0.0.1:8000/api/results
-curl -X POST http://127.0.0.1:8000/decision \
+curl http://127.0.0.1:1112/health
+curl http://127.0.0.1:1112/config
+curl http://127.0.0.1:1112/api/results
+curl -X POST http://127.0.0.1:1112/decision \
   -H 'Content-Type: application/json' \
   --data @sample-decision.json
 ```
@@ -159,7 +160,7 @@ DAYTRADE_DASHBOARD_PASSWORD=uma-senha-forte \
 DAYTRADE_SESSION_SECRET=um-segredo-aleatorio-com-pelo-menos-32-caracteres \
 ./run-local.sh
 
-open http://127.0.0.1:8000/login
+open http://127.0.0.1:1112/login
 ```
 
 ## Acompanhamento de resultado

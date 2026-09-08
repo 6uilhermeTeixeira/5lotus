@@ -1,0 +1,38 @@
+{
+  "generated_at_utc": "2026-09-05T23:45:00Z",
+  "dataset": "/home/codexops/lotus-data/derived/xauusd-m5-current.csv",
+  "period_days": 365,
+  "method": "causal H1 regime and UTC session decomposition followed by full sequential replay",
+  "baseline_v1": {
+    "trades": 59,
+    "net_pnl": -65.67,
+    "profit_factor": 0.91,
+    "expectancy_r": -0.0433,
+    "max_drawdown_r": 10.33
+  },
+  "baseline_v2": {
+    "trades": 74,
+    "net_pnl": 385.21,
+    "profit_factor": 1.58,
+    "expectancy_r": 0.2055,
+    "max_drawdown_r": 3.89
+  },
+  "selected_v3": {
+    "rules": {
+      "signal": "V2 stochastic extreme 85 with EMA50 filter",
+      "entry_cutoff_utc": "13:00",
+      "blocked_h1_regimes": ["insufficient_history", "trend:sell"],
+      "allowed_h1_regimes": ["range", "transition", "high_volatility", "trend:buy"]
+    },
+    "trades": 44,
+    "win_rate_pct": 70.45,
+    "net_pnl": 461.85,
+    "profit_factor": 2.52,
+    "expectancy_r": 0.4117,
+    "max_drawdown_r": 1.98,
+    "positive_validation_folds": 10,
+    "populated_validation_folds": 13,
+    "validation_status": "promising_not_live"
+  },
+  "conclusion": "V1 expansion was rejected; V3 keeps V2 geometry and uses causal regime/session gates learned from both versions. Shadow-only pending independent forward validation."
+}

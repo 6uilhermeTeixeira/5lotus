@@ -393,7 +393,7 @@ class DecisionTests(unittest.TestCase):
 
         self.assertEqual(response.action, DecisionAction.HOLD)
         self.assertEqual(response.reason, "flow_warmup")
-        self.assertTrue(response.metadata["candidate"])
+        self.assertFalse(response.metadata["candidate"])
         self.assertEqual(response.metadata["suggested_action"], "buy")
         self.assertIsNotNone(response.entry_price)
         self.assertIsNotNone(response.stop_loss_price)
@@ -416,7 +416,7 @@ class DecisionTests(unittest.TestCase):
 
         self.assertEqual(response.action, DecisionAction.HOLD)
         self.assertEqual(response.reason, "momentum_atr_shadow_signal")
-        self.assertTrue(response.metadata["candidate"])
+        self.assertFalse(response.metadata["candidate"])
         self.assertEqual(response.metadata["strategy_profile"], "momentum_atr_breakout")
         self.assertEqual(response.metadata["suggested_action"], "buy")
         self.assertIn("ema50", response.metadata)
@@ -508,6 +508,83 @@ class DecisionTests(unittest.TestCase):
         self.assertFalse(response.metadata["candidate"])
         self.assertEqual(response.metadata["experimental_block_reason"], "entry_at_or_after_18utc")
 
+    def test_stochastic_sell_v2_uses_validated_parameters_and_stays_shadow(self) -> None:
+        request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
+        for candle in request.candles[-4:-1]:
+            candle.open += 1
+            candle.high += 1
+            candle.low += 1
+            candle.close += 1
+
+        response = evaluate_decision(request, settings(), "stochastic_sell_v2_shadow")
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.reason, "stochastic_sell_v2_shadow_signal")
+        self.assertTrue(response.metadata["candidate"])
+        self.assertEqual(response.metadata["sell_threshold"], 85)
+        self.assertEqual(response.metadata["target_rr"], 1.25)
+        self.assertEqual(response.metadata["partial_close_pct"], 50)
+        self.assertEqual(response.metadata["entry_cutoff_hour"], 15)
+        self.assertAlmostEqual(response.take_profit_points / response.stop_loss_points, 1.25, places=2)
+        self.assertTrue(response.metadata["experimental_shadow_lock"])
+
+    def test_stochastic_sell_v2_blocks_entries_at_15_utc(self) -> None:
+        request = stochastic_sell_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+        for candle in request.candles[-4:-1]:
+            candle.open += 1
+            candle.high += 1
+            candle.low += 1
+            candle.close += 1
+
+        response = evaluate_decision(request, settings(), "stochastic_sell_v2_shadow")
+
+        self.assertEqual(response.reason, "stochastic_sell_v2_filter_block")
+        self.assertFalse(response.metadata["candidate"])
+
+    def test_stochastic_sell_v3_uses_v2_before_adaptive_switch(self) -> None:
+        request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
+        for candle in request.candles[-4:-1]:
+            candle.open += 1
+            candle.high += 1
+            candle.low += 1
+            candle.close += 1
+
+        response = evaluate_decision(
+            request,
+            settings(stochastic_regime_snapshot=RegimeSnapshot("range", "both", "test")),
+            "stochastic_sell_v3_adaptive_shadow",
+        )
+
+        self.assertEqual(response.reason, "stochastic_sell_v3_adaptive_shadow_signal")
+        self.assertTrue(response.metadata["candidate"])
+        self.assertEqual(response.metadata["v3_mode"], "v2_geometry_adaptive_h1_regime")
+        self.assertEqual(response.metadata["target_rr"], 1.25)
+        self.assertTrue(response.metadata["adaptive_regime_switch"])
+
+    def test_stochastic_sell_v3_blocks_weak_sell_trend_regime(self) -> None:
+        request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
+        for candle in request.candles[-4:-1]:
+            candle.open += 1
+            candle.high += 1
+            candle.low += 1
+            candle.close += 1
+        confirmed = evaluate_decision(
+            request,
+            settings(stochastic_regime_snapshot=RegimeSnapshot("range", "both", "test")),
+            "stochastic_sell_v3_adaptive_shadow",
+        )
+        blocked = evaluate_decision(
+            request,
+            settings(stochastic_regime_snapshot=RegimeSnapshot("trend", "sell", "test")),
+            "stochastic_sell_v3_adaptive_shadow",
+        )
+
+        self.assertEqual(confirmed.reason, "stochastic_sell_v3_adaptive_shadow_signal")
+        self.assertTrue(confirmed.metadata["candidate"])
+        self.assertEqual(confirmed.metadata["adaptive_regime"], "range")
+        self.assertEqual(blocked.reason, "stochastic_sell_v3_regime_block")
+        self.assertFalse(blocked.metadata["candidate"])
+
     def test_multitimeframe_profile_aligns_h1_m15_and_m5_in_shadow(self) -> None:
         request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
 
@@ -525,6 +602,52 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.partial_close_pct, 100)
         self.assertEqual(response.metadata["max_holding_bars"], 12)
         self.assertTrue(response.metadata["experimental_shadow_lock"])
+
+    def test_multitimeframe_v2_uses_validated_exit_and_stays_shadow(self) -> None:
+        request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+
+        response = evaluate_decision(request, settings(), "multitimeframe_trend_pullback_v2_shadow")
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.reason, "multitimeframe_trend_pullback_shadow_signal")
+        self.assertTrue(response.metadata["candidate"])
+        self.assertEqual(response.metadata["strength_min"], .5)
+        self.assertEqual(response.metadata["target_rr"], 1.25)
+        self.assertEqual(response.metadata["max_holding_bars"], 6)
+        self.assertAlmostEqual(response.take_profit_points / response.stop_loss_points, 1.25, places=2)
+        self.assertEqual(response.metadata["risk_multiplier"], .5)
+        self.assertTrue(response.metadata["experimental_shadow_lock"])
+
+    def test_multitimeframe_v3_switches_geometry_by_causal_regime(self) -> None:
+        request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+        ranging = evaluate_decision(
+            request,
+            settings(multitimeframe_regime_snapshot=RegimeSnapshot("range", "both", "test")),
+            "multitimeframe_trend_pullback_v3_adaptive_shadow",
+        )
+        trending = evaluate_decision(
+            request,
+            settings(multitimeframe_regime_snapshot=RegimeSnapshot("trend", "buy", "test")),
+            "multitimeframe_trend_pullback_v3_adaptive_shadow",
+        )
+
+        self.assertEqual(ranging.metadata["adaptive_geometry"], "v2")
+        self.assertEqual(ranging.metadata["max_holding_bars"], 6)
+        self.assertAlmostEqual(ranging.take_profit_points / ranging.stop_loss_points, 1.25, places=2)
+        self.assertEqual(trending.metadata["adaptive_geometry"], "v1")
+        self.assertEqual(trending.metadata["max_holding_bars"], 12)
+        self.assertAlmostEqual(trending.take_profit_points / trending.stop_loss_points, .75, places=2)
+
+    def test_multitimeframe_v3_blocks_countertrend_h1_regime(self) -> None:
+        request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+        response = evaluate_decision(
+            request,
+            settings(multitimeframe_regime_snapshot=RegimeSnapshot("trend", "sell", "test")),
+            "multitimeframe_trend_pullback_v3_adaptive_shadow",
+        )
+
+        self.assertEqual(response.reason, "multitimeframe_v3_regime_block")
+        self.assertFalse(response.metadata["candidate"])
 
     def test_multitimeframe_profile_blocks_entries_outside_research_session(self) -> None:
         request = multitimeframe_buy_request(datetime(2026, 7, 31, 16, 0, tzinfo=timezone.utc))
@@ -596,6 +719,7 @@ class DecisionTests(unittest.TestCase):
         self.assertTrue(response.metadata["candidate"])
         self.assertEqual(response.metadata["portfolio_component"], "bot-7")
         self.assertEqual(response.metadata["portfolio_weight_pct"], 100)
+        self.assertEqual(response.metadata["combined_daily_trade_cap"], "unlimited")
         self.assertEqual(response.risk_amount, 100)
         self.assertTrue(response.metadata["experimental_shadow_lock"])
 
@@ -701,6 +825,24 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.metadata["portfolio_weight_pct"], 100)
         self.assertEqual(response.risk_amount, 100)
         self.assertEqual(response.metadata["combined_daily_trade_cap"], "unlimited")
+
+    def test_combined_v3_selects_zigzag_v3_with_shared_risk(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 31, 10, 0, tzinfo=timezone.utc))
+        configured = settings(
+            portfolio_risk_state={},
+            portfolio_regime_snapshot=RegimeSnapshot("range", "both", "test", adx=18, atr_percentile=40),
+            zigzag_scalper_v3_expansion_threshold=999,
+        )
+
+        response = evaluate_decision(request, configured, "portfolio_v3_adaptive_union_shadow")
+
+        self.assertEqual(response.reason, "portfolio_v3_parallel_candidates")
+        self.assertEqual(len(response.parallel_candidates), 1)
+        self.assertEqual(response.parallel_candidates[0].metadata["combined_component"], "zigzag-v3")
+        self.assertEqual(response.parallel_candidates[0].metadata["portfolio_weight_pct"], 100)
+        self.assertEqual(response.metadata["parallel_max_aggregate_risk_pct"], 3)
+        self.assertEqual(response.metadata["strategy_profile"], "portfolio_v3_adaptive_union_shadow")
+        self.assertTrue(response.metadata["experimental_shadow_lock"])
 
     def retired_weighted_portfolio_blocks_bot_6_without_sell_trend(self) -> None:
         request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
@@ -1007,6 +1149,141 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.reason, "happy_gold_zigzag_structural_tick_filter_block")
         weekday_check = next(check for check in response.risk_checks if check.name == "weekday_filter")
         self.assertFalse(weekday_check.passed)
+
+    def test_zigzag_scalper_v2_is_risk_normalized_without_range_filter(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 30, 10, 0, tzinfo=timezone.utc))
+        request.bot_id = "core-zigzag-v2"
+        request.indicators = {"impulse_900s_ready": 1, "impulse_900s_move_points": 800}
+        research_settings = settings(
+            happy_gold_structural_context_900s_threshold_pips=800,
+            happy_gold_structural_ema20_gap_pips=0,
+            happy_gold_structural_max_pivot_extension_pips=1000,
+            happy_gold_normalized_range_max=0,
+        )
+
+        response = evaluate_decision(request, research_settings, "zigzag_scalper_v2_shadow")
+
+        self.assertEqual(response.reason, "zigzag_scalper_v2_shadow_signal")
+        self.assertEqual(response.metadata["strategy_profile"], "zigzag_scalper_v2_shadow")
+        self.assertEqual(response.metadata["suggested_size"], .40)
+        self.assertEqual(response.risk_amount, 24.0)
+        self.assertFalse(response.metadata["range_filter_enabled"])
+        self.assertTrue(response.metadata["risk_normalized_to_v1"])
+        self.assertNotIn("normalized_prior_m5_range", {check.name for check in response.risk_checks})
+
+    def test_zigzag_scalper_v3_switches_causally_between_v1_and_v2(self) -> None:
+        normal_request = happy_gold_breakout_request(datetime(2026, 7, 30, 10, 0, tzinfo=timezone.utc))
+        normal_response = evaluate_decision(
+            normal_request, settings(zigzag_scalper_v3_expansion_threshold=1000),
+            "zigzag_scalper_v3_adaptive_shadow",
+        )
+        self.assertEqual(normal_response.metadata["v3_mode"], "v1_normal_volatility")
+        self.assertEqual(normal_response.metadata["suggested_size"], .41)
+
+        expanded_request = happy_gold_breakout_request(datetime(2026, 7, 30, 10, 0, tzinfo=timezone.utc))
+        first = expanded_request.candles[0]
+        expanded_request.candles = [
+            first.model_copy(update={"timestamp_utc": first.timestamp_utc - timedelta(minutes=5 * (18 - index))})
+            for index in range(18)
+        ] + expanded_request.candles
+        expanded_request.indicators = {"impulse_900s_ready": 1, "impulse_900s_move_points": 800}
+        expanded_response = evaluate_decision(
+            expanded_request,
+            settings(
+                zigzag_scalper_v3_expansion_threshold=0,
+                happy_gold_structural_context_900s_threshold_pips=800,
+                happy_gold_structural_ema20_gap_pips=0,
+                happy_gold_structural_max_pivot_extension_pips=1000,
+            ),
+            "zigzag_scalper_v3_adaptive_shadow",
+        )
+        self.assertEqual(expanded_response.metadata["v3_mode"], "v2_structural_expansion")
+        self.assertEqual(expanded_response.metadata["suggested_size"], 1.66)
+        self.assertTrue(expanded_response.metadata["adaptive_regime_switch"])
+
+    def test_zigzag_scalper_v3_executes_only_for_demo_accounts(self) -> None:
+        timestamp = datetime(2026, 7, 30, 10, 0, tzinfo=timezone.utc)
+        live_settings = settings(
+            enable_live_decisions=True,
+            fimath_mode="live",
+            zigzag_scalper_v3_expansion_threshold=1000,
+        )
+        demo_request = happy_gold_breakout_request(timestamp)
+        demo_request.account.trade_mode = "demo"
+
+        demo_response = evaluate_decision(
+            demo_request, live_settings, "zigzag_scalper_v3_adaptive_shadow",
+        )
+
+        self.assertIn(demo_response.action, {DecisionAction.BUY, DecisionAction.SELL})
+        self.assertEqual(demo_response.size, .41)
+        self.assertTrue(demo_response.metadata["demo_execution_enabled"])
+
+        small_demo_request = happy_gold_breakout_request(timestamp)
+        small_demo_request.account.balance = 100
+        small_demo_request.account.equity = 100
+        small_demo_request.account.margin_free = 100
+        small_demo_request.account.trade_mode = "demo"
+        small_demo_response = evaluate_decision(
+            small_demo_request, live_settings, "zigzag_scalper_v3_adaptive_shadow",
+        )
+        self.assertEqual(small_demo_response.action, DecisionAction.HOLD)
+        self.assertEqual(small_demo_response.size, 0)
+        self.assertEqual(small_demo_response.risk_amount, 0)
+        self.assertEqual(small_demo_response.metadata["risk_budget"], 1)
+        self.assertFalse(small_demo_response.metadata["demo_execution_enabled"])
+        minimum_volume_check = next(
+            check for check in small_demo_response.risk_checks
+            if check.name == "minimum_volume_within_risk_budget"
+        )
+        self.assertFalse(minimum_volume_check.passed)
+
+        minimum_lot_settings = settings(
+            enable_live_decisions=True,
+            fimath_mode="live",
+            risk_per_trade_pct=2.4,
+            zigzag_scalper_v3_expansion_threshold=1000,
+        )
+        minimum_lot_response = evaluate_decision(
+            small_demo_request, minimum_lot_settings, "zigzag_scalper_v3_adaptive_shadow",
+        )
+        self.assertIn(minimum_lot_response.action, {DecisionAction.BUY, DecisionAction.SELL})
+        self.assertEqual(minimum_lot_response.size, .01)
+        self.assertEqual(minimum_lot_response.risk_amount, 2.4)
+        self.assertEqual(minimum_lot_response.metadata["risk_budget"], 2.4)
+        self.assertTrue(minimum_lot_response.metadata["demo_execution_enabled"])
+
+        real_request = happy_gold_breakout_request(timestamp)
+        real_request.account.trade_mode = "real"
+        real_response = evaluate_decision(
+            real_request, live_settings, "zigzag_scalper_v3_adaptive_shadow",
+        )
+
+        self.assertEqual(real_response.action, DecisionAction.HOLD)
+        self.assertEqual(real_response.size, 0)
+        self.assertFalse(real_response.metadata["demo_execution_enabled"])
+
+    def test_zigzag_scalper_v4_requires_clean_tick_microstructure(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 30, 10, 0, tzinfo=timezone.utc))
+        request.indicators = {
+            "impulse_5s_ready": 1, "impulse_5s_move_points": 25,
+            "impulse_30s_ready": 1, "impulse_30s_move_points": 90,
+            "impulse_60s_ready": 1, "impulse_60s_move_points": 150,
+            "micro_30s_efficiency": .35,
+            "micro_tick_acceleration_5s_vs_10s": 1.05,
+        }
+        response = evaluate_decision(request, settings(), "zigzag_scalper_v4_tick_microstructure_shadow")
+        self.assertEqual(response.reason, "zigzag_scalper_v4_tick_microstructure_shadow_signal")
+        self.assertFalse(response.metadata["candidate"])
+        self.assertEqual(response.metadata["research_status"], "rejected_in_tick_replay_negative_expectancy")
+        self.assertEqual(response.metadata["micro_regime"], "clean_directional_impulse")
+        self.assertEqual(response.metadata["suggested_size"], .20)
+        self.assertEqual(response.risk_amount, 24.0)
+
+        request.indicators["impulse_5s_move_points"] = -25
+        blocked = evaluate_decision(request, settings(), "zigzag_scalper_v4_tick_microstructure_shadow")
+        self.assertEqual(blocked.reason, "zigzag_scalper_v4_microstructure_filter_block")
+        self.assertFalse(blocked.metadata["candidate"])
 
     def test_happy_gold_normalized_range_emits_isolated_shadow_candidate(self) -> None:
         request = happy_gold_breakout_request(datetime(2026, 7, 30, 10, 0, tzinfo=timezone.utc))

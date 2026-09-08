@@ -1,0 +1,34 @@
+{
+  "threshold": 6.0,
+  "feature": "mean range of previous 60 completed M5 candles",
+  "overall": {
+    "trades": 737,
+    "wins": 369,
+    "net_pnl": 5548.83,
+    "profit_factor": 1.695,
+    "max_drawdown": 337.15
+  },
+  "partitions": {
+    "selection_2025_sep_dec": {
+      "trades": 271,
+      "wins": 144,
+      "net_pnl": 2334.8,
+      "profit_factor": 2.015,
+      "max_drawdown": 198.84
+    },
+    "holdout_2026_jan_apr": {
+      "trades": 208,
+      "wins": 99,
+      "net_pnl": 1859.54,
+      "profit_factor": 1.678,
+      "max_drawdown": 274.44
+    },
+    "fresh_holdout_2026_may_aug": {
+      "trades": 253,
+      "wins": 125,
+      "net_pnl": 1442.97,
+      "profit_factor": 1.507,
+      "max_drawdown": 337.15
+    }
+  }
+}

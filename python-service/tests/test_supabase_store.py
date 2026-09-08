@@ -66,6 +66,15 @@ class TickShadowResultsStore(RecordingStore):
 
 
 class SupabaseStoreTests(unittest.TestCase):
+    def test_catalog_requests_all_display_metadata(self) -> None:
+        store = RecordingStore()
+
+        store.list_bots()
+
+        path = store.calls[0][0]
+        self.assertIn("subtitle", path)
+        self.assertIn("results_file", path)
+
     @staticmethod
     def tick_shadow_row(side: str = "buy") -> dict[str, object]:
         return {

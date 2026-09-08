@@ -4,26 +4,22 @@
 #define IMPULSE_TICK_CAPACITY 65536
 #define IMPULSE_RETENTION_MSC 905000
 
-input string StrategyServiceUrl = "http://127.0.0.1:8000/decision";
-input string HealthcheckUrl = "http://127.0.0.1:8000/health";
-input string TradeResultsUrl = "http://127.0.0.1:8000/api/trades";
-input string CandleCacheUrl = "http://127.0.0.1:8000/api/candles";
+input string StrategyServiceUrl = "http://127.0.0.1:1112/decision";
+input string HealthcheckUrl = "http://127.0.0.1:1112/health";
+input string TradeResultsUrl = "http://127.0.0.1:1112/api/trades";
+input string CandleCacheUrl = "http://127.0.0.1:1112/api/candles";
 input string LotusIngestApiKey = "";
-input string ResultsBotId = "bot-6";
-input string ExperimentalBotId = "bot-6";
-input string MultitimeframeResearchBotId = "bot-7";
-input string AggressivePortfolioResearchBotId = "bot-11";
-input string HappyGoldResearchBotId = "bot-12";
-input string HappyGoldConfirmedResearchBotId = "bot-13";
-input string HappyGoldCombinedPortfolioBotId = "bot-16";
-input string HappyGoldTickImpulseBotId = "bot-17";
-input string HappyGoldZigZagTickContextBotId = "bot-18";
-input string HappyGoldZigZagStructuralTickBotId = "bot-19";
-input string HappyGoldMultiwindowTickScoreBotId = "bot-20";
-input string HappyGoldNormalizedRangeBotId = "bot-21";
+input string ResultsBotId = "core-combined-v3";
+input string StrategyBot1Id = "core-zigzag-v3";
+input string StrategyBot2Id = "core-stochastic-v3";
+input string StrategyBot3Id = "core-multitimeframe-v3";
+input string StrategyBot4Id = "core-combined-v3";
+// Deliberately empty. Set to one individual V3 only after demo validation.
+// The combined V3 returns parallel candidates and requires a multi-order executor.
+input string ExecutionBotId = "";
 input string StrategySymbol = "XAUUSD";
 input string StrategyTimeframe = "M5";
-input int HistoryBars = 60;
+input int HistoryBars = 4000;
 input int HistoryCacheBars = 100000;
 input bool RefreshDeepHistoryOnInit = false;
 input int PollIntervalSeconds = 5;
@@ -43,6 +39,12 @@ int impulseCount = 0;
 
 int OnInit()
 {
+   if(EnableOrderExecution && AccountInfoInteger(ACCOUNT_TRADE_MODE) != ACCOUNT_TRADE_MODE_DEMO)
+   {
+      Print("Order execution refused: this build is configured to trade only on an MT5 demo account.");
+      return INIT_FAILED;
+   }
+
    ENUM_TIMEFRAMES strategyPeriod = ResolveTimeframe(StrategyTimeframe);
    if(_Symbol != StrategySymbol || Period() != strategyPeriod)
    {
@@ -58,7 +60,13 @@ int OnInit()
    MarketBookAdd(_Symbol);
    trade.SetExpertMagicNumber(StrategyMagicNumber);
    CacheConfiguredBots();
-   Print("SyncLeadBridgeEA initialized. Add the service URLs to MT5 WebRequest allowlist.");
+   PrintFormat(
+      "SyncLeadBridgeEA initialized. ingest_key_configured=%s ingest_key_length=%d order_execution=%s execution_bot_configured=%s",
+      LotusIngestApiKey != "" ? "true" : "false",
+      StringLen(LotusIngestApiKey),
+      EnableOrderExecution ? "true" : "false",
+      ExecutionBotId != "" ? "true" : "false"
+   );
    return(INIT_SUCCEEDED);
 }
 
@@ -97,32 +105,20 @@ void OnTimer()
       return;
    }
 
-   // Every configured research bot is polled in shadow; execution remains disabled per call.
-   if(ExperimentalBotId != "")
-      PollDecision(tick, ExperimentalBotId, false);
-   if(MultitimeframeResearchBotId != "" && MultitimeframeResearchBotId != ExperimentalBotId)
-      PollDecision(tick, MultitimeframeResearchBotId, false);
-   if(AggressivePortfolioResearchBotId != "" && AggressivePortfolioResearchBotId != ExperimentalBotId && AggressivePortfolioResearchBotId != MultitimeframeResearchBotId)
-      PollDecision(tick, AggressivePortfolioResearchBotId, false);
-   if(HappyGoldResearchBotId != "" && HappyGoldResearchBotId != ExperimentalBotId && HappyGoldResearchBotId != MultitimeframeResearchBotId && HappyGoldResearchBotId != AggressivePortfolioResearchBotId)
-      PollDecision(tick, HappyGoldResearchBotId, false);
-   if(HappyGoldConfirmedResearchBotId != "" && HappyGoldConfirmedResearchBotId != ExperimentalBotId && HappyGoldConfirmedResearchBotId != MultitimeframeResearchBotId && HappyGoldConfirmedResearchBotId != AggressivePortfolioResearchBotId && HappyGoldConfirmedResearchBotId != HappyGoldResearchBotId)
-      PollDecision(tick, HappyGoldConfirmedResearchBotId, false);
-   if(HappyGoldCombinedPortfolioBotId != "" && HappyGoldCombinedPortfolioBotId != ExperimentalBotId && HappyGoldCombinedPortfolioBotId != MultitimeframeResearchBotId && HappyGoldCombinedPortfolioBotId != AggressivePortfolioResearchBotId && HappyGoldCombinedPortfolioBotId != HappyGoldResearchBotId && HappyGoldCombinedPortfolioBotId != HappyGoldConfirmedResearchBotId)
-      PollDecision(tick, HappyGoldCombinedPortfolioBotId, false);
-   if(HappyGoldTickImpulseBotId != "" && HappyGoldTickImpulseBotId != ExperimentalBotId && HappyGoldTickImpulseBotId != MultitimeframeResearchBotId && HappyGoldTickImpulseBotId != AggressivePortfolioResearchBotId && HappyGoldTickImpulseBotId != HappyGoldResearchBotId && HappyGoldTickImpulseBotId != HappyGoldConfirmedResearchBotId && HappyGoldTickImpulseBotId != HappyGoldCombinedPortfolioBotId)
-      PollDecision(tick, HappyGoldTickImpulseBotId, false);
-   if(HappyGoldZigZagTickContextBotId != "" && HappyGoldZigZagTickContextBotId != HappyGoldTickImpulseBotId)
-      PollDecision(tick, HappyGoldZigZagTickContextBotId, false);
-   if(HappyGoldZigZagStructuralTickBotId != "" && HappyGoldZigZagStructuralTickBotId != HappyGoldZigZagTickContextBotId)
-      PollDecision(tick, HappyGoldZigZagStructuralTickBotId, false);
-   if(HappyGoldMultiwindowTickScoreBotId != "" && HappyGoldMultiwindowTickScoreBotId != HappyGoldZigZagStructuralTickBotId)
-      PollDecision(tick, HappyGoldMultiwindowTickScoreBotId, false);
-   if(HappyGoldNormalizedRangeBotId != "" && HappyGoldNormalizedRangeBotId != HappyGoldZigZagStructuralTickBotId)
-      PollDecision(tick, HappyGoldNormalizedRangeBotId, false);
+   PollConfiguredBot(tick, StrategyBot1Id);
+   if(StrategyBot2Id != StrategyBot1Id) PollConfiguredBot(tick, StrategyBot2Id);
+   if(StrategyBot3Id != StrategyBot1Id && StrategyBot3Id != StrategyBot2Id) PollConfiguredBot(tick, StrategyBot3Id);
+   if(StrategyBot4Id != StrategyBot1Id && StrategyBot4Id != StrategyBot2Id && StrategyBot4Id != StrategyBot3Id) PollConfiguredBot(tick, StrategyBot4Id);
 
    upTicks = downTicks = neutralTicks = 0;
    upVolume = downVolume = 0.0;
+}
+
+void PollConfiguredBot(const MqlTick &tick, const string botId)
+{
+   if(botId == "") return;
+   bool allowExecution = EnableOrderExecution && ExecutionBotId != "" && botId == ExecutionBotId;
+   PollDecision(tick, botId, allowExecution);
 }
 
 void PollDecision(const MqlTick &tick, const string botId, const bool allowExecution)
@@ -147,6 +143,10 @@ string BuildDecisionPayload(const MqlTick &tick, const string botId)
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
    double margin_free = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
    long leverage = AccountInfoInteger(ACCOUNT_LEVERAGE);
+   long accountTradeMode = AccountInfoInteger(ACCOUNT_TRADE_MODE);
+   string tradeMode = accountTradeMode == ACCOUNT_TRADE_MODE_DEMO ? "demo" :
+                      accountTradeMode == ACCOUNT_TRADE_MODE_CONTEST ? "contest" : "real";
+   string accountServer = AccountInfoString(ACCOUNT_SERVER);
    double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
    double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
    double value_per_point_per_lot = 0.0;
@@ -172,12 +172,14 @@ string BuildDecisionPayload(const MqlTick &tick, const string botId)
       "\"point_size\":" + DoubleToString(_Point, _Digits) + ","
       "\"value_per_point_per_lot\":" + DoubleToString(value_per_point_per_lot, 6) + ","
       "\"candles\":" + SerializeRates(rates, copied) + ","
-      "\"positions\":[],"
+      "\"positions\":" + SerializePositions() + ","
       "\"account\":{"
          "\"balance\":" + DoubleToString(balance, 2) + ","
          "\"equity\":" + DoubleToString(equity, 2) + ","
          "\"margin_free\":" + DoubleToString(margin_free, 2) + ","
-         "\"leverage\":" + IntegerToString((int)leverage) +
+         "\"leverage\":" + IntegerToString((int)leverage) + ","
+         "\"trade_mode\":\"" + tradeMode + "\","
+         "\"server\":\"" + accountServer + "\"" +
       "},"
       "\"indicators\":" + SerializeImpulseIndicators(tick) +
       ",\"flow\":{"
@@ -250,6 +252,26 @@ bool GetImpulseWindow(const MqlTick &tick, const int seconds, double &movePoints
    return true;
 }
 
+double GetMicroEfficiency(const MqlTick &tick, const int seconds)
+{
+   double movePoints = 0.0, tickRate = 0.0;
+   int tickCount = 0;
+   if(!GetImpulseWindow(tick, seconds, movePoints, tickCount, tickRate) || tickCount < 2)
+      return 0.0;
+   int firstOffset = impulseCount - tickCount;
+   double path = 0.0;
+   double previous = impulseMids[(impulseHead + firstOffset) % IMPULSE_TICK_CAPACITY];
+   for(int offset = firstOffset + 1; offset < impulseCount; offset++)
+   {
+      double current = impulseMids[(impulseHead + offset) % IMPULSE_TICK_CAPACITY];
+      path += MathAbs(current - previous);
+      previous = current;
+   }
+   double currentMid = (tick.bid + tick.ask) / 2.0;
+   path += MathAbs(currentMid - previous);
+   return path > 0.0 ? MathAbs(movePoints * _Point) / path : 0.0;
+}
+
 string SerializeImpulseWindow(const MqlTick &tick, const int seconds)
 {
    double movePoints = 0.0, tickRate = 0.0;
@@ -265,6 +287,11 @@ string SerializeImpulseWindow(const MqlTick &tick, const int seconds)
 
 string SerializeImpulseIndicators(const MqlTick &tick)
 {
+   double move5 = 0.0, rate5 = 0.0, move10 = 0.0, rate10 = 0.0;
+   int count5 = 0, count10 = 0;
+   GetImpulseWindow(tick, 5, move5, count5, rate5);
+   GetImpulseWindow(tick, 10, move10, count10, rate10);
+   double acceleration = rate10 > 0.0 ? rate5 / rate10 : 0.0;
    return
       "{" +
       SerializeImpulseWindow(tick, 5) + "," +
@@ -272,7 +299,9 @@ string SerializeImpulseIndicators(const MqlTick &tick)
       SerializeImpulseWindow(tick, 30) + "," +
       SerializeImpulseWindow(tick, 60) + "," +
       SerializeImpulseWindow(tick, 300) + "," +
-      SerializeImpulseWindow(tick, 900) +
+      SerializeImpulseWindow(tick, 900) + "," +
+      "\"micro_30s_efficiency\":" + DoubleToString(GetMicroEfficiency(tick, 30), 6) + "," +
+      "\"micro_tick_acceleration_5s_vs_10s\":" + DoubleToString(acceleration, 6) +
       "}";
 }
 
@@ -316,6 +345,29 @@ bool CacheHistory(const string symbol, const string botId)
    bool coversYear = rates[0].time <= TimeTradeServer() - 360 * 24 * 60 * 60;
    PrintFormat("History cache complete bot_id=%s symbol=%s copied=%d covers_year=%s", botId, symbol, copied, coversYear ? "true" : "false");
    return coversYear && allBatchesSucceeded;
+}
+
+string SerializePositions()
+{
+   string json = "[";
+   for(int index = 0; index < PositionsTotal(); index++)
+   {
+      ulong ticket = PositionGetTicket(index);
+      if(ticket == 0 || !PositionSelectByTicket(ticket)) continue;
+      string symbol = PositionGetString(POSITION_SYMBOL);
+      ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+      string side = type == POSITION_TYPE_BUY ? "buy" : "sell";
+      int digits = (int)SymbolInfoInteger(symbol, SYMBOL_DIGITS);
+      if(json != "[") json += ",";
+      json += "{"
+         "\"symbol\":\"" + symbol + "\","
+         "\"side\":\"" + side + "\","
+         "\"volume\":" + DoubleToString(PositionGetDouble(POSITION_VOLUME), 2) + ","
+         "\"entry_price\":" + DoubleToString(PositionGetDouble(POSITION_PRICE_OPEN), digits) + ","
+         "\"profit\":" + DoubleToString(PositionGetDouble(POSITION_PROFIT), 2)
+      + "}";
+   }
+   return json + "]";
 }
 
 string SerializeBook()

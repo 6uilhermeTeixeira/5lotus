@@ -1,37 +1,255 @@
+import json
 import unittest
+from pathlib import Path
 
-from app.pages import render_catalog_page, render_comparison_page, render_growth_simulator_page, render_operations_page, render_results_page
+from app.pages import render_catalog_page, render_comparison_page, render_growth_simulator_page, render_history_page, render_login_page, render_operations_page, render_results_page
 from app.schemas import BotCatalogItem
 
 
 class ComparisonPageTests(unittest.TestCase):
+    def test_live_core_catalog_contains_all_three_family_versions_and_combination(self) -> None:
+        catalog_path = Path(__file__).parents[1] / "data" / "bots.json"
+        bots = [BotCatalogItem.model_validate(item) for item in json.loads(catalog_path.read_text(encoding="utf-8"))]
+
+        self.assertEqual(
+            {bot.id for bot in bots if bot.active},
+            {
+                "core-zigzag", "core-zigzag-v2", "core-zigzag-v3",
+                "core-stochastic", "core-stochastic-v2", "core-stochastic-v3",
+                "core-multitimeframe", "core-multitimeframe-v2", "core-multitimeframe-v3",
+                "core-combined-v3",
+            },
+        )
+
+    def test_catalog_uses_versioned_family_names_and_separate_subtitles(self) -> None:
+        catalog_path = Path(__file__).parents[1] / "data" / "bots.json"
+        bots = [BotCatalogItem.model_validate(item) for item in json.loads(catalog_path.read_text(encoding="utf-8"))]
+        by_id = {bot.id: bot for bot in bots}
+
+        self.assertEqual(by_id["core-zigzag"].name, "ZigZag Scalper V1")
+        self.assertEqual(by_id["core-zigzag-v2"].name, "ZigZag Scalper V2")
+        self.assertEqual(by_id["core-zigzag-v2"].subtitle, "Tick Estrutural")
+        self.assertEqual(by_id["core-stochastic"].name, "Stochastic Sell V1")
+        self.assertEqual(by_id["core-multitimeframe"].name, "Tendência Multitemporal V1")
+        self.assertEqual(by_id["core-combined-v3"].name, "Portfólio Combinado V3")
+
+        html = bytes(render_catalog_page(bots).body).decode("utf-8")
+        self.assertIn("<h3>ZigZag Scalper V2</h3><p class=\"strategy-subtitle\">Tick Estrutural</p>", html)
+        self.assertNotIn("<h3>ZigZag Scalper V2 · Tick Estrutural</h3>", html)
+        self.assertIn('class="strategy-title-block"', html)
+        self.assertIn('class="results-link">Ver resultados →', html)
+        self.assertIn("height:286px", html)
+        self.assertIn("margin:3px 0 0", html)
+
+    def test_catalog_stacks_stochastic_v2_after_baseline(self) -> None:
+        bots = [
+            BotCatalogItem(id="core-stochastic-v2", name="Stochastic Sell V2", description="Extremo", strategy_profile="stochastic_sell_v2_shadow", symbol="XAUUSD", timeframe="M5"),
+            BotCatalogItem(id="core-stochastic", name="Stochastic Sell", description="Base", strategy_profile="stochastic_sell_session", symbol="XAUUSD", timeframe="M5"),
+        ]
+
+        html = bytes(render_catalog_page(bots).body).decode("utf-8")
+        start = html.index('data-family="stochastic"')
+        end = html.index('data-family="multitimeframe"')
+        column = html[start:end]
+        self.assertIn("2 variantes", column)
+        self.assertLess(column.index(">Stochastic Sell</h3>"), column.index(">Stochastic Sell V2</h3>"))
+
+    def test_catalog_stacks_stochastic_v3_after_v2(self) -> None:
+        bots = [
+            BotCatalogItem(id="core-stochastic-v3", name="Stochastic Sell V3", description="Adaptativa", strategy_profile="stochastic_sell_v3_adaptive_shadow", symbol="XAUUSD", timeframe="M5"),
+            BotCatalogItem(id="core-stochastic-v2", name="Stochastic Sell V2", description="Extremo", strategy_profile="stochastic_sell_v2_shadow", symbol="XAUUSD", timeframe="M5"),
+            BotCatalogItem(id="core-stochastic", name="Stochastic Sell", description="Base", strategy_profile="stochastic_sell_session", symbol="XAUUSD", timeframe="M5"),
+        ]
+
+        html = bytes(render_catalog_page(bots).body).decode("utf-8")
+        start = html.index('data-family="stochastic"')
+        end = html.index('data-family="multitimeframe"')
+        column = html[start:end]
+        self.assertIn("3 variantes", column)
+        self.assertLess(column.index(">Stochastic Sell V2</h3>"), column.index(">Stochastic Sell V3</h3>"))
+
+    def test_catalog_stacks_multitimeframe_v2_after_baseline(self) -> None:
+        bots = [
+            BotCatalogItem(id="core-multitimeframe-v2", name="Tendência Multitemporal V2", description="Impulso", strategy_profile="multitimeframe_trend_pullback_v2_shadow", symbol="XAUUSD", timeframe="M5"),
+            BotCatalogItem(id="core-multitimeframe", name="Tendência Multitemporal", description="Base", strategy_profile="multitimeframe_trend_pullback", symbol="XAUUSD", timeframe="M5"),
+        ]
+
+        html = bytes(render_catalog_page(bots).body).decode("utf-8")
+        start = html.index('data-family="multitimeframe"')
+        end = html.index('data-family="combined"')
+        column = html[start:end]
+        self.assertIn("2 variantes", column)
+        self.assertLess(column.index(">Tendência Multitemporal</h3>"), column.index(">Tendência Multitemporal V2</h3>"))
+
+    def test_catalog_stacks_multitimeframe_v3_after_v2(self) -> None:
+        bots = [
+            BotCatalogItem(id="core-multitimeframe-v3", name="Tendência Multitemporal V3", description="Adaptativa", strategy_profile="multitimeframe_trend_pullback_v3_adaptive_shadow", symbol="XAUUSD", timeframe="M5"),
+            BotCatalogItem(id="core-multitimeframe-v2", name="Tendência Multitemporal V2", description="Impulso", strategy_profile="multitimeframe_trend_pullback_v2_shadow", symbol="XAUUSD", timeframe="M5"),
+            BotCatalogItem(id="core-multitimeframe", name="Tendência Multitemporal", description="Base", strategy_profile="multitimeframe_trend_pullback", symbol="XAUUSD", timeframe="M5"),
+        ]
+
+        html = bytes(render_catalog_page(bots).body).decode("utf-8")
+        column = html[html.index('data-family="multitimeframe"'):html.index('data-family="combined"')]
+        self.assertIn("3 variantes", column)
+        self.assertLess(column.index(">Tendência Multitemporal V2</h3>"), column.index(">Tendência Multitemporal V3</h3>"))
+
+    def test_catalog_keeps_only_combined_v3(self) -> None:
+        bots = [
+            BotCatalogItem(id="core-combined-v3", name="Portfólio Combinado V3", description="Adaptativa", strategy_profile="portfolio_v3_adaptive_union_shadow", symbol="XAUUSD", timeframe="M5"),
+        ]
+
+        html = bytes(render_catalog_page(bots).body).decode("utf-8")
+        column = html[html.index('data-family="combined"'):]
+        self.assertIn("1 variante", column)
+        self.assertIn(">Portfólio Combinado V3</h3>", column)
+
+    def test_catalog_stacks_second_zigzag_variant_in_same_family(self) -> None:
+        bots = [
+            BotCatalogItem(id="core-zigzag-v3", name="ZigZag Scalper V3", description="Adaptativo", strategy_profile="zigzag_scalper_v3_adaptive_shadow", symbol="XAUUSD", timeframe="M5"),
+            BotCatalogItem(id="core-zigzag-v2", name="ZigZag Scalper V2", description="Tick estrutural", strategy_profile="zigzag_scalper_v2_shadow", symbol="XAUUSD", timeframe="M5"),
+            BotCatalogItem(id="core-zigzag", name="ZigZag Scalper", description="Base", strategy_profile="happy_gold_zigzag_scalper", symbol="XAUUSD", timeframe="M5"),
+        ]
+
+        html = bytes(render_catalog_page(bots).body).decode("utf-8")
+
+        zigzag_start = html.index('data-family="zigzag"')
+        stochastic_start = html.index('data-family="stochastic"')
+        zigzag_column = html[zigzag_start:stochastic_start]
+        self.assertIn("3 variantes", zigzag_column)
+        self.assertIn("Estratégia-base", zigzag_column)
+        self.assertIn("Variação 1", zigzag_column)
+        self.assertIn("ZigZag Scalper V2", zigzag_column)
+        self.assertLess(zigzag_column.index(">ZigZag Scalper</h3>"), zigzag_column.index(">ZigZag Scalper V2</h3>"))
+        self.assertLess(zigzag_column.index(">ZigZag Scalper V2</h3>"), zigzag_column.index(">ZigZag Scalper V3</h3>"))
+        self.assertIn("display:flex; flex-direction:column", html)
+
     def test_catalog_renders_only_selected_strategies(self) -> None:
         active_bots = [
-            BotCatalogItem(id=f"bot-{index}", name=name, description="Teste", strategy_profile="fimath_ema20_flow", symbol="XAUUSD", timeframe="M5")
-            for index, name in [(6, "Stochastic Sell 18 UTC"), (7, "Tendência Multitemporal"), (11, "Portfólio 7/6 · 100/100"), (12, "Happy Gold ZigZag Scalper"), (13, "Happy Gold ZigZag · Confirmação de Regime"), (16, "Happy Gold + Portfólio 7/6 · 100/100")]
+            BotCatalogItem(id=f"bot-{index}", name=name, description="Teste", strategy_profile=profile, symbol="XAUUSD", timeframe="M5")
+            for index, name, profile in [
+                (6, "Stochastic Sell 18 UTC", "stochastic_sell_session"),
+                (7, "Tendência Multitemporal", "multitimeframe_trend_pullback"),
+                (11, "Portfólio 7/6 · 100/100", "portfolio_6_7_100_100"),
+                (12, "ZigZag Scalper", "happy_gold_zigzag_scalper"),
+                (13, "ZigZag Scalper · Confirmação de Regime", "happy_gold_zigzag_regime_confirmed"),
+                (16, "ZigZag Scalper + Portfólio 7/6 · 100/100", "happy_gold_portfolio_100_100"),
+            ]
         ]
 
         html = bytes(render_catalog_page(active_bots).body).decode("utf-8")
 
         self.assertNotIn("Arquivadas", html)
         self.assertIn('id="equity-chart"', html)
-        self.assertIn("/api/equity-comparison?symbol=XAUUSD", html)
-        self.assertIn("Happy Gold ZigZag Scalper", html)
+        self.assertIn("/api/backtest-market-chart?symbol=XAUUSD", html)
+        self.assertIn('data-resolution="1m"', html)
+        self.assertIn('data-resolution="1h"', html)
+        self.assertIn('data-resolution="1d" class="selected"', html)
+        self.assertIn('data-days="7"', html)
+        self.assertIn('data-days="365" class="selected"', html)
+        self.assertIn('data-days="1095">3A', html)
+        self.assertIn('data-risk-mode="normalized" class="selected">1% Risk/Trade', html)
+        self.assertNotIn('data-risk-mode="operational"', html)
+        self.assertIn("chartResolution='1d',chartDays=365", html)
+        self.assertIn("&mode=normalized", html)
+        self.assertIn('id="chart-fit"', html)
+        self.assertIn('id="refresh-history"', html)
+        self.assertIn("/api/history/refresh?symbol=XAUUSD&days='+chartDays", html)
+        self.assertIn("/static/vendor/lightweight-charts/lightweight-charts.standalone.production.js", html)
+        self.assertIn("LotusEquityChart.create", html)
+        self.assertIn("ZigZag Scalper", html)
+        self.assertNotIn("Happy Gold", html)
         self.assertIn('/growth-simulator', html)
         self.assertIn('/operations', html)
-        self.assertEqual(html.count('class="bot card"'), 6)
+        self.assertEqual(html.count('class="strategy-family"'), 4)
+        self.assertNotIn('data-family="original"', html)
+        self.assertIn('data-family="zigzag"', html)
+        self.assertIn('data-family="stochastic"', html)
+        self.assertIn('data-family="multitimeframe"', html)
+        self.assertIn('data-family="combined"', html)
+        self.assertIn("Combinação das 3", html)
+        self.assertEqual(html.count('class="strategy-card-row card"'), 6)
+
+    def test_catalog_has_card_and_family_chart_controls(self) -> None:
+        bots = [
+            BotCatalogItem(
+                id="core-stochastic",
+                name="Stochastic Sell",
+                description="Base",
+                strategy_profile="stochastic_sell_session",
+                symbol="XAUUSD",
+                timeframe="M5",
+            )
+        ]
+
+        html = bytes(render_catalog_page(bots).body).decode("utf-8")
+
+        self.assertIn('data-chart-bot="core-stochastic"', html)
+        self.assertIn('data-chart-family-toggle="stochastic"', html)
+        self.assertIn('data-chart-family-only="stochastic"', html)
+        self.assertIn("2lotus:equity-visible-strategies:v2", html)
+        self.assertIn('/static/equity-chart.js?v=5', html)
+        self.assertIn("aria-pressed", html)
+        self.assertIn("Somente esta", html)
+        self.assertIn("strategyFamily(item.strategy_profile)==='combined'", html)
+        self.assertIn("setVisibleBotIds", html)
+        self.assertIn("Pelo menos uma estratégia deve permanecer visível", html)
+
+    def test_authenticated_pages_use_shared_admin_sidebar(self) -> None:
+        html = bytes(render_catalog_page([]).body).decode("utf-8")
+
+        self.assertIn('class="has-app-shell"', html)
+        self.assertIn('class="app-sidebar"', html)
+        self.assertIn('class="app-nav-link active" href="/bots" aria-current="page"', html)
+        self.assertIn('href="/operations"', html)
+        self.assertIn('href="/history"', html)
+        self.assertIn('href="/growth-simulator"', html)
+        self.assertIn('href="/compare"', html)
+        self.assertIn('/static/admin-shell.css?v=2', html)
+        self.assertIn('/static/admin-shell.js?v=1', html)
+        self.assertIn('data-sidebar-open', html)
+        self.assertIn('data-sidebar-close', html)
+        self.assertLess(html.index('href="/bots"'), html.index('href="/growth-simulator"'))
+        self.assertLess(html.index('href="/growth-simulator"'), html.index('href="/compare"'))
+        self.assertLess(html.index('href="/compare"'), html.index('href="/operations"'))
+        self.assertLess(html.index('href="/operations"'), html.index('href="/history"'))
+
+    def test_history_page_renders_live_year_progress(self) -> None:
+        html = bytes(render_history_page().body).decode("utf-8")
+
+        self.assertIn('class="app-nav-link active" href="/history"', html)
+        self.assertIn("/api/history/progress", html)
+        self.assertIn('id="overall-bar"', html)
+        self.assertIn('id="year-list"', html)
+        self.assertIn("Anos equivalentes baixados", html)
+        self.assertIn("setInterval", html)
+
+    def test_strategy_cards_follow_shared_admin_visual_system(self) -> None:
+        css_path = Path(__file__).parents[1] / "app" / "static" / "admin-shell.css"
+        css = css_path.read_text(encoding="utf-8")
+
+        self.assertIn(".app-content .strategy-card-row.card", css)
+        self.assertIn("height: 330px", css)
+        self.assertIn("background: var(--shell-surface-raised)", css)
+        self.assertIn("-webkit-line-clamp: 3", css)
+
+    def test_login_remains_outside_authenticated_shell(self) -> None:
+        html = bytes(render_login_page().body).decode("utf-8")
+
+        self.assertNotIn('class="app-sidebar"', html)
+        self.assertNotIn('/static/admin-shell.css', html)
 
     def test_growth_simulator_has_custom_balance_and_risk_controls(self) -> None:
         html = bytes(render_growth_simulator_page().body).decode("utf-8")
 
-        self.assertIn('id="initial-balance"', html)
-        self.assertIn('id="base-risk"', html)
-        self.assertIn('id="tiers"', html)
-        self.assertIn("/api/growth-simulation", html)
-        self.assertIn('id="growth-chart"', html)
+        self.assertIn('id="capital"', html)
+        self.assertIn('id="risk"', html)
+        self.assertIn('data-mode="normalized"', html)
+        self.assertIn('data-mode="operational"', html)
+        self.assertIn("/api/growth-comparison", html)
+        self.assertIn('id="chart"', html)
         self.assertIn('value="10000"', html)
-        self.assertIn('value="0.25"', html)
-        self.assertIn("Faixas de redução de risco", html)
+        self.assertIn('value="1"', html)
+        self.assertIn("Replay histórico por estratégia", html)
         self.assertNotIn("Cinza: referência", html)
         self.assertNotIn("data.reference,color:'#777'", html)
 
@@ -49,9 +267,9 @@ class ComparisonPageTests(unittest.TestCase):
                 (6, "Stochastic Sell 18 UTC", "stochastic_sell_session"),
                 (7, "Tendência Multitemporal", "multitimeframe_trend_pullback"),
                 (11, "Portfólio 7/6 · 100/100", "portfolio_6_7_100_100"),
-                (12, "Happy Gold ZigZag Scalper", "happy_gold_zigzag_scalper"),
-                (13, "Happy Gold ZigZag · Confirmação de Regime", "happy_gold_zigzag_regime_confirmed"),
-                (16, "Happy Gold + Portfólio 7/6 · 100/100", "happy_gold_portfolio_100_100"),
+                (12, "ZigZag Scalper", "happy_gold_zigzag_scalper"),
+                (13, "ZigZag Scalper · Confirmação de Regime", "happy_gold_zigzag_regime_confirmed"),
+                (16, "ZigZag Scalper + Portfólio 7/6 · 100/100", "happy_gold_portfolio_100_100"),
             ]
         ]
 
@@ -62,17 +280,22 @@ class ComparisonPageTests(unittest.TestCase):
         self.assertIn("Stochastic Sell 18 UTC", html)
         self.assertIn("Tendência Multitemporal", html)
         self.assertIn("Portfólio 7/6 · 100/100", html)
-        self.assertIn("Happy Gold ZigZag Scalper", html)
-        self.assertIn("Happy Gold ZigZag · Confirmação de Regime", html)
-        self.assertNotIn("Happy Gold ZigZag · Reteste ATR", html)
-        self.assertIn("Happy Gold + Portfólio 7/6 · 100/100", html)
+        self.assertIn("ZigZag Scalper", html)
+        self.assertIn("ZigZag Scalper · Confirmação de Regime", html)
+        self.assertNotIn("ZigZag Scalper · Reteste ATR", html)
+        self.assertIn("ZigZag Scalper + Portfólio 7/6 · 100/100", html)
+        self.assertNotIn("Happy Gold", html)
         self.assertIn("<strong>6</strong>", html)
-        self.assertIn("/api/compare", html)
+        self.assertIn("/api/equity-comparison", html)
+        self.assertIn('data-days="90"', html)
+        self.assertIn('data-days="365" class="selected"', html)
+        self.assertIn('data-days="1095"', html)
+        self.assertIn("1% Risk/Trade", html)
 
     def test_results_page_defaults_to_long_historical_validation(self) -> None:
         bot = BotCatalogItem(
             id="bot-16",
-            name="Happy Gold + Portfólio",
+            name="ZigZag Scalper + Portfólio",
             description="Teste",
             strategy_profile="happy_gold_portfolio_100_100",
             symbol="XAUUSD",
@@ -92,6 +315,7 @@ class ComparisonPageTests(unittest.TestCase):
         html = bytes(render_operations_page().body).decode("utf-8")
         self.assertIn("/api/operations", html)
         self.assertIn("Saúde operacional", html)
+        self.assertIn('class="app-nav-link active" href="/operations" aria-current="page"', html)
 
 
 if __name__ == "__main__":

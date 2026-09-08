@@ -5,71 +5,263 @@ from fastapi.responses import HTMLResponse
 from .schemas import BotCatalogItem
 
 
-def _page(title: str, body: str) -> HTMLResponse:
-    return HTMLResponse(f"""<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/png" href="/static/brand/icon-1-black.png"><link rel="apple-touch-icon" href="/static/brand/icon-1-black.png"><title>{escape(title)}</title><style>
+STRATEGY_FAMILIES = (
+    ("zigzag", "ZigZag Scalper", "Rompimentos, confirmações de regime e contexto de ticks."),
+    ("stochastic", "Stochastic Sell", "Variações do pullback vendedor e de sua janela operacional."),
+    ("multitimeframe", "Tendência multitemporal", "Alinhamento e pullbacks entre H1, M15 e M5."),
+    ("combined", "Combinação das 3", "Composições, pesos e regras de conflito entre as três famílias."),
+)
+
+
+def _strategy_family(bot: BotCatalogItem) -> str:
+    profile = bot.strategy_profile.lower()
+    if profile in {"happy_gold_portfolio_100_100", "portfolio_6_7", "portfolio_6_7_100_100"} or "portfolio" in profile:
+        return "combined"
+    if "zigzag" in profile:
+        return "zigzag"
+    if "stochastic" in profile:
+        return "stochastic"
+    if "multitimeframe" in profile:
+        return "multitimeframe"
+    return "combined"
+
+
+def _variant_label(bot: BotCatalogItem, family: str, position: int) -> str:
+    if family == "combined":
+        if bot.strategy_profile == "happy_gold_portfolio_100_100":
+            return "Composição completa"
+        if "portfolio_6_7" in bot.strategy_profile:
+            return "Baseline parcial · 2 de 3"
+    return "Estratégia-base" if position == 0 else f"Variação {position}"
+
+
+def _family_order(bot: BotCatalogItem) -> tuple[int, str]:
+    priority = {
+        "happy_gold_zigzag_scalper": 0,
+        "zigzag_scalper_v2_shadow": 1,
+        "zigzag_scalper_v3_adaptive_shadow": 2,
+        "stochastic_sell_session": 0,
+        "stochastic_sell_v2_shadow": 1,
+        "stochastic_sell_v3_adaptive_shadow": 2,
+        "multitimeframe_trend_pullback": 0,
+        "multitimeframe_trend_pullback_v2_shadow": 1,
+        "multitimeframe_trend_pullback_v3_adaptive_shadow": 2,
+        "portfolio_v3_adaptive_union_shadow": 0,
+    }
+    return priority.get(bot.strategy_profile, 100), bot.name.casefold()
+
+
+def _subtitle_html(bot: BotCatalogItem, class_name: str = "strategy-subtitle") -> str:
+    return f'<p class="{class_name}">{escape(bot.subtitle)}</p>' if bot.subtitle else ""
+
+
+NAVIGATION = (
+    ("strategies", "/bots", "Estratégias", "grid"),
+    ("simulator", "/growth-simulator", "Simulador de crescimento", "trend"),
+    ("comparison", "/compare", "Comparar estratégias", "compare"),
+    ("operations", "/operations", "Saúde operacional", "pulse"),
+    ("history", "/history", "Histórico do ouro", "database"),
+)
+
+
+def _navigation_icon(name: str) -> str:
+    paths = {
+        "grid": '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+        "database": '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v6c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 11v6c0 1.7 3.6 3 8 3s8-1.3 8-3v-6"/>',
+        "pulse": '<path d="M3 12h4l2.5-6 4.5 12 2.5-6H21"/>',
+        "trend": '<path d="M4 18V6M4 18h16M7 14l4-4 3 2 5-6"/>',
+        "compare": '<path d="M7 3v18M17 3v18M3 7l4-4 4 4M13 17l4 4 4-4"/>',
+    }
+    return f'<svg viewBox="0 0 24 24" aria-hidden="true">{paths[name]}</svg>'
+
+
+def _page(title: str, body: str, *, active_nav: str | None = "auto") -> HTMLResponse:
+    shell_open = shell_close = shell_class = shell_assets = ""
+    if active_nav == "auto":
+        active_nav = (
+            "history" if "Histórico" in title else
+            "operations" if "Saúde" in title else
+            "simulator" if "Simulador" in title else
+            "comparison" if "Comparação" in title else
+            "strategies"
+        )
+    if active_nav is not None:
+        links = "".join(
+            f'<a class="app-nav-link{" active" if item_id == active_nav else ""}" href="{href}"'
+            f'{" aria-current=\"page\"" if item_id == active_nav else ""}>'
+            f'{_navigation_icon(icon)}<span>{escape(label)}</span></a>'
+            for item_id, href, label, icon in NAVIGATION
+        )
+        current_label = next(label for item_id, _, label, _ in NAVIGATION if item_id == active_nav)
+        shell_class = ' class="has-app-shell"'
+        shell_assets = '<link rel="stylesheet" href="/static/admin-shell.css?v=2"><script src="/static/admin-shell.js?v=1" defer></script>'
+        shell_open = f'''<div class="app-shell"><aside class="app-sidebar" id="app-sidebar" aria-label="Navegação principal"><div class="app-sidebar-brand"><a href="/bots" aria-label="2Lotus — Estratégias"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><button class="app-sidebar-close" type="button" data-sidebar-close aria-label="Fechar menu">×</button></div><div class="app-workspace-label"><span>Research workspace</span><strong>Shadow operations</strong></div><nav class="app-nav">{links}</nav><div class="app-sidebar-footer"><span class="app-status-dot" aria-hidden="true"></span><div><strong>Ambiente protegido</strong><small>Execução real desativada</small></div><form method="post" action="/logout"><button class="app-logout" type="submit">Sair</button></form></div></aside><div class="app-sidebar-overlay" data-sidebar-close></div><section class="app-workspace"><div class="app-topbar"><button class="app-menu-button" type="button" data-sidebar-open aria-controls="app-sidebar" aria-expanded="false" aria-label="Abrir menu">{_navigation_icon("grid")}</button><div><span>2Lotus</span><strong>{escape(current_label)}</strong></div><span class="app-topbar-mode">Shadow</span></div><div class="app-content">'''
+        shell_close = "</div></section></div>"
+    return HTMLResponse(f"""<!DOCTYPE html><html lang="pt-BR"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="icon" type="image/png" href="/static/brand/icon-1-black.png"><link rel="apple-touch-icon" href="/static/brand/icon-1-black.png"><title>{escape(title)}</title>{shell_assets}<style>
     :root {{ color-scheme:dark; --bg:#000; --panel:#0b0b0b; --panel2:#151515; --border:#666; --text:#fff; --muted:#a6a6a6; --green:#41d392; --red:#ff6b81; --yellow:#f6c667; }}
-    * {{ box-sizing:border-box; }} body {{ margin:0; font-family:Inter,Arial,sans-serif; color:var(--text); background:var(--bg); }} main {{ max-width:1240px; margin:auto; padding:36px 20px 48px; }} h1,h2,p {{ margin-top:0; }} .muted {{ color:var(--muted); }} .header {{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:28px; }} button {{ font:inherit; cursor:pointer; }} .link-button {{ color:var(--muted); background:transparent; border:0; padding:0; }} .panel,.card {{ background:var(--panel); border:1px solid var(--border); border-radius:10px; }} .brand {{ display:inline-flex; width:max-content; }} .brand img {{ display:block; width:118px; height:auto; }} .brand-compact img {{ width:72px; }}
+    * {{ box-sizing:border-box; }} body {{ margin:0; font-family:Inter,Arial,sans-serif; color:var(--text); background:var(--bg); }} main {{ max-width:1240px; margin:auto; padding:36px 20px 48px; }} h1,h2,p {{ margin-top:0; }} .muted {{ color:var(--muted); }} .page-subtitle {{ margin:-6px 0 10px; color:var(--yellow); font-size:13px; font-weight:800; letter-spacing:.04em; }} .header {{ display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:28px; }} button {{ font:inherit; cursor:pointer; }} .link-button {{ color:var(--muted); background:transparent; border:0; padding:0; }} .panel,.card {{ background:var(--panel); border:1px solid var(--border); border-radius:10px; }} .brand {{ display:inline-flex; width:max-content; }} .brand img {{ display:block; width:118px; height:auto; }} .brand-compact img {{ width:72px; }}
     @media(max-width:640px) {{ main {{ padding:24px 16px; }} .header {{ flex-direction:column; }} }}
-    </style><script src="/static/security.js"></script></head><body>{body}</body></html>""")
+    </style><script src="/static/security.js"></script></head><body{shell_class}>{shell_open}{body}{shell_close}</body></html>""")
 
 
 def render_login_page(error: str | None = None, status_code: int = 200) -> HTMLResponse:
     error_html = f'<p class="error">{escape(error)}</p>' if error else ""
     response = _page("2Lotus | Estratégias", f"""<main class="login"><section class="panel"><img class="login-logo" src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"><h1>Estratégias</h1><p class="muted">Acesse os testes e indicadores de performance.</p>{error_html}<form method="post" action="/login"><label>Senha<input type="password" name="password" autocomplete="current-password" required autofocus></label><button type="submit">Entrar</button></form></section></main><style>
     .login {{ min-height:100vh; display:grid; place-items:center; padding:20px; }} .login .panel {{ width:min(100%,400px); padding:30px; }} .login-logo {{ display:block; width:185px; height:auto; margin:0 auto 26px; }} .login label {{ display:grid; gap:8px; margin:24px 0 14px; font-size:14px; }} .login input {{ border:1px solid var(--border); border-radius:8px; background:#000; color:var(--text); padding:12px; font:inherit; }} .login button {{ width:100%; border:1px solid #fff; border-radius:8px; background:#fff; color:#000; padding:12px; font-weight:700; }} .error {{ color:var(--red); font-size:14px; }}
-    </style>""")
+    </style>""", active_nav=None)
     response.status_code = status_code
     return response
 
 
 def render_catalog_page(active_bots: list[BotCatalogItem], archived_bots: list[BotCatalogItem] | None = None) -> HTMLResponse:
+    grouped = {family_id: [] for family_id, _, _ in STRATEGY_FAMILIES}
+    for bot in active_bots:
+        grouped[_strategy_family(bot)].append(bot)
 
-    def render_cards(bots: list[BotCatalogItem], *, archived: bool) -> str:
-        if not bots:
-            return '<p class="muted empty-state">Nenhuma estratégia nesta seção.</p>'
-        badge = '<span class="status-badge">Arquivada</span>' if archived else '<span class="status-badge active">Ativa</span>'
-        action = "Ver histórico →" if archived else "Ver resultados →"
-        return "".join(
-            f'''<a class="bot card" href="/bots/{escape(bot.id)}"><div class="card-meta"><p class="muted">{escape(bot.symbol)} · {escape(bot.timeframe)}</p>{badge}</div><h2>{escape(bot.name)}</h2><p class="muted">{escape(bot.description)}</p><strong>{action}</strong></a>'''
-            for bot in bots
+    columns = []
+    for family_id, title, description in STRATEGY_FAMILIES:
+        bots = sorted(grouped[family_id], key=_family_order)
+        cards = "".join(
+            f'''<div class="strategy-card-row card"><a class="bot" href="/bots/{escape(bot.id)}"><div class="card-meta"><span class="variant-label">{escape(_variant_label(bot, family_id, position))}</span><span class="status-badge active">Ativa</span></div><p class="market muted">{escape(bot.symbol)} · {escape(bot.timeframe)}</p><div class="strategy-title-block"><h3>{escape(bot.name)}</h3>{_subtitle_html(bot)}</div><p class="strategy-summary muted">{escape(bot.description)}</p><strong class="results-link">Ver resultados →</strong></a><button class="strategy-card-toggle" type="button" data-chart-bot="{escape(bot.id)}" data-chart-family="{family_id}" aria-pressed="false" aria-label="Exibir {escape(bot.name)} no gráfico"><span class="strategy-card-swatch" aria-hidden="true"></span><span class="strategy-card-toggle-label">Exibir no gráfico</span></button></div>'''
+            for position, bot in enumerate(bots)
         )
-
-    active_cards = render_cards(active_bots, archived=False)
-    return _page("2Lotus | Estratégias", f"""<main><header class="header"><div><a class="brand" href="/bots" aria-label="2Lotus"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><h1>Estratégias</h1><p class="muted">Acompanhe as seis estratégias selecionadas para shadow e validação.</p></div><div class="header-actions"><a href="/operations">Saúde operacional</a><a href="/growth-simulator">Simular crescimento</a><a href="/compare">Comparar estratégias</a><form method="post" action="/logout"><button class="link-button" type="submit">Sair</button></form></div></header>
+        if not cards:
+            cards = '<div class="family-empty"><p class="muted">Nenhuma variante ativa.</p></div>'
+        columns.append(
+            f'''<article class="strategy-family" data-family="{family_id}"><header class="family-heading"><p class="eyebrow">{len(bots)} {"variante" if len(bots) == 1 else "variantes"}</p><h2>{escape(title)}</h2><p class="muted">{escape(description)}</p><div class="family-chart-actions"><button type="button" data-chart-family-toggle="{family_id}" aria-pressed="false">Ativar categoria</button><button type="button" data-chart-family-only="{family_id}">Somente esta</button></div></header><div class="variant-stack">{cards}</div></article>'''
+        )
+    family_columns = "".join(columns)
+    return _page("2Lotus | Estratégias", f"""<main><header class="header"><div><a class="brand" href="/bots" aria-label="2Lotus"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><h1>Estratégias</h1><p class="muted">Acompanhe as famílias e versões ativas do 2Lotus.</p></div><div class="header-actions"><a href="/operations">Saúde operacional</a><a href="/growth-simulator">Simular crescimento</a><a href="/compare">Comparar estratégias</a><form method="post" action="/logout"><button class="link-button" type="submit">Sair</button></form></div></header>
     <section>
-      <section class="panel equity-panel"><div class="equity-heading"><div><p class="eyebrow">Backtest de 1 ano</p><h2>Desempenho acumulado das estratégias ativas</h2><p class="muted">XAU/USD · M5 · PnL acumulado simulado em USD</p></div><p class="muted" id="equity-status">Carregando curvas...</p></div><div id="equity-empty" class="muted" hidden></div><svg id="equity-chart" viewBox="0 0 1100 420" role="img" aria-label="Desempenho acumulado das estratégias ativas"></svg><div id="equity-legend" class="equity-legend"></div></section>
-      <div class="section-heading"><div><p class="eyebrow">Em acompanhamento</p><h2>Estratégias ativas</h2></div><p class="muted">{len(active_bots)} estratégias</p></div><section class="grid">{active_cards}</section>
+      <section class="panel equity-panel"><div class="equity-heading"><div><p class="eyebrow">Mercado e backtest</p><h2>XAU/USD com desempenho das estratégias</h2><p class="muted">Candles no painel superior · PnL acumulado no painel inferior</p></div><div class="history-actions"><button id="refresh-history" type="button">Recarregar histórico</button><p class="muted" id="equity-status" aria-live="polite">Carregando gráfico...</p></div></div><div class="chart-toolbar"><div class="chart-options" aria-label="Modo de risco"><button data-risk-mode="normalized" class="selected">1% Risk/Trade</button></div><div class="chart-options" aria-label="Duração dos candles"><button data-resolution="1m">1m</button><button data-resolution="5m">5m</button><button data-resolution="1h">1h</button><button data-resolution="1d" class="selected">1d</button></div><div class="chart-options" aria-label="Período exibido"><button data-days="7">7D</button><button data-days="30">30D</button><button data-days="90">90D</button><button data-days="365" class="selected">1A</button><button data-days="1095">3A</button></div><button id="chart-fit" type="button">Ajustar</button></div><p id="strategy-filter-hint" class="strategy-filter-hint" role="status" aria-live="polite"></p><div id="equity-empty" class="muted" hidden></div><div id="equity-chart" role="img" aria-label="Candles XAUUSD e desempenho acumulado das estratégias"></div><div id="equity-legend" class="equity-legend" aria-live="polite"></div><p class="chart-help muted">Cada período reinicia em US$ 10.000 e simula risco de 1% por entrada somente dentro da janela selecionada.</p></section>
+      <div class="section-heading"><div><p class="eyebrow">Em acompanhamento</p><h2>Famílias de estratégias</h2><p class="muted">Estratégias organizadas por família e versão.</p></div><p class="muted">{len(active_bots)} variantes ativas</p></div><section class="family-grid">{family_columns}</section>
     </section></main><style>
     .header-actions {{ display:flex; gap:16px; align-items:center; }} .header-actions a {{ color:var(--text); }} .catalog-tabs {{ display:inline-flex; gap:4px; padding:4px; margin-bottom:22px; border:1px solid var(--border); border-radius:10px; background:var(--panel); }} .catalog-tabs button {{ display:flex; align-items:center; gap:9px; border:0; border-radius:7px; padding:10px 16px; background:transparent; color:var(--muted); font-weight:700; }} .catalog-tabs button[aria-selected="true"] {{ background:#fff; color:#000; }} .catalog-tabs span {{ min-width:22px; padding:2px 6px; border-radius:999px; background:rgba(127,127,127,.2); font-size:12px; text-align:center; }}
-    .equity-panel {{ padding:20px; margin-bottom:28px; }} .equity-heading,.section-heading {{ display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }} .equity-heading h2 {{ margin-bottom:6px; }} .eyebrow {{ margin-bottom:6px; color:var(--green); font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }} #equity-chart {{ width:100%; min-height:320px; margin-top:8px; }} .equity-legend {{ display:flex; flex-wrap:wrap; gap:9px 16px; padding-top:12px; border-top:1px solid rgba(255,255,255,.14); }} .legend-item {{ display:inline-flex; align-items:center; gap:7px; color:var(--muted); font-size:12px; }} .legend-item i {{ width:18px; height:3px; border-radius:999px; }} .section-heading {{ margin-bottom:14px; }} .section-heading h2 {{ margin-bottom:0; }}
-    .grid {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; }} .bot {{ min-height:220px; display:flex; flex-direction:column; align-items:flex-start; padding:22px; color:var(--text); text-decoration:none; }} .bot h2,.bot p {{ margin-bottom:12px; }} .bot strong {{ color:var(--green); margin-top:auto; }} .card-meta {{ width:100%; display:flex; justify-content:space-between; gap:12px; align-items:flex-start; }} .status-badge {{ padding:4px 8px; border:1px solid #555; border-radius:999px; color:var(--muted); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; }} .status-badge.active {{ color:var(--green); border-color:rgba(65,211,146,.45); }} .archive-note {{ padding:22px; margin-bottom:18px; border-left:3px solid var(--yellow); }} .archive-note .eyebrow {{ color:var(--yellow); }} .archive-note p:last-child {{ max-width:820px; margin-bottom:0; line-height:1.55; }} .empty-state {{ grid-column:1/-1; padding:24px 0; }}
-    @media(max-width:720px) {{ .equity-heading,.section-heading {{ flex-direction:column; }} #equity-chart {{ min-height:250px; }} }}
-    </style><script>
-    const palette=['#41d392','#62a8ff','#f6c667','#ff6b81','#b78cff','#52d8e8','#ff9f43'];
-    const usd=value=>new Intl.NumberFormat('pt-BR',{{style:'currency',currency:'USD',maximumFractionDigits:0}}).format(value||0);
+    .equity-panel {{ padding:20px; margin-bottom:28px; overflow:hidden; }} .equity-heading,.section-heading {{ display:flex; align-items:flex-start; justify-content:space-between; gap:18px; }} .equity-heading h2 {{ margin-bottom:6px; }} .history-actions {{ display:flex; flex-direction:column; align-items:flex-end; gap:8px; }} .history-actions p {{ margin:0; text-align:right; }} #refresh-history {{ padding:9px 13px; border:1px solid var(--green); border-radius:7px; color:var(--green); background:transparent; font-weight:800; }} #refresh-history:disabled {{ cursor:wait; opacity:.55; }} .chart-toolbar {{ display:flex; align-items:center; flex-wrap:wrap; gap:10px; margin-top:16px; }} .chart-options {{ display:flex; padding:3px; border:1px solid rgba(148,163,184,.18); border-radius:8px; background:#080b10; }} .chart-options button,#chart-fit {{ padding:7px 10px; border:0; border-radius:6px; color:var(--muted); background:transparent; font-weight:700; }} .chart-options button.selected {{ color:#fff; background:rgba(139,124,255,.28); }} #chart-fit {{ margin-left:auto; border:1px solid rgba(148,163,184,.18); }} .strategy-filter {{ margin-top:14px; padding:14px; border:1px solid rgba(148,163,184,.18); border-radius:9px; background:#080b10; }} .strategy-filter-heading {{ display:flex; justify-content:space-between; gap:16px; }} .strategy-filter-heading h3 {{ margin:0 0 4px; font-size:15px; }} .strategy-filter-heading p {{ margin:0; font-size:12px; }} .strategy-filter-groups {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:12px; }} .strategy-filter-group {{ min-width:0; }} .strategy-filter-group h4 {{ margin:0 0 6px; color:var(--muted); font-size:11px; letter-spacing:.06em; text-transform:uppercase; }} .strategy-toggle-row {{ display:grid; grid-template-columns:minmax(0,1fr) auto; gap:5px; margin-top:5px; }} .strategy-toggle,.strategy-isolate {{ min-height:34px; border:1px solid rgba(148,163,184,.24); border-radius:7px; color:var(--muted); background:#10151e; }} .strategy-toggle {{ display:flex; align-items:center; min-width:0; gap:8px; padding:7px 9px; text-align:left; }} .strategy-toggle span:last-child {{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }} .strategy-toggle[aria-pressed="true"] {{ border-color:var(--strategy-color); color:#fff; background:color-mix(in srgb,var(--strategy-color) 16%,#10151e); }} .strategy-swatch {{ flex:0 0 auto; width:10px; height:10px; border-radius:50%; background:var(--strategy-color); }} .strategy-isolate {{ padding:6px 8px; font-size:11px; }} .strategy-toggle:focus-visible,.strategy-isolate:focus-visible {{ outline:2px solid #fff; outline-offset:2px; }} .strategy-filter-hint {{ min-height:16px; margin:8px 0 0; color:var(--yellow); font-size:11px; }} .eyebrow {{ margin-bottom:6px; color:var(--green); font-size:12px; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }} #equity-chart {{ width:100%; height:540px; margin-top:10px; border:1px solid rgba(148,163,184,.12); border-radius:8px; overflow:hidden; background:#0b0f16; }} .equity-legend {{ min-height:42px; display:flex; align-items:center; flex-wrap:wrap; gap:9px 16px; padding:10px 2px 0; border-top:1px solid rgba(255,255,255,.14); }} .equity-legend time,.equity-legend .ohlc {{ color:#dce4f1; font-size:12px; }} .legend-item {{ display:inline-flex; align-items:center; gap:7px; color:var(--muted); font-size:12px; }} .legend-item strong,.ohlc strong {{ color:var(--text); }} .legend-item i {{ width:18px; height:3px; border-radius:999px; }} .chart-help {{ margin:8px 0 0; font-size:11px; }} .section-heading {{ margin-bottom:14px; }} .section-heading h2 {{ margin-bottom:0; }}
+    .family-grid {{ display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:16px; align-items:start; }} .strategy-family {{ min-width:0; }} .family-heading {{ min-height:156px; padding:18px; border:1px solid var(--border); border-bottom:0; border-radius:10px 10px 0 0; background:var(--panel2); }} .family-heading h2 {{ margin-bottom:9px; font-size:20px; }} .family-heading p:last-child {{ margin-bottom:0; font-size:13px; line-height:1.45; }} .variant-stack {{ display:flex; flex-direction:column; gap:12px; padding:12px; border:1px solid var(--border); border-radius:0 0 10px 10px; background:rgba(255,255,255,.025); }} .bot {{ height:286px; min-height:286px; display:flex; flex-direction:column; align-items:stretch; padding:18px; color:var(--text); text-decoration:none; }} .bot h3,.bot p {{ margin-bottom:0; }} .strategy-title-block {{ min-height:45px; margin-bottom:10px; }} .bot h3 {{ margin:0; font-size:17px; line-height:1.25; }} .bot .strategy-subtitle {{ margin:3px 0 0; color:var(--yellow); font-size:12px; font-weight:800; line-height:1.25; letter-spacing:.025em; }} .bot .strategy-summary {{ display:-webkit-box; overflow:hidden; margin:0; font-size:13px; line-height:1.45; -webkit-box-orient:vertical; -webkit-line-clamp:4; }} .bot .results-link {{ display:block; width:100%; margin-top:auto; padding-top:12px; border-top:1px solid rgba(148,163,184,.16); color:var(--green); }} .bot .market {{ margin:11px 0 8px; font-size:12px; }} .card-meta {{ width:100%; display:flex; justify-content:space-between; gap:8px; align-items:center; }} .variant-label {{ color:var(--yellow); font-size:11px; font-weight:800; letter-spacing:.04em; text-transform:uppercase; }} .status-badge {{ padding:4px 8px; border:1px solid #555; border-radius:999px; color:var(--muted); font-size:11px; font-weight:800; text-transform:uppercase; letter-spacing:.05em; }} .status-badge.active {{ color:var(--green); border-color:rgba(65,211,146,.45); }} .family-empty {{ min-height:112px; display:grid; place-items:center; padding:18px; border:1px dashed rgba(166,166,166,.35); border-radius:8px; text-align:center; }} .family-empty p {{ margin:0; }}
+    .family-heading {{ min-height:220px; }} .family-heading>p:last-of-type {{ margin-bottom:0; }} .family-chart-actions {{ display:flex; flex-wrap:wrap; gap:6px; margin-top:13px; }} .family-chart-actions button {{ padding:7px 8px; border:1px solid rgba(148,163,184,.35); border-radius:6px; color:var(--muted); background:#090c12; font-size:11px; font-weight:700; }} .family-chart-actions button[aria-pressed="true"] {{ color:#000; border-color:var(--green); background:var(--green); }} .strategy-card-row {{ display:flex; flex-direction:column; overflow:hidden; }} .strategy-card-row .bot {{ flex:0 0 286px; min-height:286px; padding-bottom:12px; }} .strategy-card-toggle {{ display:flex; align-items:center; justify-content:center; gap:8px; margin:0 12px 12px; padding:9px 12px; border:1px solid rgba(148,163,184,.28); border-radius:7px; color:var(--muted); background:#0c1017; font-size:11px; font-weight:700; }} .strategy-card-toggle[aria-pressed="true"] {{ color:#fff; border-color:var(--strategy-color); background:#15221d; }} .strategy-card-swatch {{ width:11px; height:11px; border-radius:50%; background:var(--strategy-color,#555); }} .strategy-card-toggle-label {{ line-height:1.2; }} .strategy-card-toggle:disabled,.family-chart-actions button:disabled {{ cursor:not-allowed; opacity:.35; }} .strategy-card-toggle:focus-visible,.family-chart-actions button:focus-visible {{ outline:2px solid #fff; outline-offset:2px; }}
+    .family-chart-actions {{ flex-wrap:nowrap; }} .family-chart-actions button {{ flex:0 0 108px; width:108px; height:32px; padding:0 6px; white-space:nowrap; }}
+    @media(max-width:1040px) {{ .strategy-filter-groups,.family-grid {{ grid-template-columns:repeat(2,minmax(0,1fr)); }} }} @media(max-width:720px) {{ .equity-heading,.section-heading,.strategy-filter-heading {{ flex-direction:column; }} .history-actions {{ align-items:flex-start; }} .history-actions p {{ text-align:left; }} #chart-fit {{ margin-left:0; }} .strategy-filter-groups {{ grid-template-columns:1fr; }} #equity-chart {{ height:460px; }} .family-grid {{ grid-template-columns:1fr; }} .family-heading {{ min-height:auto; }} }}
+    </style><script src="/static/vendor/lightweight-charts/lightweight-charts.standalone.production.js"></script><script src="/static/equity-chart.js?v=5"></script><script>
+    const equityChart=LotusEquityChart.create(document.getElementById('equity-chart'),document.getElementById('equity-legend'));
+    const strategyStorageKey='2lotus:equity-visible-strategies:v2';
+    let chartResolution='1d',chartDays=365,currentEquityData=null,selectedBotIds=null,selectionWasSaved=false,hintTimer=null;
+    function strategyFamily(profile) {{
+      const value=(profile||'').toLowerCase();
+      if(value.includes('portfolio')) return 'combined';
+      if(value.includes('zigzag')) return 'zigzag';
+      if(value.includes('stochastic')) return 'stochastic';
+      if(value.includes('multitimeframe')) return 'multitimeframe';
+      return 'combined';
+    }}
+    function loadStrategySelection() {{
+      try {{
+        const raw=localStorage.getItem(strategyStorageKey);
+        selectionWasSaved=raw!==null;
+        const parsed=raw===null?null:JSON.parse(raw);
+        return Array.isArray(parsed)?new Set(parsed.filter(id=>typeof id==='string')):null;
+      }} catch(error) {{ selectionWasSaved=false; return null; }}
+    }}
+    function saveStrategySelection() {{
+      try {{ localStorage.setItem(strategyStorageKey,JSON.stringify([...selectedBotIds])); selectionWasSaved=true; }} catch(error) {{ /* Storage can be unavailable in private contexts. */ }}
+    }}
+    function reconcileStrategySelection(series) {{
+      const available=new Set(series.map(item=>item.bot_id));
+      if(selectedBotIds===null) selectedBotIds=loadStrategySelection();
+      const valid=new Set([...(selectedBotIds||[])].filter(id=>available.has(id)));
+      if(!valid.size&&series.length) {{
+        series.filter(item=>strategyFamily(item.strategy_profile)==='combined').forEach(item=>valid.add(item.bot_id));
+        if(!valid.size) valid.add(series[0].bot_id);
+      }}
+      selectedBotIds=valid;
+      if(selectionWasSaved||valid.size) saveStrategySelection();
+    }}
+    function showStrategyHint(message) {{
+      const hint=document.getElementById('strategy-filter-hint');
+      hint.textContent=message;
+      clearTimeout(hintTimer);
+      hintTimer=setTimeout(()=>{{hint.textContent='';}},2400);
+    }}
+    function syncStrategyControls() {{
+      const state=equityChart.getSeriesState(),byId=new Map(state.map(item=>[item.botId,item]));
+      document.querySelectorAll('[data-chart-bot]').forEach(button=>{{
+        const item=byId.get(button.dataset.chartBot),visible=Boolean(item&&item.visible);
+        button.disabled=!item; button.setAttribute('aria-pressed',String(visible));
+        button.setAttribute('aria-label',(visible?'Ocultar ':'Exibir ')+(item?item.name:'estratégia indisponível')+' no gráfico');
+        button.querySelector('.strategy-card-toggle-label').textContent=visible?'No gráfico':'Exibir no gráfico';
+        if(item) button.style.setProperty('--strategy-color',item.color);
+      }});
+      document.querySelectorAll('[data-chart-family-toggle]').forEach(button=>{{
+        const ids=state.filter(item=>strategyFamily(item.strategyProfile)===button.dataset.chartFamilyToggle).map(item=>item.botId);
+        const allActive=ids.length>0&&ids.every(id=>selectedBotIds.has(id));
+        button.disabled=!ids.length; button.setAttribute('aria-pressed',String(allActive)); button.textContent=allActive?'Desativar':'Ativar categoria';
+      }});
+      document.querySelectorAll('[data-chart-family-only]').forEach(button=>{{
+        button.disabled=!state.some(item=>strategyFamily(item.strategyProfile)===button.dataset.chartFamilyOnly);
+      }});
+    }}
+    function applyStrategySelection() {{
+      equityChart.setVisibleBotIds(selectedBotIds);
+      syncStrategyControls();
+      updateEquityStatus();
+      saveStrategySelection();
+    }}
+    function toggleStrategy(botId) {{
+      if(selectedBotIds.has(botId)&&selectedBotIds.size===1) {{ showStrategyHint('Pelo menos uma estratégia deve permanecer visível.'); return; }}
+      if(selectedBotIds.has(botId)) selectedBotIds.delete(botId); else selectedBotIds.add(botId);
+      applyStrategySelection();
+    }}
+    function toggleFamily(familyId) {{
+      const ids=equityChart.getSeriesState().filter(item=>strategyFamily(item.strategyProfile)===familyId).map(item=>item.botId);
+      const allActive=ids.length&&ids.every(id=>selectedBotIds.has(id));
+      if(allActive&&selectedBotIds.size===ids.filter(id=>selectedBotIds.has(id)).length) {{ showStrategyHint('Pelo menos uma categoria deve permanecer visível.'); return; }}
+      ids.forEach(id=>allActive?selectedBotIds.delete(id):selectedBotIds.add(id)); applyStrategySelection();
+    }}
+    function isolateFamily(familyId) {{
+      selectedBotIds=new Set(equityChart.getSeriesState().filter(item=>strategyFamily(item.strategyProfile)===familyId).map(item=>item.botId));
+      if(selectedBotIds.size) applyStrategySelection();
+    }}
+    function updateEquityStatus() {{
+      if(!currentEquityData) return;
+      const visibleSeries=(currentEquityData.series||[]).filter(item=>selectedBotIds&&selectedBotIds.has(item.bot_id));
+      const trades=visibleSeries.reduce((total,item)=>total+Number(item.summary&&item.summary.trades_count||0),0);
+      document.getElementById('equity-status').textContent=(currentEquityData.candles||[]).length+' candles · '+visibleSeries.length+' de '+(currentEquityData.series||[]).length+' curvas'+(trades?' · '+trades+' trades':' · nenhum trade no período')+((currentEquityData.missing_bot_ids||[]).length?' · '+currentEquityData.missing_bot_ids.length+' pendentes':'');
+    }}
     function renderEquity(data) {{
-      const svg=document.getElementById('equity-chart'), empty=document.getElementById('equity-empty'), legend=document.getElementById('equity-legend');
-      const usable=(data.series||[]).filter(item=>item.points&&item.points.length);
-      if(!usable.length) {{ svg.hidden=true; empty.hidden=false; empty.textContent='O backtest consolidado ainda não foi carregado para este ativo.'; legend.innerHTML=''; return; }}
-      svg.hidden=false; empty.hidden=true; const W=1100,H=420,L=78,R=22,T=22,B=48;
-      const timestamps=usable.flatMap(item=>item.points.map(point=>+new Date(point.day+'T00:00:00Z'))), values=[0,...usable.flatMap(item=>item.points.map(point=>+point.cumulative_pnl))];
-      const minX=Math.min(...timestamps),maxX=Math.max(...timestamps),rawMin=Math.min(...values),rawMax=Math.max(...values),padding=Math.max((rawMax-rawMin)*.12,10),minY=rawMin-padding,maxY=rawMax+padding;
-      const x=value=>L+(value-minX)*(W-L-R)/Math.max(maxX-minX,1), y=value=>T+(maxY-value)*(H-T-B)/Math.max(maxY-minY,1);
-      const grid=[0,.25,.5,.75,1].map(ratio=>{{const value=maxY-(maxY-minY)*ratio,yy=y(value);return `<line x1="${{L}}" x2="${{W-R}}" y1="${{yy}}" y2="${{yy}}" stroke="#292929"/><text x="${{L-10}}" y="${{yy+4}}" fill="#a6a6a6" text-anchor="end" font-size="12">${{usd(value)}}</text>`;}}).join('');
-      const zero=minY<=0&&maxY>=0?`<line x1="${{L}}" x2="${{W-R}}" y1="${{y(0)}}" y2="${{y(0)}}" stroke="#777" stroke-dasharray="5 5"/>`:'';
-      const lines=usable.map((item,index)=>{{const color=palette[index%palette.length],points=item.points.map(point=>`${{x(+new Date(point.day+'T00:00:00Z')).toFixed(1)}},${{y(+point.cumulative_pnl).toFixed(1)}}`).join(' ');return `<polyline points="${{points}}" fill="none" stroke="${{color}}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><title>${{item.name}}: ${{usd(item.summary.net_pnl)}}</title></polyline>`;}}).join('');
-      const dateLabel=value=>new Date(value).toLocaleDateString('pt-BR',{{month:'short',year:'2-digit',timeZone:'UTC'}}); const xLabels=[0,.25,.5,.75,1].map(ratio=>{{const value=minX+(maxX-minX)*ratio;return `<text x="${{x(value)}}" y="${{H-15}}" fill="#a6a6a6" text-anchor="middle" font-size="12">${{dateLabel(value)}}</text>`;}}).join('');
-      svg.innerHTML=grid+zero+lines+xLabels; legend.innerHTML=usable.map((item,index)=>`<span class="legend-item"><i style="background:${{palette[index%palette.length]}}"></i>${{escapeHtml(item.name.replace(' · EUR/USD',''))}} · ${{usd(item.summary.net_pnl)}}</span>`).join('');
+      const host=document.getElementById('equity-chart'), empty=document.getElementById('equity-empty'), legend=document.getElementById('equity-legend');
+      const hasCandles=(data.candles||[]).length>0, hasCurves=(data.series||[]).some(item=>item.points&&item.points.length);
+      const drawableSeries=(data.series||[]).filter(item=>item.points&&item.points.length);
+      reconcileStrategySelection(drawableSeries);
+      if(!hasCandles&&!hasCurves) {{ host.hidden=true; empty.hidden=false; empty.textContent='O histórico de mercado e o backtest ainda não foram carregados para este ativo.'; legend.innerHTML=''; syncStrategyControls(); return; }}
+      host.hidden=false; empty.hidden=true; equityChart.setData(data,{{visibleBotIds:selectedBotIds}}); syncStrategyControls();
     }}
     async function loadActiveEquity() {{
-      try {{ const response=await fetch('/api/equity-comparison?symbol=XAUUSD&days=365'); if(!response.ok) throw new Error('Não foi possível carregar a comparação.'); const data=await response.json(); renderEquity(data); document.getElementById('equity-status').textContent=data.series.length+' curvas · '+data.period_days+' dias'+(data.missing_bot_ids.length?' · '+data.missing_bot_ids.length+' pendentes':''); }} catch(error) {{ document.getElementById('equity-status').textContent=error.message; renderEquity({{series:[]}}); }}
+      try {{ const response=await fetch('/api/backtest-market-chart?symbol=XAUUSD&resolution='+chartResolution+'&days='+chartDays+'&mode=normalized'); if(!response.ok) throw new Error('Não foi possível carregar o mercado e os backtests.'); const data=await response.json(); currentEquityData=data; renderEquity(data); updateEquityStatus(); }} catch(error) {{ document.getElementById('equity-status').textContent='Erro ao carregar o gráfico: '+error.message; }}
     }}
+    async function refreshHistory() {{
+      const button=document.getElementById('refresh-history'),status=document.getElementById('equity-status');
+      button.disabled=true; button.textContent='Atualizando...'; status.textContent='Publicando downloads, importando candles e recalculando backtests...';
+      try {{
+        const response=await fetch('/api/history/refresh?symbol=XAUUSD&days='+chartDays,{{method:'POST'}});
+        const payload=await response.json().catch(()=>({{}}));
+        if(!response.ok) throw new Error(payload.detail||'Não foi possível atualizar o histórico.');
+        await loadActiveEquity();
+        showStrategyHint(payload.snapshots_updated+' backtests atualizados · '+payload.candles_imported+' candles importados.');
+      }} catch(error) {{ status.textContent=error.message; }} finally {{ button.disabled=false; button.textContent='Recarregar histórico'; }}
+    }}
+    document.getElementById('refresh-history').onclick=refreshHistory;
+    document.querySelectorAll('[data-chart-bot]').forEach(button=>button.onclick=()=>toggleStrategy(button.dataset.chartBot));
+    document.querySelectorAll('[data-chart-family-toggle]').forEach(button=>button.onclick=()=>toggleFamily(button.dataset.chartFamilyToggle));
+    document.querySelectorAll('[data-chart-family-only]').forEach(button=>button.onclick=()=>isolateFamily(button.dataset.chartFamilyOnly));
+    document.querySelectorAll('[data-resolution]').forEach(button=>button.onclick=()=>{{document.querySelectorAll('[data-resolution]').forEach(item=>item.classList.remove('selected'));button.classList.add('selected');chartResolution=button.dataset.resolution;loadActiveEquity();}});
+    document.querySelectorAll('[data-days]').forEach(button=>button.onclick=()=>{{document.querySelectorAll('[data-days]').forEach(item=>item.classList.remove('selected'));button.classList.add('selected');chartDays=Number(button.dataset.days);loadActiveEquity();}});
+    document.getElementById('chart-fit').onclick=()=>equityChart.fitContent();
     loadActiveEquity();
     </script>""")
 
 
 def _render_growth_simulator_page_legacy() -> HTMLResponse:
-    return _page("2Lotus | Simulador de crescimento", """<main><header class="header"><div><a class="brand brand-compact" href="/bots" aria-label="2Lotus"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><p class="eyebrow">Happy Gold + Portfólio 7/6 · 100/100</p><h1>Simulador de crescimento</h1><p class="muted">Reaplique as 802 operações do replay anual com capital e risco personalizados.</p></div><div class="actions"><a href="/bots/bot-16">Ver estratégia</a><a href="/bots">Estratégias</a><form method="post" action="/logout"><button class="link-button" type="submit">Sair</button></form></div></header>
+    return _page("2Lotus | Simulador de crescimento", """<main><header class="header"><div><a class="brand brand-compact" href="/bots" aria-label="2Lotus"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><p class="eyebrow">Portfólio Combinado V1</p><h1>Simulador de crescimento</h1><p class="muted">Reaplique as 802 operações do replay anual com capital e risco personalizados.</p></div><div class="actions"><a href="/bots/core-portfolio">Ver estratégia</a><a href="/bots">Estratégias</a><form method="post" action="/logout"><button class="link-button" type="submit">Sair</button></form></div></header>
     <section class="panel controls"><form id="simulation-form"><label>Capital inicial (USD)<input id="initial-balance" name="initial_balance" type="number" min="100" max="100000000" step="100" value="10000" required></label><label>Risco-base por operação (%)<input id="risk" name="risk_per_trade_pct" type="number" min="0.01" max="10" step="0.01" value="0.25" required></label><button type="submit">Simular curva</button></form><p class="muted">O risco é recalculado sobre o saldo antes de cada operação. A sequência de entradas e os resultados em R permanecem iguais ao backtest.</p></section>
     <section class="cards"><article class="card"><p class="muted">Saldo final</p><strong id="final-balance">-</strong><span id="initial-label">-</span></article><article class="card"><p class="muted">PnL projetado</p><strong id="net-pnl">-</strong><span id="return-pct">-</span></article><article class="card"><p class="muted">Drawdown máximo</p><strong id="drawdown">-</strong><span id="drawdown-pct">-</span></article><article class="card"><p class="muted">Operações simuladas</p><strong id="trades">-</strong><span id="period">-</span></article></section>
     <section class="panel chart-panel"><div class="chart-heading"><div><h2>Curva de saldo</h2><p class="muted">Referência: US$ 10.000 e risco de 0,25% · Simulação: valores personalizados</p></div><p class="muted" id="status">Carregando...</p></div><div id="chart-empty" class="muted" hidden></div><svg id="growth-chart" viewBox="0 0 1100 440" role="img" aria-label="Curva simulada de crescimento"></svg><div class="legend"><span><i class="reference"></i>Referência</span><span><i class="simulation"></i>Simulação personalizada</span></div></section>
@@ -84,8 +276,8 @@ def _render_growth_simulator_page_legacy() -> HTMLResponse:
     </script>""")
 
 
-def render_growth_simulator_page() -> HTMLResponse:
-    return _page("2Lotus | Simulador", """<main><header class="header"><div><a class="brand brand-compact" href="/bots"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><p class="eyebrow">Happy Gold + Portfólio 7/6 · 100/100</p><h1>Simulador de crescimento</h1><p class="muted">Reaplique as operações anuais com risco composto e reduções permanentes por saldo.</p></div><div class="actions"><a href="/operations">Saúde</a><a href="/bots">Estratégias</a></div></header>
+def _render_growth_simulator_page_v2_legacy() -> HTMLResponse:
+    return _page("2Lotus | Simulador", """<main><header class="header"><div><a class="brand brand-compact" href="/bots"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><p class="eyebrow">Portfólio Combinado V1</p><h1>Simulador de crescimento</h1><p class="muted">Reaplique as operações anuais com risco composto e reduções permanentes por saldo.</p></div><div class="actions"><a href="/operations">Saúde</a><a href="/bots">Estratégias</a></div></header>
     <section class="panel controls"><form id="simulation-form"><label>Capital inicial (USD)<input id="initial-balance" type="number" min="1" max="100000000" step="1" value="10000" required></label><label>Risco por operação (%)<input id="base-risk" type="number" min="0.01" max="10" step="0.01" value="0.25" required></label><button class="primary" type="submit">Simular curva</button><div class="optional-tiers"><div class="tier-heading"><div><strong>Faixas de redução de risco</strong><small class="muted">Opcional</small></div><button id="add-tier" type="button">+ Adicionar faixa</button></div><div id="tiers"></div></div></form><p class="muted">Se adicionar faixas, o risco menor fica travado ao atingir o capital definido, mesmo que o saldo recue.</p></section>
     <section class="cards"><article class="card"><p class="muted">Saldo final</p><strong id="final-balance">-</strong><span id="minimum-balance">-</span></article><article class="card"><p class="muted">PnL / retorno</p><strong id="net-pnl">-</strong><span id="return-pct">-</span></article><article class="card"><p class="muted">Drawdown máximo</p><strong id="drawdown">-</strong><span id="drawdown-pct">-</span></article><article class="card"><p class="muted">Operações</p><strong id="trades">-</strong><span id="period">-</span></article></section>
     <section class="panel chart-panel"><div class="chart-heading"><div><h2>Curva de saldo</h2><p class="muted">Cenário calculado com o capital e o risco informados.</p></div><p class="muted" id="status">Carregando...</p></div><svg id="growth-chart" viewBox="0 0 1100 440" role="img"></svg><div id="milestones" class="milestones"></div></section>
@@ -100,30 +292,73 @@ def render_growth_simulator_page() -> HTMLResponse:
     </script>""")
 
 
+def render_growth_simulator_page(bots: list[BotCatalogItem] | None = None) -> HTMLResponse:
+    active = sorted(bots or [], key=lambda bot: (_strategy_family(bot), _family_order(bot)))
+    controls = "".join(
+        f'<label class="strategy-choice" data-family="{_strategy_family(bot)}"><input type="checkbox" value="{escape(bot.id)}" '
+        f'{"checked" if bot.id == "core-combined-v3" else ""}><span>{escape(bot.name)}</span></label>'
+        for bot in active
+    )
+    return _page("2Lotus | Simulador", f"""<main><header class="header"><div><a class="brand brand-compact" href="/bots"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><p class="eyebrow">Replay histórico por estratégia</p><h1>Simulador de crescimento</h1><p class="muted">Compare estratégias com o mesmo capital, risco e período.</p></div><a href="/bots">Estratégias</a></header>
+    <section class="panel controls"><form id="form"><label>Capital inicial (USD)<input id="capital" type="number" min="1" max="100000000" value="10000"></label><label>Risco por operação (%)<input id="risk" type="number" min="0.01" max="10" step="0.01" value="1"></label><label>Período<select id="days"><option value="30">30 dias</option><option value="90">90 dias</option><option value="365" selected>1 ano</option></select></label><div class="mode"><button type="button" data-mode="normalized" class="selected">Normalizado 1%</button><button type="button" data-mode="operational">Operacional</button></div><button class="primary" type="submit">Simular</button></form></section>
+    <section class="panel selector"><div class="family-actions"><button data-family-button="zigzag">ZigZag</button><button data-family-button="stochastic">Stochastic</button><button data-family-button="multitimeframe">Multitemporal</button><button data-family-button="combined">Combinações</button><button id="clear" type="button">Limpar</button></div><div class="strategy-grid">{controls}</div></section>
+    <section class="panel chart-panel"><div class="chart-heading"><div><h2>Curvas de crescimento</h2><p class="muted">Cada linha reaplica a sequência real de resultados em R.</p></div><p id="status" class="muted">Carregando...</p></div><svg id="chart" viewBox="0 0 1100 460" role="img"></svg><div id="legend" class="legend"></div></section>
+    <section id="summaries" class="summaries"></section><section class="panel warning"><strong>Simulação histórica</strong><p class="muted">Não prevê resultados futuros. Riscos maiores amplificam drawdown, exposição e efeito composto.</p></section></main><style>
+    a{{color:var(--text)}}.eyebrow{{color:var(--green);font-size:12px;font-weight:800;text-transform:uppercase}}.controls,.selector,.chart-panel,.warning{{padding:20px;margin-bottom:18px}}form{{display:flex;flex-wrap:wrap;gap:14px;align-items:end}}label{{display:grid;gap:6px;color:var(--muted);font-size:12px}}input,select{{padding:10px;color:#fff;background:#000;border:1px solid var(--border);border-radius:7px}}.mode,.family-actions{{display:flex;flex-wrap:wrap;gap:6px}}button{{padding:9px 12px;border:1px solid var(--border);border-radius:7px;color:var(--muted);background:#090909}}button.selected,.primary{{color:#000;background:#fff}}.strategy-grid{{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}}.strategy-choice{{display:flex;align-items:center;gap:8px;padding:10px;border:1px solid #333;border-radius:7px;background:#101010}}.strategy-choice input{{accent-color:#fff}}.chart-heading{{display:flex;justify-content:space-between;gap:12px}}#chart{{width:100%;min-height:360px}}.legend{{display:flex;flex-wrap:wrap;gap:12px}}.legend span{{font-size:12px;color:var(--muted)}}.legend i{{display:inline-block;width:18px;height:3px;margin-right:6px}}.summaries{{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px}}.summary{{padding:16px}}.summary strong{{display:block;font-size:21px;margin:7px 0}}.summary small{{color:var(--muted)}}.warning{{border-left:3px solid var(--yellow)}}@media(max-width:760px){{.strategy-grid,.summaries{{grid-template-columns:1fr}}}}
+    </style><script>
+    const palette={{zigzag:'#a855f7',stochastic:'#3b82f6',multitimeframe:'#67e8f9',combined:'#ef4444'}};let mode='normalized';
+    const family=p=>p.includes('portfolio')?'combined':p.includes('zigzag')?'zigzag':p.includes('stochastic')?'stochastic':'multitimeframe';
+    document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{{document.querySelectorAll('[data-mode]').forEach(x=>x.classList.remove('selected'));b.classList.add('selected');mode=b.dataset.mode;simulate()}});
+    document.querySelectorAll('[data-family-button]').forEach(b=>b.onclick=()=>{{document.querySelectorAll(`.strategy-choice[data-family="${{b.dataset.familyButton}}"] input`).forEach(x=>x.checked=true);simulate()}});document.getElementById('clear').onclick=()=>{{document.querySelectorAll('.strategy-choice input').forEach(x=>x.checked=false);draw({{series:[]}})}};
+    const money=v=>new Intl.NumberFormat('pt-BR',{{style:'currency',currency:'USD'}}).format(v||0);
+    function draw(data){{const svg=document.getElementById('chart'),all=data.series.flatMap(s=>s.simulation.points.map(p=>+p.balance));if(!all.length){{svg.innerHTML='<text x="550" y="220" text-anchor="middle" fill="#999">Selecione uma estratégia</text>';document.getElementById('legend').innerHTML='';document.getElementById('summaries').innerHTML='';return}}const W=1100,H=460,L=92,R=22,T=20,B=42,lo=Math.min(...all),hi=Math.max(...all),days=data.series.flatMap(s=>s.simulation.points.map(p=>+new Date(p.day+'T00:00:00Z'))),a=Math.min(...days),z=Math.max(...days),x=v=>L+(v-a)*(W-L-R)/Math.max(z-a,1),y=v=>T+(hi-v)*(H-T-B)/Math.max(hi-lo,1),grid=[0,.25,.5,.75,1].map(q=>{{const v=hi-(hi-lo)*q,yy=y(v);return `<line x1="${{L}}" x2="${{W-R}}" y1="${{yy}}" y2="${{yy}}" stroke="#292929"/><text x="${{L-8}}" y="${{yy+4}}" text-anchor="end" fill="#999" font-size="11">${{money(v)}}</text>`}}).join('');svg.innerHTML=grid+data.series.map((s,i)=>{{const c=palette[family(s.strategy_profile)],dash=[null,'10 6','3 5','14 5 3 5'][i%4];return `<path d="${{s.simulation.points.map((p,j)=>`${{j?'L':'M'}} ${{x(+new Date(p.day+'T00:00:00Z'))}} ${{y(+p.balance)}}`).join(' ')}}" fill="none" stroke="${{c}}" stroke-width="3" ${{dash?`stroke-dasharray="${{dash}}"`:''}}/>`}}).join('');document.getElementById('legend').innerHTML=data.series.map(s=>`<span><i style="background:${{palette[family(s.strategy_profile)]}}"></i>${{s.bot_name}}</span>`).join('');document.getElementById('summaries').innerHTML=data.series.map(s=>`<article class="card summary"><small>${{s.bot_name}}</small><strong>${{money(s.simulation.final_balance)}}</strong><small>Lucro ${{money(s.simulation.net_pnl)}} · DD ${{s.simulation.max_drawdown_pct.toFixed(2)}}% · ${{s.simulation.trades_simulated}} trades</small></article>`).join('')}}
+    async function simulate(e){{if(e)e.preventDefault();const ids=[...document.querySelectorAll('.strategy-choice input:checked')].map(x=>x.value);if(!ids.length)return draw({{series:[]}});document.getElementById('status').textContent='Simulando...';const body={{bot_ids:ids,mode,days:+document.getElementById('days').value,initial_balance:+document.getElementById('capital').value,risk_tiers:[{{balance_threshold:0,risk_per_trade_pct:+document.getElementById('risk').value}}]}};const response=await fetch('/api/growth-comparison',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify(body)}});const data=await response.json();if(!response.ok)throw Error(data.detail||'Falha na simulação');draw(data);document.getElementById('status').textContent=data.series.length+' estratégias · '+(mode==='normalized'?'normalizado':'operacional')}}document.getElementById('form').onsubmit=e=>simulate(e).catch(err=>document.getElementById('status').textContent=err.message);simulate().catch(err=>document.getElementById('status').textContent=err.message);
+    </script>""")
+
+
+def render_history_page() -> HTMLResponse:
+    return _page("2Lotus | Histórico do ouro", """<main><header class="header"><div><a class="brand brand-compact" href="/bots" aria-label="2Lotus"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><h1>Histórico do ouro</h1><p class="muted">Acompanhamento da coleta horária de ticks XAUUSD na Dukascopy.</p></div><div class="live-state"><span class="state-dot" id="state-dot"></span><div><strong id="state-label">Verificando tarefa...</strong><small id="updated-label">Aguardando dados</small></div></div></header>
+    <section class="metric-grid"><article class="panel metric"><span>Progresso total</span><strong id="total-progress">—</strong><small id="collection-range">—</small></article><article class="panel metric"><span>Anos equivalentes baixados</span><strong id="equivalent-years">—</strong><small id="hours-complete">—</small></article><article class="panel metric"><span>Anos 100% completos</span><strong id="complete-years">—</strong><small id="years-total">—</small></article><article class="panel metric"><span>Previsão de conclusão</span><strong id="eta">—</strong><small id="rate">—</small></article></section>
+    <section class="panel overall"><div class="overall-heading"><div><p class="eyebrow">Cobertura total</p><h2 id="overall-label">Carregando manifesto...</h2></div><strong id="overall-percent">0%</strong></div><div class="track track-large"><span id="overall-bar"></span></div></section>
+    <section class="panel years-panel"><div class="section-heading"><div><p class="eyebrow">Linha histórica</p><h2>Progresso por ano</h2></div><p class="muted">Cada barra representa as horas disponíveis daquele ano.</p></div><div class="year-list" id="year-list"><p class="muted">Lendo os dados da coleta...</p></div></section>
+    <p class="muted footnote">A tela é somente leitura e atualiza automaticamente a cada 15 segundos. Horas sem negociação confirmadas pela fonte contam como processadas.</p></main><style>
+    .live-state{display:flex;align-items:center;gap:11px;padding:11px 14px;border:1px solid #273244;border-radius:9px;background:#0d131c}.live-state div{display:grid;gap:3px}.live-state small{color:var(--muted)}.state-dot{width:10px;height:10px;border-radius:50%;background:#687386;box-shadow:0 0 0 5px rgba(104,115,134,.12)}.state-dot.running{background:var(--green);box-shadow:0 0 0 5px rgba(65,211,146,.12)}.metric-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:13px;margin-bottom:18px}.metric{min-height:132px;padding:18px;display:flex;flex-direction:column}.metric span,.metric small{color:var(--muted);font-size:12px}.metric strong{margin:auto 0 7px;font-size:28px}.overall,.years-panel{padding:20px;margin-bottom:18px}.overall-heading,.section-heading{display:flex;align-items:flex-end;justify-content:space-between;gap:18px}.overall-heading h2,.section-heading h2{margin:0}.overall-heading>strong{font-size:30px;color:var(--green)}.eyebrow{margin-bottom:7px;color:#b9b0ff;font-size:11px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}.track{height:9px;overflow:hidden;border-radius:999px;background:#202938}.track span{display:block;width:0;height:100%;border-radius:inherit;background:linear-gradient(90deg,#5c7cfa,#41d392);transition:width .4s ease}.track-large{height:13px;margin-top:18px}.year-list{display:grid;gap:9px;margin-top:19px}.year-row{display:grid;grid-template-columns:58px minmax(180px,1fr) 76px 112px;gap:13px;align-items:center;padding:9px 11px;border:1px solid #202a39;border-radius:8px;background:#0c1118}.year-row.complete{border-color:rgba(65,211,146,.25)}.year-row strong{font-variant-numeric:tabular-nums}.year-row .percent{text-align:right;color:#d8deea}.year-row small{text-align:right;color:var(--muted)}.year-row.complete .percent{color:var(--green)}.footnote{font-size:12px}@media(max-width:980px){.metric-grid{grid-template-columns:repeat(2,1fr)}}@media(max-width:680px){.metric-grid{grid-template-columns:1fr}.live-state{width:100%}.year-row{grid-template-columns:48px 1fr 62px}.year-row small{display:none}.section-heading{align-items:flex-start;flex-direction:column}}
+    </style><script>
+    const number=value=>new Intl.NumberFormat('pt-BR').format(value||0);const dateTime=value=>value?new Date(value).toLocaleString('pt-BR',{timeZone:'UTC'})+' UTC':'Sem atualização';
+    const duration=seconds=>{if(seconds==null)return 'Calculando';const days=Math.floor(seconds/86400),hours=Math.floor(seconds%86400/3600);return days?days+'d '+hours+'h':hours+'h'};
+    function renderProgress(data){if(!data.available)throw Error('Manifesto da coleta ainda não está disponível.');document.getElementById('total-progress').textContent=data.progress_pct.toFixed(2)+'%';document.getElementById('collection-range').textContent=data.requested_start+' até '+data.requested_end;document.getElementById('equivalent-years').textContent=data.equivalent_years.toFixed(2)+' anos';document.getElementById('hours-complete').textContent=number(data.completed_hours)+' horas processadas';document.getElementById('complete-years').textContent=data.complete_years;document.getElementById('years-total').textContent='de '+data.total_years+' anos no intervalo';document.getElementById('eta').textContent=duration(data.eta_seconds);document.getElementById('rate').textContent=data.rate_hours_per_minute.toFixed(2)+' horas/min nos últimos 15 min';document.getElementById('overall-percent').textContent=data.progress_pct.toFixed(2)+'%';document.getElementById('overall-label').textContent=number(data.completed_hours)+' de '+number(data.expected_hours)+' horas';document.getElementById('overall-bar').style.width=data.progress_pct+'%';const dot=document.getElementById('state-dot');dot.classList.toggle('running',data.running);document.getElementById('state-label').textContent=data.running?'Download em andamento':'Coleta sem atividade recente';document.getElementById('updated-label').textContent='Última gravação: '+dateTime(data.updated_at);document.getElementById('year-list').innerHTML=[...data.years].reverse().map(year=>`<div class="year-row ${year.complete?'complete':''}"><strong>${year.year}</strong><div class="track"><span style="width:${year.progress_pct}%"></span></div><span class="percent">${year.progress_pct.toFixed(1)}%</span><small>${number(year.completed_hours)} / ${number(year.expected_hours)} h</small></div>`).join('')}
+    async function refreshProgress(){const response=await fetch('/api/history/progress');const data=await response.json();if(!response.ok)throw Error(data.detail||'Falha ao consultar o progresso.');renderProgress(data)}refreshProgress().catch(error=>document.getElementById('overall-label').textContent=error.message);setInterval(()=>refreshProgress().catch(()=>{}),15000);
+    </script>""", active_nav="history")
+
+
 def render_operations_page() -> HTMLResponse:
     return _page("2Lotus | Saúde operacional", """<main><header class="header"><div><a class="brand brand-compact" href="/bots"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><h1>Saúde operacional</h1><p class="muted">Heartbeat, mercado e snapshots das estratégias shadow.</p></div><div class="actions"><a href="/bots">Estratégias</a></div></header><section class="panel table"><table><thead><tr><th>Estratégia</th><th>Status</th><th>Último sucesso</th><th>Candle</th><th>Resposta / erro</th><th>Latência</th><th>Snapshot</th></tr></thead><tbody id="rows"><tr><td colspan="7" class="muted">Carregando...</td></tr></tbody></table></section><p id="updated" class="muted"></p></main><style>.actions a{color:var(--text)}.table{padding:0;overflow:auto}table{width:100%;min-width:950px;border-collapse:collapse}th,td{padding:15px;text-align:left;border-bottom:1px solid #292929}th{color:var(--muted);font-size:12px;text-transform:uppercase}.badge{padding:5px 8px;border-radius:999px;background:#222;font-size:11px}.healthy{color:var(--green)}.delayed,.market_closed{color:var(--yellow)}.stale{color:var(--red)}</style><script>const date=v=>v?new Date(v).toLocaleString('pt-BR',{timeZone:'UTC'})+' UTC':'-';fetch('/api/operations').then(r=>{if(!r.ok)throw Error('Falha ao carregar saúde.');return r.json()}).then(data=>{document.getElementById('rows').innerHTML=data.bots.map(b=>`<tr><td><strong>${escapeHtml(b.name)}</strong><br><small class="muted">${escapeHtml(b.bot_id)}</small></td><td><span class="badge ${escapeHtml(b.status)}">${escapeHtml(b.status.replaceAll('_',' '))}</span><br><small class="muted">${b.consecutive_errors||0} erros</small></td><td>${date(b.last_success_at_utc||b.last_request_at_utc)}<br><small class="muted">tentativa ${date(b.last_attempt_at_utc)}</small></td><td>${date(b.last_candle_at_utc)}<br><small class="muted">atraso ${b.market_lag_seconds==null?'-':Math.round(b.market_lag_seconds/60)+' min'}</small></td><td>${escapeHtml(b.last_error_code||b.last_action||'-')}<br><small class="muted">${escapeHtml(b.last_error||b.last_reason||'')}</small></td><td>${b.last_latency_ms==null?'-':Number(b.last_latency_ms).toFixed(0)+' ms'}</td><td>${date(b.snapshot_updated_at_utc)}<br><small class="muted">dados até ${date(b.market_data_through_utc)}</small></td></tr>`).join('');document.getElementById('updated').textContent='Atualizado em '+date(data.updated_at_utc)}).catch(e=>document.getElementById('rows').textContent=e.message)</script>""")
 
 
 def render_comparison_page(bots: list[BotCatalogItem]) -> HTMLResponse:
     rows = "".join(
-        f'''<tr data-bot-id="{escape(bot.id)}"><td><a href="/bots/{escape(bot.id)}">{escape(bot.name)}</a><small>{escape(bot.strategy_profile)}</small></td><td>{escape(bot.symbol)} · {escape(bot.timeframe)}</td><td data-field="trades">-</td><td data-field="open">-</td><td data-field="win-rate">-</td><td data-field="profit-factor">-</td><td data-field="net-pnl">-</td><td data-field="latest">-</td></tr>'''
+        f'''<tr data-bot-id="{escape(bot.id)}"><td><a href="/bots/{escape(bot.id)}">{escape(bot.name)}</a>{f'<small>{escape(bot.subtitle)}</small>' if bot.subtitle else ''}</td><td>{escape(bot.symbol)} · {escape(bot.timeframe)}</td><td data-field="trades">-</td><td data-field="open">-</td><td data-field="win-rate">-</td><td data-field="profit-factor">-</td><td data-field="net-pnl">-</td><td data-field="latest">-</td></tr>'''
         for bot in bots
     ) or '<tr><td colspan="8" class="muted">Nenhum bot foi cadastrado.</td></tr>'
-    return _page("2Lotus | Comparação", f"""<main><header class="header"><div><a class="brand brand-compact" href="/bots" aria-label="2Lotus"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><h1>Comparação das estratégias</h1><p class="muted">Todos os resultados abaixo são paper trades enquanto o modo shadow estiver ativo.</p></div><div class="actions"><a href="/bots">Estratégias</a><form method="post" action="/logout"><button class="link-button" type="submit">Sair</button></form><p class="muted" id="updated-at">Carregando...</p></div></header>
-    <section class="summary-grid"><article class="panel"><p class="muted">Estratégias ativas</p><strong>{len(bots)}</strong></article><article class="panel"><p class="muted">Mercado acompanhado</p><strong>XAUUSD · M5</strong></article><article class="panel"><p class="muted">Execução</p><strong class="yellow">Shadow</strong></article></section>
+    return _page("2Lotus | Comparação", f"""<main><header class="header"><div><a class="brand brand-compact" href="/bots" aria-label="2Lotus"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><h1>Comparação das estratégias</h1><p class="muted">Compare os replays históricos sob a mesma regra de risco.</p></div><div class="actions"><a href="/bots">Estratégias</a><form method="post" action="/logout"><button class="link-button" type="submit">Sair</button></form><p class="muted" id="updated-at">Carregando...</p></div></header>
+    <section class="comparison-toolbar panel"><div><p class="eyebrow">Período analisado</p><div class="period-buttons" role="group" aria-label="Período da comparação"><button type="button" data-days="90">90 dias</button><button type="button" data-days="365" class="selected">1 ano</button><button type="button" data-days="1095">3 anos</button></div></div><p class="muted" id="comparison-status">Carregando resultados históricos...</p></section>
+    <section class="summary-grid"><article class="panel"><p class="muted">Estratégias ativas</p><strong>{len(bots)}</strong></article><article class="panel"><p class="muted">Mercado acompanhado</p><strong>XAUUSD · M5</strong></article><article class="panel"><p class="muted">Risco comparável</p><strong class="green">1% Risk/Trade</strong></article></section>
     <section class="panel table-panel"><div class="table-wrap"><table><thead><tr><th>Estratégia</th><th>Mercado</th><th>Fechados</th><th>Abertos</th><th>Win rate</th><th>Profit factor</th><th>PnL líquido</th><th>Último evento</th></tr></thead><tbody>{rows}</tbody></table></div></section>
     <p class="muted note">As posições são isoladas por bot e variante. Um sinal de uma estratégia não bloqueia nem encerra posições das demais.</p></main><style>
-    .actions {{ display:flex; justify-content:flex-end; align-items:flex-start; gap:14px; flex-wrap:wrap; }} .actions a {{ color:var(--text); }} .actions p {{ width:100%; text-align:right; }} .summary-grid {{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:18px; }} .summary-grid .panel {{ padding:18px; }} .summary-grid strong {{ display:block; font-size:24px; }} .table-panel {{ padding:0; overflow:hidden; }} .table-wrap {{ overflow-x:auto; }} table {{ width:100%; border-collapse:collapse; min-width:980px; }} th,td {{ padding:16px; text-align:left; border-bottom:1px solid rgba(255,255,255,.16); }} th {{ color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.05em; }} td a {{ color:var(--text); font-weight:700; }} td small {{ display:block; margin-top:5px; color:var(--muted); }} .green {{ color:var(--green); }} .red {{ color:var(--red); }} .yellow {{ color:var(--yellow); }} .note {{ margin:18px 2px 0; }} @media(max-width:720px) {{ .summary-grid {{ grid-template-columns:1fr; }} }}
+    .actions {{ display:flex; justify-content:flex-end; align-items:flex-start; gap:14px; flex-wrap:wrap; }} .actions a {{ color:var(--text); }} .actions p {{ width:100%; text-align:right; }} .comparison-toolbar {{ display:flex; justify-content:space-between; align-items:center; gap:18px; padding:18px; margin-bottom:18px; }} .comparison-toolbar p {{ margin:0; }} .eyebrow {{ margin-bottom:9px!important; color:var(--green); font-size:11px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }} .period-buttons {{ display:flex; gap:7px; }} .period-buttons button {{ padding:8px 12px; border:1px solid #2a3547; border-radius:7px; color:var(--muted); background:#0b1017; font-weight:700; }} .period-buttons button.selected {{ color:#07110d; border-color:var(--green); background:var(--green); }} .summary-grid {{ display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:14px; margin-bottom:18px; }} .summary-grid .panel {{ padding:18px; }} .summary-grid strong {{ display:block; font-size:24px; }} .table-panel {{ padding:0; overflow:hidden; }} .table-wrap {{ overflow-x:auto; }} table {{ width:100%; border-collapse:collapse; min-width:980px; }} th,td {{ padding:16px; text-align:left; border-bottom:1px solid rgba(255,255,255,.16); }} th {{ color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.05em; }} td a {{ color:var(--text); font-weight:700; }} td small {{ display:block; margin-top:5px; color:var(--muted); }} .green {{ color:var(--green); }} .red {{ color:var(--red); }} .yellow {{ color:var(--yellow); }} .note {{ margin:18px 2px 0; }} @media(max-width:720px) {{ .comparison-toolbar {{ align-items:flex-start; flex-direction:column; }} .summary-grid {{ grid-template-columns:1fr; }} }}
     </style><script>
     const money = value => new Intl.NumberFormat('pt-BR', {{style:'currency',currency:'USD'}}).format(value || 0);
     const date = value => value ? new Date(value).toLocaleString('pt-BR', {{timeZone:'UTC'}}) + ' UTC' : 'Sem eventos';
     const color = value => value > 0 ? 'green' : value < 0 ? 'red' : 'yellow';
+    let comparisonDays = 365;
     async function loadComparison() {{
-      const response = await fetch('/api/compare');
+      document.getElementById('comparison-status').textContent = 'Carregando resultados históricos...';
+      const response = await fetch(`/api/equity-comparison?symbol=XAUUSD&days=${{comparisonDays}}&mode=normalized`);
       if (!response.ok) throw new Error('Não foi possível carregar a comparação.');
       const data = await response.json();
-      for (const bot of data.bots) {{
-        const row = document.querySelector(`[data-bot-id="${{bot.id}}"]`);
+      document.querySelectorAll('[data-bot-id]').forEach(row => row.querySelectorAll('[data-field]').forEach(cell => cell.textContent = '-'));
+      for (const bot of data.series) {{
+        const row = document.querySelector(`[data-bot-id="${{bot.bot_id}}"]`);
         if (!row) continue;
         const summary = bot.summary;
         row.querySelector('[data-field="trades"]').textContent = summary.trades_count;
@@ -131,11 +366,20 @@ def render_comparison_page(bots: list[BotCatalogItem]) -> HTMLResponse:
         row.querySelector('[data-field="win-rate"]').textContent = summary.win_rate_pct.toFixed(2) + '%';
         row.querySelector('[data-field="profit-factor"]').textContent = summary.profit_factor.toFixed(2);
         const pnl = row.querySelector('[data-field="net-pnl"]'); pnl.textContent = money(summary.net_pnl); pnl.className = color(summary.net_pnl);
-        row.querySelector('[data-field="latest"]').textContent = date(bot.latest_trade_at_utc);
+        const latest = bot.points.length ? bot.points[bot.points.length - 1].day + 'T00:00:00Z' : null;
+        row.querySelector('[data-field="latest"]').textContent = date(latest);
       }}
+      const missing = data.missing_bot_ids.length;
+      document.getElementById('comparison-status').textContent = data.series.length + ' estratégias carregadas' + (missing ? ' · ' + missing + ' sem histórico neste período' : '');
       document.getElementById('updated-at').textContent = 'Atualizado em ' + date(data.updated_at_utc);
     }}
-    loadComparison().catch(error => document.getElementById('updated-at').textContent = error.message);
+    document.querySelectorAll('[data-days]').forEach(button => button.addEventListener('click', () => {{
+      document.querySelectorAll('[data-days]').forEach(item => item.classList.remove('selected'));
+      button.classList.add('selected'); comparisonDays = Number(button.dataset.days);
+      loadComparison().catch(showComparisonError);
+    }}));
+    function showComparisonError(error) {{ document.getElementById('comparison-status').textContent = error.message; document.getElementById('updated-at').textContent = 'Falha ao atualizar'; }}
+    loadComparison().catch(showComparisonError);
     </script>""")
 
 
@@ -150,7 +394,7 @@ def render_strategy_description(description: str) -> str:
 def _render_results_page_legacy(bot: BotCatalogItem) -> HTMLResponse:
     bot_id = escape(bot.id)
     strategy_description = render_strategy_description(bot.strategy_description or bot.description)
-    return _page(f"{bot.name} | Resultados", f"""<main><header class="header"><div><a class="brand brand-compact" href="/bots" aria-label="Voltar para todos os bots"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><p class="muted">{escape(bot.symbol)} · {escape(bot.timeframe)} · {escape(bot.strategy_profile)}</p><h1>{escape(bot.name)}</h1><p class="muted">{escape(bot.description)}</p></div><div class="actions"><a href="/compare">Comparar</a><a href="/bots">Todos os bots</a><form method="post" action="/logout"><button class="link-button" type="submit">Sair</button></form><p class="muted" id="latest-trade">Carregando...</p></div></header>
+    return _page(f"{bot.name} | Resultados", f"""<main><header class="header"><div><a class="brand brand-compact" href="/bots" aria-label="Voltar para todos os bots"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><p class="muted">{escape(bot.symbol)} · {escape(bot.timeframe)} · {escape(bot.strategy_profile)}</p><h1>{escape(bot.name)}</h1>{_subtitle_html(bot, "page-subtitle")}<p class="muted">{escape(bot.description)}</p></div><div class="actions"><a href="/compare">Comparar</a><a href="/bots">Todos os bots</a><form method="post" action="/logout"><button class="link-button" type="submit">Sair</button></form><p class="muted" id="latest-trade">Carregando...</p></div></header>
     <section class="cards"><article class="card"><p class="muted">PnL líquido</p><strong id="net-pnl">-</strong><span id="gross-pnl"></span></article><article class="card"><p class="muted">Trades fechados</p><strong id="trades-count">-</strong><span id="open-positions"></span></article><article class="card"><p class="muted">Win rate</p><strong id="win-rate">-</strong><span id="wl-breakdown"></span></article><article class="card"><p class="muted">Profit factor</p><strong id="profit-factor">-</strong><span id="avg-rr"></span></article><article class="card"><p class="muted">Melhor / pior</p><strong id="best-trade">-</strong><span id="worst-trade"></span></article></section>
     <section class="panel strategy-card"><p class="muted">Estratégia utilizada</p><h2>{escape(bot.strategy_profile)}</h2>{strategy_description}</section>
     <section class="panel chart-panel"><div class="chart-heading"><div><h2>Preço e operações</h2><p class="muted">Arraste para voltar ou avançar no tempo; use o scroll para alterar a quantidade de candles visíveis.</p></div><div class="legend"><label>Tempo <select id="chart-timeframe"><option value="M5">M5</option><option value="M15">M15</option><option value="H1">H1</option></select></label><span><i class="entry-buy"></i>Compra</span><span><i class="entry-sell"></i>Venda</span><span><i class="exit"></i>Fechamento</span><button id="chart-reset" type="button">Mais recente</button></div></div><div id="market-chart-empty" class="muted">Carregando gráfico...</div><svg id="market-chart" viewBox="0 0 1000 360" role="img" aria-label="Gráfico de preço com operações do bot" tabindex="0" hidden></svg><input id="chart-timeline" type="range" min="0" value="0" aria-label="Navegar no histórico do gráfico"></section>
@@ -224,7 +468,7 @@ def _render_results_page_legacy(bot: BotCatalogItem) -> HTMLResponse:
 def render_results_page(bot: BotCatalogItem) -> HTMLResponse:
     bot_id = escape(bot.id)
     strategy_description = render_strategy_description(bot.strategy_description or bot.description)
-    return _page(f"{bot.name} | Resultados", f"""<main><header class="header"><div><a class="brand brand-compact" href="/bots" aria-label="Voltar para estratégias"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><p class="muted">{escape(bot.symbol)} · {escape(bot.timeframe)} · {escape(bot.strategy_profile)}</p><h1>{escape(bot.name)}</h1><p class="muted">{escape(bot.description)}</p></div><div class="actions"><a href="/compare">Comparar</a><a href="/bots">Estratégias</a><form method="post" action="/logout"><button class="link-button" type="submit">Sair</button></form></div></header>
+    return _page(f"{bot.name} | Resultados", f"""<main><header class="header"><div><a class="brand brand-compact" href="/bots" aria-label="Voltar para estratégias"><img src="/static/brand/logo-1-white-no-bg.png" alt="2Lotus"></a><p class="muted">{escape(bot.symbol)} · {escape(bot.timeframe)} · {escape(bot.strategy_profile)}</p><h1>{escape(bot.name)}</h1>{_subtitle_html(bot, "page-subtitle")}<p class="muted">{escape(bot.description)}</p></div><div class="actions"><a href="/compare">Comparar</a><a href="/bots">Estratégias</a><form method="post" action="/logout"><button class="link-button" type="submit">Sair</button></form></div></header>
     <section class="mode panel"><div><p class="eyebrow">Fonte dos resultados</p><select id="result-mode"><option value="replay" selected>Validação histórica</option><option value="live">Acompanhamento ao vivo / shadow</option></select></div><label>Período <select id="replay-days"><option value="30">30 dias</option><option value="120">120 dias</option><option value="365" selected>365 dias</option></select></label><p id="period-label" class="muted">Carregando validação histórica...</p></section>
     <section class="cards"><article class="card"><p class="muted">PnL líquido</p><strong id="net-pnl">-</strong><span id="gross-pnl"></span></article><article class="card"><p class="muted">Trades fechados</p><strong id="trades-count">-</strong><span id="open-positions"></span></article><article class="card"><p class="muted">Win rate</p><strong id="win-rate">-</strong><span id="wl-breakdown"></span></article><article class="card"><p class="muted">Profit factor</p><strong id="profit-factor">-</strong><span id="avg-rr"></span></article><article class="card"><p class="muted">Gatilhos elegíveis</p><strong id="eligible-count">-</strong><span id="candidate-count"></span></article></section>
     <section class="panel strategy-card"><p class="muted">Estratégia utilizada</p><h2>{escape(bot.strategy_profile)}</h2>{strategy_description}</section>

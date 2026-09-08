@@ -1,0 +1,2127 @@
+{
+  "method": "Rule selected on paired 2025 controls, then scanned at every 1s market observation without timestamp matching.",
+  "dataset_version": "20260907T154410Z-c1f0ba29b854",
+  "frozen_rule": {
+    "directional_move_60s_min_pips": 47.0,
+    "directional_move_900s_min_pips": 190.0,
+    "session_utc": "03:00-19:00",
+    "rearm": "qualification must become false",
+    "cooldown_seconds_after_exit": 180
+  },
+  "execution_model": {
+    "resolution": "1s",
+    "stop_pips": 240.0,
+    "target_pips": 1000.0,
+    "max_hold_seconds": 60,
+    "lot": 0.2,
+    "round_turn_commission": 0.9
+  },
+  "training_2025_oct_dec": {
+    "trades": 10785,
+    "win_rate_pct": 27.12,
+    "net_pnl": -159943.07,
+    "profit_factor": 0.312,
+    "exits": {
+      "stop": 2242,
+      "target": 12,
+      "time_60s": 8531
+    }
+  },
+  "holdout_2026_jan_apr": {
+    "trades": 18263,
+    "win_rate_pct": 27.01,
+    "net_pnl": -318737.87,
+    "profit_factor": 0.366,
+    "exits": {
+      "stop": 6482,
+      "target": 124,
+      "time_60s": 11657
+    }
+  },
+  "holdout_2026_may_sep": {
+    "trades": 17676,
+    "win_rate_pct": 28.0,
+    "net_pnl": -244160.07,
+    "profit_factor": 0.332,
+    "exits": {
+      "stop": 3408,
+      "target": 22,
+      "time_60s": 14246
+    }
+  },
+  "overall": {
+    "trades": 46724,
+    "win_rate_pct": 27.41,
+    "net_pnl": -722841.01,
+    "profit_factor": 0.343,
+    "exits": {
+      "stop": 12132,
+      "target": 158,
+      "time_60s": 34434
+    }
+  },
+  "countertrend_exhaustion_test": {
+    "training_2025_oct_dec": {
+      "trades": 10785,
+      "win_rate_pct": 28.73,
+      "net_pnl": -158756.6,
+      "profit_factor": 0.3,
+      "exits": {
+        "stop": 2256,
+        "target": 4,
+        "time_60s": 8525
+      }
+    },
+    "holdout_2026_jan_apr": {
+      "trades": 18263,
+      "win_rate_pct": 29.13,
+      "net_pnl": -300290.75,
+      "profit_factor": 0.386,
+      "exits": {
+        "stop": 6406,
+        "target": 97,
+        "time_60s": 11760
+      }
+    },
+    "holdout_2026_may_sep": {
+      "trades": 17676,
+      "win_rate_pct": 30.99,
+      "net_pnl": -223862.5,
+      "profit_factor": 0.353,
+      "exits": {
+        "stop": 3396,
+        "target": 13,
+        "time_60s": 14267
+      }
+    },
+    "overall": {
+      "trades": 46724,
+      "win_rate_pct": 29.74,
+      "net_pnl": -682909.85,
+      "profit_factor": 0.357,
+      "exits": {
+        "stop": 12058,
+        "target": 114,
+        "time_60s": 34552
+      }
+    }
+  },
+  "modeled_spread_scenarios": {
+    "spread_0_pips": {
+      "training_2025_oct_dec": {
+        "trades": 10785,
+        "win_rate_pct": 46.12,
+        "net_pnl": -11965.1,
+        "profit_factor": 0.914,
+        "exits": {
+          "stop": 1190,
+          "target": 19,
+          "time_60s": 9576
+        }
+      },
+      "holdout_2026_jan_apr": {
+        "trades": 18263,
+        "win_rate_pct": 44.71,
+        "net_pnl": -19286.17,
+        "profit_factor": 0.943,
+        "exits": {
+          "stop": 4120,
+          "target": 272,
+          "time_60s": 13871
+        }
+      },
+      "holdout_2026_may_sep": {
+        "trades": 17676,
+        "win_rate_pct": 45.91,
+        "net_pnl": -25144.5,
+        "profit_factor": 0.89,
+        "exits": {
+          "stop": 1844,
+          "target": 36,
+          "time_60s": 15796
+        }
+      },
+      "overall": {
+        "trades": 46724,
+        "win_rate_pct": 45.49,
+        "net_pnl": -56395.77,
+        "profit_factor": 0.921,
+        "exits": {
+          "stop": 7154,
+          "target": 327,
+          "time_60s": 39243
+        }
+      }
+    },
+    "spread_10_pips": {
+      "training_2025_oct_dec": {
+        "trades": 10785,
+        "win_rate_pct": 42.83,
+        "net_pnl": -33461.76,
+        "profit_factor": 0.779,
+        "exits": {
+          "stop": 1299,
+          "target": 19,
+          "time_60s": 9467
+        }
+      },
+      "holdout_2026_jan_apr": {
+        "trades": 18263,
+        "win_rate_pct": 42.12,
+        "net_pnl": -56935.23,
+        "profit_factor": 0.842,
+        "exits": {
+          "stop": 4370,
+          "target": 262,
+          "time_60s": 13631
+        }
+      },
+      "holdout_2026_may_sep": {
+        "trades": 17676,
+        "win_rate_pct": 42.65,
+        "net_pnl": -60130.96,
+        "profit_factor": 0.758,
+        "exits": {
+          "stop": 2037,
+          "target": 35,
+          "time_60s": 15604
+        }
+      },
+      "overall": {
+        "trades": 46724,
+        "win_rate_pct": 42.48,
+        "net_pnl": -150527.95,
+        "profit_factor": 0.802,
+        "exits": {
+          "stop": 7706,
+          "target": 316,
+          "time_60s": 38702
+        }
+      }
+    }
+  },
+  "causal_strategy_intersections": {
+    "zigzag_v1_same_side_5s": {
+      "training_2025_oct_dec": {
+        "trades": 5,
+        "win_rate_pct": 0.0,
+        "net_pnl": -77.25,
+        "profit_factor": 0.0,
+        "exits": {
+          "stop": 0,
+          "target": 0,
+          "time_60s": 5
+        }
+      },
+      "holdout_2026_jan_apr": {
+        "trades": 6,
+        "win_rate_pct": 0.0,
+        "net_pnl": -251.67,
+        "profit_factor": 0.0,
+        "exits": {
+          "stop": 4,
+          "target": 0,
+          "time_60s": 2
+        }
+      },
+      "holdout_2026_may_sep": {
+        "trades": 12,
+        "win_rate_pct": 25.0,
+        "net_pnl": -389.01,
+        "profit_factor": 0.071,
+        "exits": {
+          "stop": 8,
+          "target": 0,
+          "time_60s": 4
+        }
+      },
+      "overall": {
+        "trades": 23,
+        "win_rate_pct": 13.04,
+        "net_pnl": -717.93,
+        "profit_factor": 0.04,
+        "exits": {
+          "stop": 12,
+          "target": 0,
+          "time_60s": 11
+        }
+      }
+    },
+    "stochastic_v3_sell_5s": {
+      "training_2025_oct_dec": {
+        "trades": 0,
+        "win_rate_pct": null,
+        "net_pnl": 0,
+        "profit_factor": null,
+        "exits": {
+          "stop": 0,
+          "target": 0,
+          "time_60s": 0
+        }
+      },
+      "holdout_2026_jan_apr": {
+        "trades": 0,
+        "win_rate_pct": null,
+        "net_pnl": 0,
+        "profit_factor": null,
+        "exits": {
+          "stop": 0,
+          "target": 0,
+          "time_60s": 0
+        }
+      },
+      "holdout_2026_may_sep": {
+        "trades": 0,
+        "win_rate_pct": null,
+        "net_pnl": 0,
+        "profit_factor": null,
+        "exits": {
+          "stop": 0,
+          "target": 0,
+          "time_60s": 0
+        }
+      },
+      "overall": {
+        "trades": 0,
+        "win_rate_pct": null,
+        "net_pnl": 0,
+        "profit_factor": null,
+        "exits": {
+          "stop": 0,
+          "target": 0,
+          "time_60s": 0
+        }
+      }
+    },
+    "v1_or_stochastic_v3_5s": {
+      "training_2025_oct_dec": {
+        "trades": 5,
+        "win_rate_pct": 0.0,
+        "net_pnl": -77.25,
+        "profit_factor": 0.0,
+        "exits": {
+          "stop": 0,
+          "target": 0,
+          "time_60s": 5
+        }
+      },
+      "holdout_2026_jan_apr": {
+        "trades": 6,
+        "win_rate_pct": 0.0,
+        "net_pnl": -251.67,
+        "profit_factor": 0.0,
+        "exits": {
+          "stop": 4,
+          "target": 0,
+          "time_60s": 2
+        }
+      },
+      "holdout_2026_may_sep": {
+        "trades": 12,
+        "win_rate_pct": 25.0,
+        "net_pnl": -389.01,
+        "profit_factor": 0.071,
+        "exits": {
+          "stop": 8,
+          "target": 0,
+          "time_60s": 4
+        }
+      },
+      "overall": {
+        "trades": 23,
+        "win_rate_pct": 13.04,
+        "net_pnl": -717.93,
+        "profit_factor": 0.04,
+        "exits": {
+          "stop": 12,
+          "target": 0,
+          "time_60s": 11
+        }
+      }
+    },
+    "zigzag_v1_same_side_30s": {
+      "training_2025_oct_dec": {
+        "trades": 24,
+        "win_rate_pct": 20.83,
+        "net_pnl": -373.44,
+        "profit_factor": 0.349,
+        "exits": {
+          "stop": 7,
+          "target": 0,
+          "time_60s": 17
+        }
+      },
+      "holdout_2026_jan_apr": {
+        "trades": 23,
+        "win_rate_pct": 17.39,
+        "net_pnl": -698.12,
+        "profit_factor": 0.229,
+        "exits": {
+          "stop": 13,
+          "target": 0,
+          "time_60s": 10
+        }
+      },
+      "holdout_2026_may_sep": {
+        "trades": 38,
+        "win_rate_pct": 31.58,
+        "net_pnl": -676.53,
+        "profit_factor": 0.355,
+        "exits": {
+          "stop": 16,
+          "target": 0,
+          "time_60s": 22
+        }
+      },
+      "overall": {
+        "trades": 85,
+        "win_rate_pct": 24.71,
+        "net_pnl": -1748.09,
+        "profit_factor": 0.308,
+        "exits": {
+          "stop": 36,
+          "target": 0,
+          "time_60s": 49
+        }
+      }
+    },
+    "stochastic_v3_sell_30s": {
+      "training_2025_oct_dec": {
+        "trades": 1,
+        "win_rate_pct": 0.0,
+        "net_pnl": -0.71,
+        "profit_factor": 0.0,
+        "exits": {
+          "stop": 0,
+          "target": 0,
+          "time_60s": 1
+        }
+      },
+      "holdout_2026_jan_apr": {
+        "trades": 0,
+        "win_rate_pct": null,
+        "net_pnl": 0,
+        "profit_factor": null,
+        "exits": {
+          "stop": 0,
+          "target": 0,
+          "time_60s": 0
+        }
+      },
+      "holdout_2026_may_sep": {
+        "trades": 1,
+        "win_rate_pct": 100.0,
+        "net_pnl": 2.73,
+        "profit_factor": null,
+        "exits": {
+          "stop": 0,
+          "target": 0,
+          "time_60s": 1
+        }
+      },
+      "overall": {
+        "trades": 2,
+        "win_rate_pct": 50.0,
+        "net_pnl": 2.02,
+        "profit_factor": 3.845,
+        "exits": {
+          "stop": 0,
+          "target": 0,
+          "time_60s": 2
+        }
+      }
+    },
+    "v1_or_stochastic_v3_30s": {
+      "training_2025_oct_dec": {
+        "trades": 25,
+        "win_rate_pct": 20.0,
+        "net_pnl": -374.15,
+        "profit_factor": 0.349,
+        "exits": {
+          "stop": 7,
+          "target": 0,
+          "time_60s": 18
+        }
+      },
+      "holdout_2026_jan_apr": {
+        "trades": 23,
+        "win_rate_pct": 17.39,
+        "net_pnl": -698.12,
+        "profit_factor": 0.229,
+        "exits": {
+          "stop": 13,
+          "target": 0,
+          "time_60s": 10
+        }
+      },
+      "holdout_2026_may_sep": {
+        "trades": 39,
+        "win_rate_pct": 33.33,
+        "net_pnl": -673.8,
+        "profit_factor": 0.358,
+        "exits": {
+          "stop": 16,
+          "target": 0,
+          "time_60s": 23
+        }
+      },
+      "overall": {
+        "trades": 87,
+        "win_rate_pct": 25.29,
+        "net_pnl": -1746.07,
+        "profit_factor": 0.309,
+        "exits": {
+          "stop": 36,
+          "target": 0,
+          "time_60s": 51
+        }
+      }
+    },
+    "zigzag_v1_same_side_60s": {
+      "training_2025_oct_dec": {
+        "trades": 35,
+        "win_rate_pct": 28.57,
+        "net_pnl": -478.31,
+        "profit_factor": 0.383,
+        "exits": {
+          "stop": 10,
+          "target": 0,
+          "time_60s": 25
+        }
+      },
+      "holdout_2026_jan_apr": {
+        "trades": 43,
+        "win_rate_pct": 23.26,
+        "net_pnl": -952.21,
+        "profit_factor": 0.351,
+        "exits": {
+          "stop": 22,
+          "target": 0,
+          "time_60s": 21
+        }
+      },
+      "holdout_2026_may_sep": {
+        "trades": 56,
+        "win_rate_pct": 35.71,
+        "net_pnl": -624.46,
+        "profit_factor": 0.532,
+        "exits": {
+          "stop": 18,
+          "target": 0,
+          "time_60s": 38
+        }
+      },
+      "overall": {
+        "trades": 134,
+        "win_rate_pct": 29.85,
+        "net_pnl": -2054.98,
+        "profit_factor": 0.425,
+        "exits": {
+          "stop": 50,
+          "target": 0,
+          "time_60s": 84
+        }
+      }
+    },
+    "stochastic_v3_sell_60s": {
+      "training_2025_oct_dec": {
+        "trades": 4,
+        "win_rate_pct": 50.0,
+        "net_pnl": -3.24,
+        "profit_factor": 0.92,
+        "exits": {
+          "stop": 0,
+          "target": 0,
+          "time_60s": 4
+        }
+      },
+      "holdout_2026_jan_apr": {
+        "trades": 3,
+        "win_rate_pct": 0.0,
+        "net_pnl": -85.47,
+        "profit_factor": 0.0,
+        "exits": {
+          "stop": 1,
+          "target": 0,
+          "time_60s": 2
+        }
+      },
+      "holdout_2026_may_sep": {
+        "trades": 3,
+        "win_rate_pct": 100.0,
+        "net_pnl": 77.25,
+        "profit_factor": null,
+        "exits": {
+          "stop": 0,
+          "target": 0,
+          "time_60s": 3
+        }
+      },
+      "overall": {
+        "trades": 10,
+        "win_rate_pct": 50.0,
+        "net_pnl": -11.46,
+        "profit_factor": 0.909,
+        "exits": {
+          "stop": 1,
+          "target": 0,
+          "time_60s": 9
+        }
+      }
+    },
+    "v1_or_stochastic_v3_60s": {
+      "training_2025_oct_dec": {
+        "trades": 39,
+        "win_rate_pct": 30.77,
+        "net_pnl": -481.55,
+        "profit_factor": 0.41,
+        "exits": {
+          "stop": 10,
+          "target": 0,
+          "time_60s": 29
+        }
+      },
+      "holdout_2026_jan_apr": {
+        "trades": 46,
+        "win_rate_pct": 21.74,
+        "net_pnl": -1037.68,
+        "profit_factor": 0.332,
+        "exits": {
+          "stop": 23,
+          "target": 0,
+          "time_60s": 23
+        }
+      },
+      "holdout_2026_may_sep": {
+        "trades": 59,
+        "win_rate_pct": 38.98,
+        "net_pnl": -547.21,
+        "profit_factor": 0.59,
+        "exits": {
+          "stop": 18,
+          "target": 0,
+          "time_60s": 41
+        }
+      },
+      "overall": {
+        "trades": 144,
+        "win_rate_pct": 31.25,
+        "net_pnl": -2066.44,
+        "profit_factor": 0.442,
+        "exits": {
+          "stop": 51,
+          "target": 0,
+          "time_60s": 93
+        }
+      }
+    },
+    "zigzag_v1_same_side_300s": {
+      "training_2025_oct_dec": {
+        "trades": 167,
+        "win_rate_pct": 28.14,
+        "net_pnl": -2409.68,
+        "profit_factor": 0.331,
+        "exits": {
+          "stop": 39,
+          "target": 0,
+          "time_60s": 128
+        }
+      },
+      "holdout_2026_jan_apr": {
+        "trades": 238,
+        "win_rate_pct": 20.17,
+        "net_pnl": -5990.66,
+        "profit_factor": 0.26,
+        "exits": {
+          "stop": 110,
+          "target": 1,
+          "time_60s": 127
+        }
+      },
+      "holdout_2026_may_sep": {
+        "trades": 260,
+        "win_rate_pct": 28.85,
+        "net_pnl": -3762.19,
+        "profit_factor": 0.347,
+        "exits": {
+          "stop": 63,
+          "target": 0,
+          "time_60s": 197
+        }
+      },
+      "overall": {
+        "trades": 665,
+        "win_rate_pct": 25.56,
+        "net_pnl": -12162.53,
+        "profit_factor": 0.303,
+        "exits": {
+          "stop": 212,
+          "target": 1,
+          "time_60s": 452
+        }
+      }
+    },
+    "stochastic_v3_sell_300s": {
+      "training_2025_oct_dec": {
+        "trades": 8,
+        "win_rate_pct": 25.0,
+        "net_pnl": -81.5,
+        "profit_factor": 0.315,
+        "exits": {
+          "stop": 1,
+          "target": 0,
+          "time_60s": 7
+        }
+      },
+      "holdout_2026_jan_apr": {
+        "trades": 16,
+        "win_rate_pct": 12.5,
+        "net_pnl": -385.74,
+        "profit_factor": 0.08,
+        "exits": {
+          "stop": 5,
+          "target": 0,
+          "time_60s": 11
+        }
+      },
+      "holdout_2026_may_sep": {
+        "trades": 16,
+        "win_rate_pct": 43.75,
+        "net_pnl": -217.07,
+        "profit_factor": 0.381,
+        "exits": {
+          "stop": 3,
+          "target": 0,
+          "time_60s": 13
+        }
+      },
+      "overall": {
+        "trades": 40,
+        "win_rate_pct": 27.5,
+        "net_pnl": -684.31,
+        "profit_factor": 0.23,
+        "exits": {
+          "stop": 9,
+          "target": 0,
+          "time_60s": 31
+        }
+      }
+    },
+    "v1_or_stochastic_v3_300s": {
+      "training_2025_oct_dec": {
+        "trades": 175,
+        "win_rate_pct": 28.0,
+        "net_pnl": -2491.18,
+        "profit_factor": 0.331,
+        "exits": {
+          "stop": 40,
+          "target": 0,
+          "time_60s": 135
+        }
+      },
+      "holdout_2026_jan_apr": {
+        "trades": 254,
+        "win_rate_pct": 19.69,
+        "net_pnl": -6376.4,
+        "profit_factor": 0.251,
+        "exits": {
+          "stop": 115,
+          "target": 1,
+          "time_60s": 138
+        }
+      },
+      "holdout_2026_may_sep": {
+        "trades": 276,
+        "win_rate_pct": 29.71,
+        "net_pnl": -3979.26,
+        "profit_factor": 0.349,
+        "exits": {
+          "stop": 66,
+          "target": 0,
+          "time_60s": 210
+        }
+      },
+      "overall": {
+        "trades": 705,
+        "win_rate_pct": 25.67,
+        "net_pnl": -12846.84,
+        "profit_factor": 0.3,
+        "exits": {
+          "stop": 221,
+          "target": 1,
+          "time_60s": 483
+        }
+      }
+    }
+  },
+  "financial_filter_search": {
+    "pnl_source": "net_pnl",
+    "selection": "single filters and pairs ranked only by 2025 training profit factor",
+    "minimum_training_trades": {
+      "single": 100,
+      "pair": 50
+    },
+    "top_20_training_rules": [
+      {
+        "rules": [
+          "move_60s_pips>=179",
+          "acceleration_60s_vs_300s<=0.227906"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 67,
+          "net_pnl": -847.44,
+          "profit_factor": 0.64,
+          "win_rate_pct": 25.37
+        },
+        "holdout_2026_full": {
+          "trades": 444,
+          "net_pnl": -11490.41,
+          "profit_factor": 0.393,
+          "win_rate_pct": 24.1
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 361,
+          "net_pnl": -11173.21,
+          "profit_factor": 0.325,
+          "win_rate_pct": 19.67
+        },
+        "holdout_2026_may_sep": {
+          "trades": 83,
+          "net_pnl": -317.2,
+          "profit_factor": 0.866,
+          "win_rate_pct": 43.37
+        }
+      },
+      {
+        "rules": [
+          "acceleration_60s_vs_300s<=0.227906",
+          "move_60s_pips>=133.97"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 150,
+          "net_pnl": -1839.24,
+          "profit_factor": 0.588,
+          "win_rate_pct": 27.33
+        },
+        "holdout_2026_full": {
+          "trades": 865,
+          "net_pnl": -19459.53,
+          "profit_factor": 0.417,
+          "win_rate_pct": 25.32
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 655,
+          "net_pnl": -17244.28,
+          "profit_factor": 0.368,
+          "win_rate_pct": 22.75
+        },
+        "holdout_2026_may_sep": {
+          "trades": 210,
+          "net_pnl": -2215.25,
+          "profit_factor": 0.636,
+          "win_rate_pct": 33.33
+        }
+      },
+      {
+        "rules": [
+          "move_900s_pips>=1046.62",
+          "spread_pips<=55.4646"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 98,
+          "net_pnl": -920.97,
+          "profit_factor": 0.577,
+          "win_rate_pct": 43.88
+        },
+        "holdout_2026_full": {
+          "trades": 535,
+          "net_pnl": -7004.85,
+          "profit_factor": 0.495,
+          "win_rate_pct": 33.08
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 151,
+          "net_pnl": -2148.84,
+          "profit_factor": 0.445,
+          "win_rate_pct": 33.11
+        },
+        "holdout_2026_may_sep": {
+          "trades": 384,
+          "net_pnl": -4856.01,
+          "profit_factor": 0.514,
+          "win_rate_pct": 33.07
+        }
+      },
+      {
+        "rules": [
+          "move_30s_pips>=207.5",
+          "spread_pips<=55.4646"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 128,
+          "net_pnl": -1103.82,
+          "profit_factor": 0.576,
+          "win_rate_pct": 38.28
+        },
+        "holdout_2026_full": {
+          "trades": 599,
+          "net_pnl": -9409.14,
+          "profit_factor": 0.378,
+          "win_rate_pct": 29.88
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 160,
+          "net_pnl": -2669.01,
+          "profit_factor": 0.378,
+          "win_rate_pct": 31.87
+        },
+        "holdout_2026_may_sep": {
+          "trades": 439,
+          "net_pnl": -6740.13,
+          "profit_factor": 0.378,
+          "win_rate_pct": 29.16
+        }
+      },
+      {
+        "rules": [
+          "move_10s_pips>=135.27",
+          "move_300s_pips>=600.1"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 256,
+          "net_pnl": -3509.02,
+          "profit_factor": 0.57,
+          "win_rate_pct": 29.69
+        },
+        "holdout_2026_full": {
+          "trades": 1619,
+          "net_pnl": -33187.43,
+          "profit_factor": 0.46,
+          "win_rate_pct": 24.64
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 1247,
+          "net_pnl": -28973.34,
+          "profit_factor": 0.432,
+          "win_rate_pct": 22.29
+        },
+        "holdout_2026_may_sep": {
+          "trades": 372,
+          "net_pnl": -4214.09,
+          "profit_factor": 0.597,
+          "win_rate_pct": 32.53
+        }
+      },
+      {
+        "rules": [
+          "move_900s_pips>=743.07",
+          "move_10s_pips>=135.27"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 383,
+          "net_pnl": -5453.8,
+          "profit_factor": 0.539,
+          "win_rate_pct": 29.77
+        },
+        "holdout_2026_full": {
+          "trades": 2215,
+          "net_pnl": -46234.39,
+          "profit_factor": 0.441,
+          "win_rate_pct": 26.28
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 1685,
+          "net_pnl": -41021.26,
+          "profit_factor": 0.396,
+          "win_rate_pct": 24.04
+        },
+        "holdout_2026_may_sep": {
+          "trades": 530,
+          "net_pnl": -5213.13,
+          "profit_factor": 0.647,
+          "win_rate_pct": 33.4
+        }
+      },
+      {
+        "rules": [
+          "move_30s_pips<=-14.8",
+          "move_5s_pips>=70"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 105,
+          "net_pnl": -1373.83,
+          "profit_factor": 0.535,
+          "win_rate_pct": 35.24
+        },
+        "holdout_2026_full": {
+          "trades": 591,
+          "net_pnl": -11091.98,
+          "profit_factor": 0.451,
+          "win_rate_pct": 27.07
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 436,
+          "net_pnl": -9156.0,
+          "profit_factor": 0.436,
+          "win_rate_pct": 26.15
+        },
+        "holdout_2026_may_sep": {
+          "trades": 155,
+          "net_pnl": -1935.98,
+          "profit_factor": 0.51,
+          "win_rate_pct": 29.68
+        }
+      },
+      {
+        "rules": [
+          "move_300s_pips>=600.1",
+          "move_10s_pips>=94.87"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 391,
+          "net_pnl": -5548.71,
+          "profit_factor": 0.53,
+          "win_rate_pct": 30.69
+        },
+        "holdout_2026_full": {
+          "trades": 2201,
+          "net_pnl": -44404.54,
+          "profit_factor": 0.449,
+          "win_rate_pct": 26.08
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 1632,
+          "net_pnl": -37112.12,
+          "profit_factor": 0.426,
+          "win_rate_pct": 23.96
+        },
+        "holdout_2026_may_sep": {
+          "trades": 569,
+          "net_pnl": -7292.42,
+          "profit_factor": 0.543,
+          "win_rate_pct": 32.16
+        }
+      },
+      {
+        "rules": [
+          "move_30s_pips<=-14.8",
+          "move_300s_pips<=-137.65"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 136,
+          "net_pnl": -1344.52,
+          "profit_factor": 0.525,
+          "win_rate_pct": 32.35
+        },
+        "holdout_2026_full": {
+          "trades": 613,
+          "net_pnl": -10014.46,
+          "profit_factor": 0.45,
+          "win_rate_pct": 29.04
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 435,
+          "net_pnl": -7773.68,
+          "profit_factor": 0.462,
+          "win_rate_pct": 27.36
+        },
+        "holdout_2026_may_sep": {
+          "trades": 178,
+          "net_pnl": -2240.78,
+          "profit_factor": 0.404,
+          "win_rate_pct": 33.15
+        }
+      },
+      {
+        "rules": [
+          "acceleration_60s_vs_300s<=0.16173",
+          "move_60s_pips>=105.65"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 102,
+          "net_pnl": -1664.41,
+          "profit_factor": 0.525,
+          "win_rate_pct": 24.51
+        },
+        "holdout_2026_full": {
+          "trades": 628,
+          "net_pnl": -15941.12,
+          "profit_factor": 0.384,
+          "win_rate_pct": 21.82
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 498,
+          "net_pnl": -14198.58,
+          "profit_factor": 0.35,
+          "win_rate_pct": 19.88
+        },
+        "holdout_2026_may_sep": {
+          "trades": 130,
+          "net_pnl": -1742.54,
+          "profit_factor": 0.57,
+          "win_rate_pct": 29.23
+        }
+      },
+      {
+        "rules": [
+          "move_300s_pips>=600.1",
+          "spread_pips<=55.4646"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 131,
+          "net_pnl": -1397.27,
+          "profit_factor": 0.523,
+          "win_rate_pct": 38.17
+        },
+        "holdout_2026_full": {
+          "trades": 547,
+          "net_pnl": -8837.95,
+          "profit_factor": 0.406,
+          "win_rate_pct": 29.25
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 147,
+          "net_pnl": -2238.7,
+          "profit_factor": 0.448,
+          "win_rate_pct": 32.65
+        },
+        "holdout_2026_may_sep": {
+          "trades": 400,
+          "net_pnl": -6599.25,
+          "profit_factor": 0.39,
+          "win_rate_pct": 28.0
+        }
+      },
+      {
+        "rules": [
+          "move_10s_pips>=135.27",
+          "acceleration_60s_vs_300s<=0.16173"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 140,
+          "net_pnl": -2010.05,
+          "profit_factor": 0.52,
+          "win_rate_pct": 26.43
+        },
+        "holdout_2026_full": {
+          "trades": 895,
+          "net_pnl": -19539.6,
+          "profit_factor": 0.416,
+          "win_rate_pct": 25.7
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 666,
+          "net_pnl": -16547.4,
+          "profit_factor": 0.388,
+          "win_rate_pct": 23.57
+        },
+        "holdout_2026_may_sep": {
+          "trades": 229,
+          "net_pnl": -2992.2,
+          "profit_factor": 0.532,
+          "win_rate_pct": 31.88
+        }
+      },
+      {
+        "rules": [
+          "move_900s_pips>=1046.62",
+          "move_60s_pips>=258.44"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 292,
+          "net_pnl": -4681.45,
+          "profit_factor": 0.512,
+          "win_rate_pct": 31.16
+        },
+        "holdout_2026_full": {
+          "trades": 1722,
+          "net_pnl": -38390.96,
+          "profit_factor": 0.435,
+          "win_rate_pct": 25.44
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 1324,
+          "net_pnl": -32737.47,
+          "profit_factor": 0.412,
+          "win_rate_pct": 23.56
+        },
+        "holdout_2026_may_sep": {
+          "trades": 398,
+          "net_pnl": -5653.49,
+          "profit_factor": 0.538,
+          "win_rate_pct": 31.66
+        }
+      },
+      {
+        "rules": [
+          "move_900s_pips>=743.07",
+          "move_10s_pips>=94.87"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 632,
+          "net_pnl": -8934.65,
+          "profit_factor": 0.511,
+          "win_rate_pct": 31.49
+        },
+        "holdout_2026_full": {
+          "trades": 3268,
+          "net_pnl": -65436.98,
+          "profit_factor": 0.43,
+          "win_rate_pct": 26.68
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 2346,
+          "net_pnl": -54618.88,
+          "profit_factor": 0.393,
+          "win_rate_pct": 24.38
+        },
+        "holdout_2026_may_sep": {
+          "trades": 922,
+          "net_pnl": -10818.1,
+          "profit_factor": 0.563,
+          "win_rate_pct": 32.54
+        }
+      },
+      {
+        "rules": [
+          "move_900s_pips>=743.07",
+          "move_10s_pips>=72.5"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 813,
+          "net_pnl": -11110.94,
+          "profit_factor": 0.511,
+          "win_rate_pct": 32.35
+        },
+        "holdout_2026_full": {
+          "trades": 3992,
+          "net_pnl": -76872.42,
+          "profit_factor": 0.428,
+          "win_rate_pct": 27.73
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 2786,
+          "net_pnl": -62249.34,
+          "profit_factor": 0.394,
+          "win_rate_pct": 25.56
+        },
+        "holdout_2026_may_sep": {
+          "trades": 1206,
+          "net_pnl": -14623.08,
+          "profit_factor": 0.539,
+          "win_rate_pct": 32.75
+        }
+      },
+      {
+        "rules": [
+          "move_10s_pips>=135.27",
+          "spread_pips<=55.4646"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 122,
+          "net_pnl": -1133.79,
+          "profit_factor": 0.51,
+          "win_rate_pct": 37.7
+        },
+        "holdout_2026_full": {
+          "trades": 646,
+          "net_pnl": -9103.32,
+          "profit_factor": 0.399,
+          "win_rate_pct": 30.5
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 166,
+          "net_pnl": -1886.8,
+          "profit_factor": 0.518,
+          "win_rate_pct": 37.35
+        },
+        "holdout_2026_may_sep": {
+          "trades": 480,
+          "net_pnl": -7216.52,
+          "profit_factor": 0.358,
+          "win_rate_pct": 28.12
+        }
+      },
+      {
+        "rules": [
+          "move_10s_pips<=-20.09",
+          "move_300s_pips<=-137.65"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 110,
+          "net_pnl": -1194.96,
+          "profit_factor": 0.51,
+          "win_rate_pct": 34.55
+        },
+        "holdout_2026_full": {
+          "trades": 554,
+          "net_pnl": -7760.3,
+          "profit_factor": 0.513,
+          "win_rate_pct": 30.51
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 389,
+          "net_pnl": -5524.14,
+          "profit_factor": 0.555,
+          "win_rate_pct": 29.82
+        },
+        "holdout_2026_may_sep": {
+          "trades": 165,
+          "net_pnl": -2236.16,
+          "profit_factor": 0.369,
+          "win_rate_pct": 32.12
+        }
+      },
+      {
+        "rules": [
+          "move_900s_pips>=743.07",
+          "spread_pips<=55.4646"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 286,
+          "net_pnl": -2757.4,
+          "profit_factor": 0.51,
+          "win_rate_pct": 37.41
+        },
+        "holdout_2026_full": {
+          "trades": 1181,
+          "net_pnl": -15159.92,
+          "profit_factor": 0.447,
+          "win_rate_pct": 32.94
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 284,
+          "net_pnl": -3650.19,
+          "profit_factor": 0.449,
+          "win_rate_pct": 34.86
+        },
+        "holdout_2026_may_sep": {
+          "trades": 897,
+          "net_pnl": -11509.73,
+          "profit_factor": 0.447,
+          "win_rate_pct": 32.33
+        }
+      },
+      {
+        "rules": [
+          "move_10s_pips>=94.87",
+          "spread_pips<=55.4646"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 303,
+          "net_pnl": -2774.15,
+          "profit_factor": 0.508,
+          "win_rate_pct": 34.65
+        },
+        "holdout_2026_full": {
+          "trades": 1439,
+          "net_pnl": -18879.24,
+          "profit_factor": 0.401,
+          "win_rate_pct": 32.04
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 336,
+          "net_pnl": -3263.94,
+          "profit_factor": 0.549,
+          "win_rate_pct": 39.29
+        },
+        "holdout_2026_may_sep": {
+          "trades": 1103,
+          "net_pnl": -15615.3,
+          "profit_factor": 0.356,
+          "win_rate_pct": 29.83
+        }
+      },
+      {
+        "rules": [
+          "move_300s_pips>=600.1",
+          "move_5s_pips>=70"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 354,
+          "net_pnl": -5348.16,
+          "profit_factor": 0.508,
+          "win_rate_pct": 29.94
+        },
+        "holdout_2026_full": {
+          "trades": 2045,
+          "net_pnl": -40761.41,
+          "profit_factor": 0.456,
+          "win_rate_pct": 25.62
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 1506,
+          "net_pnl": -33513.34,
+          "profit_factor": 0.437,
+          "win_rate_pct": 24.04
+        },
+        "holdout_2026_may_sep": {
+          "trades": 539,
+          "net_pnl": -7248.07,
+          "profit_factor": 0.529,
+          "win_rate_pct": 30.06
+        }
+      }
+    ],
+    "robust_rules": [],
+    "decision": "rejected_no_rule_profitable_in_both_2026_holdouts"
+  },
+  "zero_spread_filter_search": {
+    "pnl_source": "net_pnl_spread_0",
+    "selection": "single filters and pairs ranked only by 2025 training profit factor",
+    "minimum_training_trades": {
+      "single": 100,
+      "pair": 50
+    },
+    "top_20_training_rules": [
+      {
+        "rules": [
+          "move_10s_pips<=-20.09",
+          "hour<6"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 141,
+          "net_pnl": 1018.92,
+          "profit_factor": 1.736,
+          "win_rate_pct": 56.74
+        },
+        "holdout_2026_full": {
+          "trades": 604,
+          "net_pnl": 705.53,
+          "profit_factor": 1.073,
+          "win_rate_pct": 45.36
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 355,
+          "net_pnl": 1526.47,
+          "profit_factor": 1.236,
+          "win_rate_pct": 46.48
+        },
+        "holdout_2026_may_sep": {
+          "trades": 249,
+          "net_pnl": -820.94,
+          "profit_factor": 0.745,
+          "win_rate_pct": 43.78
+        }
+      },
+      {
+        "rules": [
+          "hour<6",
+          "acceleration_60s_vs_300s<=0.16173"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 133,
+          "net_pnl": 682.59,
+          "profit_factor": 1.524,
+          "win_rate_pct": 51.13
+        },
+        "holdout_2026_full": {
+          "trades": 669,
+          "net_pnl": -1468.23,
+          "profit_factor": 0.88,
+          "win_rate_pct": 43.2
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 397,
+          "net_pnl": -833.78,
+          "profit_factor": 0.902,
+          "win_rate_pct": 43.58
+        },
+        "holdout_2026_may_sep": {
+          "trades": 272,
+          "net_pnl": -634.45,
+          "profit_factor": 0.83,
+          "win_rate_pct": 42.65
+        }
+      },
+      {
+        "rules": [
+          "hour<5",
+          "move_5s_pips<=-17"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 106,
+          "net_pnl": 512.82,
+          "profit_factor": 1.508,
+          "win_rate_pct": 51.89
+        },
+        "holdout_2026_full": {
+          "trades": 331,
+          "net_pnl": -629.16,
+          "profit_factor": 0.889,
+          "win_rate_pct": 45.02
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 201,
+          "net_pnl": -362.58,
+          "profit_factor": 0.912,
+          "win_rate_pct": 42.29
+        },
+        "holdout_2026_may_sep": {
+          "trades": 130,
+          "net_pnl": -266.58,
+          "profit_factor": 0.828,
+          "win_rate_pct": 49.23
+        }
+      },
+      {
+        "rules": [
+          "move_30s_pips<=-14.8",
+          "acceleration_60s_vs_300s>=0.826476"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 227,
+          "net_pnl": 1111.86,
+          "profit_factor": 1.413,
+          "win_rate_pct": 51.98
+        },
+        "holdout_2026_full": {
+          "trades": 784,
+          "net_pnl": -343.72,
+          "profit_factor": 0.974,
+          "win_rate_pct": 46.3
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 425,
+          "net_pnl": 315.93,
+          "profit_factor": 1.038,
+          "win_rate_pct": 46.59
+        },
+        "holdout_2026_may_sep": {
+          "trades": 359,
+          "net_pnl": -659.65,
+          "profit_factor": 0.867,
+          "win_rate_pct": 45.96
+        }
+      },
+      {
+        "rules": [
+          "hour<6",
+          "move_5s_pips<=-17"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 173,
+          "net_pnl": 780.14,
+          "profit_factor": 1.385,
+          "win_rate_pct": 51.45
+        },
+        "holdout_2026_full": {
+          "trades": 585,
+          "net_pnl": -810.37,
+          "profit_factor": 0.921,
+          "win_rate_pct": 44.27
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 328,
+          "net_pnl": -159.02,
+          "profit_factor": 0.976,
+          "win_rate_pct": 43.6
+        },
+        "holdout_2026_may_sep": {
+          "trades": 257,
+          "net_pnl": -651.35,
+          "profit_factor": 0.815,
+          "win_rate_pct": 45.14
+        }
+      },
+      {
+        "rules": [
+          "move_10s_pips<=-20.09",
+          "hour<5"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 80,
+          "net_pnl": 246.62,
+          "profit_factor": 1.351,
+          "win_rate_pct": 56.25
+        },
+        "holdout_2026_full": {
+          "trades": 347,
+          "net_pnl": -2.75,
+          "profit_factor": 0.999,
+          "win_rate_pct": 45.24
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 211,
+          "net_pnl": 419.89,
+          "profit_factor": 1.114,
+          "win_rate_pct": 45.02
+        },
+        "holdout_2026_may_sep": {
+          "trades": 136,
+          "net_pnl": -422.64,
+          "profit_factor": 0.721,
+          "win_rate_pct": 45.59
+        }
+      },
+      {
+        "rules": [
+          "acceleration_60s_vs_300s<=0.16173",
+          "move_5s_pips<=-17"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 144,
+          "net_pnl": 794.86,
+          "profit_factor": 1.334,
+          "win_rate_pct": 52.08
+        },
+        "holdout_2026_full": {
+          "trades": 699,
+          "net_pnl": 160.15,
+          "profit_factor": 1.01,
+          "win_rate_pct": 42.49
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 465,
+          "net_pnl": -129.67,
+          "profit_factor": 0.989,
+          "win_rate_pct": 41.51
+        },
+        "holdout_2026_may_sep": {
+          "trades": 234,
+          "net_pnl": 289.82,
+          "profit_factor": 1.069,
+          "win_rate_pct": 44.44
+        }
+      },
+      {
+        "rules": [
+          "hour<5",
+          "move_900s_pips>=743.07"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 151,
+          "net_pnl": 565.77,
+          "profit_factor": 1.325,
+          "win_rate_pct": 50.33
+        },
+        "holdout_2026_full": {
+          "trades": 651,
+          "net_pnl": -1516.75,
+          "profit_factor": 0.882,
+          "win_rate_pct": 41.01
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 436,
+          "net_pnl": -1009.14,
+          "profit_factor": 0.898,
+          "win_rate_pct": 38.76
+        },
+        "holdout_2026_may_sep": {
+          "trades": 215,
+          "net_pnl": -507.61,
+          "profit_factor": 0.828,
+          "win_rate_pct": 45.58
+        }
+      },
+      {
+        "rules": [
+          "hour<6",
+          "move_900s_pips>=743.07"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 264,
+          "net_pnl": 1061.49,
+          "profit_factor": 1.324,
+          "win_rate_pct": 50.76
+        },
+        "holdout_2026_full": {
+          "trades": 1214,
+          "net_pnl": -2048.45,
+          "profit_factor": 0.916,
+          "win_rate_pct": 43.0
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 799,
+          "net_pnl": -1136.44,
+          "profit_factor": 0.938,
+          "win_rate_pct": 41.43
+        },
+        "holdout_2026_may_sep": {
+          "trades": 415,
+          "net_pnl": -912.01,
+          "profit_factor": 0.85,
+          "win_rate_pct": 46.02
+        }
+      },
+      {
+        "rules": [
+          "move_30s_pips<=17.5",
+          "acceleration_60s_vs_300s>=0.826476"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 504,
+          "net_pnl": 1544.54,
+          "profit_factor": 1.305,
+          "win_rate_pct": 51.98
+        },
+        "holdout_2026_full": {
+          "trades": 1618,
+          "net_pnl": -1583.93,
+          "profit_factor": 0.932,
+          "win_rate_pct": 46.85
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 806,
+          "net_pnl": 39.11,
+          "profit_factor": 1.003,
+          "win_rate_pct": 48.39
+        },
+        "holdout_2026_may_sep": {
+          "trades": 812,
+          "net_pnl": -1623.04,
+          "profit_factor": 0.838,
+          "win_rate_pct": 45.32
+        }
+      },
+      {
+        "rules": [
+          "hour<6",
+          "move_10s_pips<=1"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 355,
+          "net_pnl": 841.74,
+          "profit_factor": 1.261,
+          "win_rate_pct": 49.01
+        },
+        "holdout_2026_full": {
+          "trades": 1276,
+          "net_pnl": 261.04,
+          "profit_factor": 1.015,
+          "win_rate_pct": 45.61
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 684,
+          "net_pnl": 1203.66,
+          "profit_factor": 1.118,
+          "win_rate_pct": 45.18
+        },
+        "holdout_2026_may_sep": {
+          "trades": 592,
+          "net_pnl": -942.62,
+          "profit_factor": 0.86,
+          "win_rate_pct": 46.11
+        }
+      },
+      {
+        "rules": [
+          "move_60s_pips<=56.5",
+          "move_900s_pips>=743.07"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 332,
+          "net_pnl": 1118.34,
+          "profit_factor": 1.258,
+          "win_rate_pct": 51.2
+        },
+        "holdout_2026_full": {
+          "trades": 1231,
+          "net_pnl": -1659.3,
+          "profit_factor": 0.927,
+          "win_rate_pct": 46.71
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 663,
+          "net_pnl": -1923.5,
+          "profit_factor": 0.864,
+          "win_rate_pct": 46.0
+        },
+        "holdout_2026_may_sep": {
+          "trades": 568,
+          "net_pnl": 264.2,
+          "profit_factor": 1.031,
+          "win_rate_pct": 47.54
+        }
+      },
+      {
+        "rules": [
+          "move_30s_pips<=39",
+          "acceleration_60s_vs_300s>=0.826476"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 805,
+          "net_pnl": 1964.93,
+          "profit_factor": 1.249,
+          "win_rate_pct": 50.68
+        },
+        "holdout_2026_full": {
+          "trades": 2461,
+          "net_pnl": -2668.41,
+          "profit_factor": 0.92,
+          "win_rate_pct": 47.46
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 1161,
+          "net_pnl": -920.09,
+          "profit_factor": 0.949,
+          "win_rate_pct": 47.55
+        },
+        "holdout_2026_may_sep": {
+          "trades": 1300,
+          "net_pnl": -1748.32,
+          "profit_factor": 0.884,
+          "win_rate_pct": 47.38
+        }
+      },
+      {
+        "rules": [
+          "move_30s_pips<=39",
+          "move_10s_pips>=94.87"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 194,
+          "net_pnl": 840.64,
+          "profit_factor": 1.242,
+          "win_rate_pct": 46.39
+        },
+        "holdout_2026_full": {
+          "trades": 916,
+          "net_pnl": -3918.71,
+          "profit_factor": 0.822,
+          "win_rate_pct": 40.07
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 598,
+          "net_pnl": -3618.24,
+          "profit_factor": 0.788,
+          "win_rate_pct": 37.63
+        },
+        "holdout_2026_may_sep": {
+          "trades": 318,
+          "net_pnl": -300.47,
+          "profit_factor": 0.94,
+          "win_rate_pct": 44.65
+        }
+      },
+      {
+        "rules": [
+          "move_10s_pips>=94.87",
+          "move_5s_pips<=27.5"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 246,
+          "net_pnl": 969.02,
+          "profit_factor": 1.231,
+          "win_rate_pct": 47.15
+        },
+        "holdout_2026_full": {
+          "trades": 1073,
+          "net_pnl": -1226.88,
+          "profit_factor": 0.947,
+          "win_rate_pct": 44.64
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 697,
+          "net_pnl": -541.75,
+          "profit_factor": 0.968,
+          "win_rate_pct": 44.33
+        },
+        "holdout_2026_may_sep": {
+          "trades": 376,
+          "net_pnl": -685.13,
+          "profit_factor": 0.883,
+          "win_rate_pct": 45.21
+        }
+      },
+      {
+        "rules": [
+          "hour<6",
+          "acceleration_60s_vs_300s<=0.227906"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 320,
+          "net_pnl": 769.49,
+          "profit_factor": 1.22,
+          "win_rate_pct": 48.75
+        },
+        "holdout_2026_full": {
+          "trades": 1254,
+          "net_pnl": -3080.1,
+          "profit_factor": 0.846,
+          "win_rate_pct": 43.54
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 694,
+          "net_pnl": -1717.06,
+          "profit_factor": 0.869,
+          "win_rate_pct": 43.8
+        },
+        "holdout_2026_may_sep": {
+          "trades": 560,
+          "net_pnl": -1363.04,
+          "profit_factor": 0.803,
+          "win_rate_pct": 43.21
+        }
+      },
+      {
+        "rules": [
+          "move_30s_pips<=74.35",
+          "move_10s_pips>=94.87"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 365,
+          "net_pnl": 1194.12,
+          "profit_factor": 1.21,
+          "win_rate_pct": 46.3
+        },
+        "holdout_2026_full": {
+          "trades": 1566,
+          "net_pnl": -4952.73,
+          "profit_factor": 0.852,
+          "win_rate_pct": 42.53
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 960,
+          "net_pnl": -4542.15,
+          "profit_factor": 0.813,
+          "win_rate_pct": 40.21
+        },
+        "holdout_2026_may_sep": {
+          "trades": 606,
+          "net_pnl": -410.58,
+          "profit_factor": 0.955,
+          "win_rate_pct": 46.2
+        }
+      },
+      {
+        "rules": [
+          "hour<5",
+          "move_10s_pips>=94.87"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 155,
+          "net_pnl": 358.62,
+          "profit_factor": 1.21,
+          "win_rate_pct": 49.03
+        },
+        "holdout_2026_full": {
+          "trades": 823,
+          "net_pnl": -192.2,
+          "profit_factor": 0.986,
+          "win_rate_pct": 43.01
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 497,
+          "net_pnl": -419.47,
+          "profit_factor": 0.957,
+          "win_rate_pct": 41.25
+        },
+        "holdout_2026_may_sep": {
+          "trades": 326,
+          "net_pnl": 227.27,
+          "profit_factor": 1.063,
+          "win_rate_pct": 45.71
+        }
+      },
+      {
+        "rules": [
+          "move_30s_pips<=-14.8",
+          "acceleration_60s_vs_300s>=0.618202"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 307,
+          "net_pnl": 782.68,
+          "profit_factor": 1.198,
+          "win_rate_pct": 50.16
+        },
+        "holdout_2026_full": {
+          "trades": 1060,
+          "net_pnl": -537.35,
+          "profit_factor": 0.971,
+          "win_rate_pct": 45.94
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 587,
+          "net_pnl": 139.93,
+          "profit_factor": 1.012,
+          "win_rate_pct": 45.14
+        },
+        "holdout_2026_may_sep": {
+          "trades": 473,
+          "net_pnl": -677.28,
+          "profit_factor": 0.894,
+          "win_rate_pct": 46.93
+        }
+      },
+      {
+        "rules": [
+          "move_30s_pips<=56.5",
+          "acceleration_60s_vs_300s>=0.826476"
+        ],
+        "training_2025_oct_dec": {
+          "trades": 1131,
+          "net_pnl": 2033.96,
+          "profit_factor": 1.188,
+          "win_rate_pct": 49.69
+        },
+        "holdout_2026_full": {
+          "trades": 3242,
+          "net_pnl": -4503.4,
+          "profit_factor": 0.894,
+          "win_rate_pct": 46.98
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 1484,
+          "net_pnl": -1830.41,
+          "profit_factor": 0.919,
+          "win_rate_pct": 47.17
+        },
+        "holdout_2026_may_sep": {
+          "trades": 1758,
+          "net_pnl": -2672.99,
+          "profit_factor": 0.867,
+          "win_rate_pct": 46.81
+        }
+      }
+    ],
+    "robust_rules": [],
+    "decision": "rejected_no_rule_profitable_in_both_2026_holdouts"
+  },
+  "pullback_deceleration_probe": {
+    "rule": "base 60s/900s momentum, move_5s <= -17 pips, acceleration_60s_vs_300s <= 0.16173",
+    "cost_scenarios": {
+      "observed_spread": {
+        "training_2025_oct_dec": {
+          "trades": 144,
+          "win_rate_pct": 34.72,
+          "net_pnl": -1854.08,
+          "profit_factor": 0.483,
+          "exits": {
+            "stop": 46,
+            "target": 1,
+            "time_60s": 97
+          }
+        },
+        "holdout_2026_full": {
+          "trades": 699,
+          "win_rate_pct": 27.9,
+          "net_pnl": -13022.32,
+          "profit_factor": 0.419,
+          "exits": {
+            "stop": 326,
+            "target": 5,
+            "time_60s": 368
+          }
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 465,
+          "win_rate_pct": 26.02,
+          "net_pnl": -10153.83,
+          "profit_factor": 0.381,
+          "exits": {
+            "stop": 251,
+            "target": 5,
+            "time_60s": 209
+          }
+        },
+        "holdout_2026_may_sep": {
+          "trades": 234,
+          "win_rate_pct": 31.62,
+          "net_pnl": -2868.49,
+          "profit_factor": 0.521,
+          "exits": {
+            "stop": 75,
+            "target": 0,
+            "time_60s": 159
+          }
+        }
+      },
+      "spread_0_pips": {
+        "training_2025_oct_dec": {
+          "trades": 144,
+          "win_rate_pct": 52.08,
+          "net_pnl": 794.86,
+          "profit_factor": 1.334,
+          "exits": {
+            "stop": 30,
+            "target": 3,
+            "time_60s": 111
+          }
+        },
+        "holdout_2026_full": {
+          "trades": 699,
+          "win_rate_pct": 42.49,
+          "net_pnl": 160.15,
+          "profit_factor": 1.01,
+          "exits": {
+            "stop": 227,
+            "target": 20,
+            "time_60s": 452
+          }
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 465,
+          "win_rate_pct": 41.51,
+          "net_pnl": -129.67,
+          "profit_factor": 0.989,
+          "exits": {
+            "stop": 175,
+            "target": 18,
+            "time_60s": 272
+          }
+        },
+        "holdout_2026_may_sep": {
+          "trades": 234,
+          "win_rate_pct": 44.44,
+          "net_pnl": 289.82,
+          "profit_factor": 1.069,
+          "exits": {
+            "stop": 52,
+            "target": 2,
+            "time_60s": 180
+          }
+        }
+      },
+      "spread_10_pips": {
+        "training_2025_oct_dec": {
+          "trades": 144,
+          "win_rate_pct": 50.69,
+          "net_pnl": 511.02,
+          "profit_factor": 1.204,
+          "exits": {
+            "stop": 32,
+            "target": 3,
+            "time_60s": 109
+          }
+        },
+        "holdout_2026_full": {
+          "trades": 699,
+          "win_rate_pct": 41.06,
+          "net_pnl": -866.68,
+          "profit_factor": 0.949,
+          "exits": {
+            "stop": 234,
+            "target": 20,
+            "time_60s": 445
+          }
+        },
+        "holdout_2026_jan_apr": {
+          "trades": 465,
+          "win_rate_pct": 40.22,
+          "net_pnl": -766.8,
+          "profit_factor": 0.939,
+          "exits": {
+            "stop": 181,
+            "target": 18,
+            "time_60s": 266
+          }
+        },
+        "holdout_2026_may_sep": {
+          "trades": 234,
+          "win_rate_pct": 42.74,
+          "net_pnl": -99.88,
+          "profit_factor": 0.977,
+          "exits": {
+            "stop": 53,
+            "target": 2,
+            "time_60s": 179
+          }
+        }
+      }
+    },
+    "status": "fragile_zero_spread_only_not_promoted"
+  },
+  "decision": "rejected_excessive_false_positive_density_and_negative_expectancy",
+  "interpretation": "Paired controls show momentum near known entries, but momentum is not a sufficiently unique entry trigger in the full market stream."
+}

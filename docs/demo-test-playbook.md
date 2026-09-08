@@ -10,7 +10,7 @@ no ambiente demo do projeto.
 
 ## Estado atual
 
-Em **sábado, 18 de julho de 2026**, o mercado do `XAUUSD` normalmente estara fechado.
+O teste de ordem deve ser feito quando o `XAUUSD` estiver aberto e recebendo ticks.
 
 Isso significa:
 
@@ -20,10 +20,8 @@ Isso significa:
 
 ## Dependencias operacionais
 
-Hoje existem dois detalhes importantes:
-
-1. o MT5 roda dentro de um container Docker, entao `127.0.0.1` dentro do terminal nao enxerga o servico Python do host
-2. o EA precisa ser copiado/compilado dentro do ambiente MT5 manualmente
+O MT5 e o servico Python compartilham a rede no Compose; por isso o EA usa
+`127.0.0.1:1112`. O EA ainda precisa ser instalado e compilado no MetaEditor.
 
 ## Preparacao
 
@@ -32,21 +30,21 @@ Hoje existem dois detalhes importantes:
 Para teste seguro, sem liberar execucao automatica:
 
 ```bash
-cd /home/codexops/2Lotus/python-service
-DAYTRADE_ENABLE_LIVE_DECISIONS=false .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir .
+cd /home/codexops/projects/2Lotus
+docker compose up -d api
 ```
 
 Para permitir que o servico retorne `buy` ou `sell` quando o setup estiver valido:
 
 ```bash
-cd /home/codexops/2Lotus/python-service
-DAYTRADE_ENABLE_LIVE_DECISIONS=true .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8000 --app-dir .
+Defina `DAYTRADE_ENABLE_LIVE_DECISIONS=true` no `.env` apenas durante a fase
+controlada em demo e recrie o servico `api`.
 ```
 
 ### 2. Subir o desktop remoto do MT5
 
 ```bash
-cd /home/codexops/2Lotus
+cd /home/codexops/projects/2Lotus
 ./scripts/run-mt5-desktop.sh
 ```
 
@@ -58,28 +56,12 @@ No navegador, abrir:
 http://127.0.0.1:6080/vnc.html?host=127.0.0.1&port=6080
 ```
 
-## Descobrir o IP do host para o container
-
-O EA dentro do MT5 precisa chamar o servico Python usando o IP do host visto pelo container.
-
-Descobrir com:
-
-```bash
-docker exec 2lotus-mt5-desktop sh -lc "ip route | awk '/default/ {print \$3}'"
-```
-
-Exemplo de retorno esperado:
-
-```text
-127.0.0.1
-```
-
 ## Validar conectividade do container para o servico
 
 Antes de abrir o MT5, validar com:
 
 ```bash
-docker exec 2lotus-mt5-desktop curl http://127.0.0.1:8000/health
+docker exec 2lotus-mt5-desktop curl http://127.0.0.1:1112/health
 ```
 
 Resposta esperada:
@@ -93,7 +75,8 @@ Se isso falhar, o problema ainda e de rede, nao de estrategia.
 ## Copiar o EA para o ambiente do MT5
 
 ```bash
-docker cp /home/codexops/2Lotus/mt5/experts/SyncLeadBridgeEA.mq5 2lotus-mt5-desktop:/data/home/SyncLeadBridgeEA.mq5
+cd /home/codexops/projects/2Lotus
+./scripts/install-mt5-expert.sh
 ```
 
 ## Configurar o MT5
@@ -105,7 +88,7 @@ Dentro do desktop remoto:
 3. compilar o EA
 4. no MT5, abrir `Tools > Options > Expert Advisors`
 5. marcar `Allow algorithmic trading`
-6. adicionar `http://127.0.0.1:8000` na allowlist de `WebRequest`
+6. adicionar `http://127.0.0.1:1112` na allowlist de `WebRequest`
 7. abrir um grafico `XAUUSD`
 8. ajustar o grafico para `M5`
 9. anexar o EA ao grafico
@@ -114,28 +97,34 @@ Dentro do desktop remoto:
 
 ### Fase 1: conectividade e decisao sem ordem
 
-- `StrategyServiceUrl = http://127.0.0.1:8000/decision`
-- `TradeResultsUrl = http://127.0.0.1:8000/api/trades`
-- `ResultsBotId = bot-6`
+- `StrategyServiceUrl = http://127.0.0.1:1112/decision`
+- `TradeResultsUrl = http://127.0.0.1:1112/api/trades`
+- `ResultsBotId = core-combined-v3`
 - `LotusIngestApiKey =` valor de `DAYTRADE_INGEST_API_KEY` do `.env` do 2Lotus
 - `StrategyTimeframe = M5`
-- `HistoryBars = 30`
+- `HistoryBars = 4000`
 - `EnableOrderExecution = false`
+- `ExecutionBotId =` vazio
 
 ### Fase 2: ordem automatica em demo
 
-- `StrategyServiceUrl = http://127.0.0.1:8000/decision`
-- `TradeResultsUrl = http://127.0.0.1:8000/api/trades`
-- `ResultsBotId = bot-6`
+- `StrategyServiceUrl = http://127.0.0.1:1112/decision`
+- `TradeResultsUrl = http://127.0.0.1:1112/api/trades`
+- `ResultsBotId =` o mesmo bot individual definido em `ExecutionBotId`
 - `StrategyTimeframe = M5`
-- `HistoryBars = 30`
+- `HistoryBars = 4000`
 - `EnableOrderExecution = true`
+- `ExecutionBotId = core-zigzag-v3`, `core-stochastic-v3` ou `core-multitimeframe-v3`
 
 Essa segunda fase so faz sentido quando:
 
 - o servico Python estiver com `DAYTRADE_ENABLE_LIVE_DECISIONS=true`
 - houver ticks reais no `XAUUSD`
 - o terminal estiver conectado na conta demo
+- somente uma estrategia individual estiver selecionada para execucao
+
+`core-combined-v3` ainda nao pode executar ordens: sua resposta contem varios
+`parallel_candidates`, enquanto o EA atual executa apenas uma decisao simples.
 
 ## Fases do teste
 

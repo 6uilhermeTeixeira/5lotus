@@ -9,15 +9,26 @@ from .config import Settings
 from .regime import RegimeSnapshot, build_regime_timeline, regime_allows, regime_at
 from .results_store import build_results_snapshot
 from .schemas import AccountSnapshot, BotCatalogItem, CandleSnapshot, DecisionRequest, HistoricalReplayResponse, ReplayValidationFold, TradeResult
-from .strategy import HAPPY_GOLD_COMBINED_PROFILE, WEIGHTED_PORTFOLIO_PROFILES, evaluate_decision
+from .strategy import ADAPTIVE_V3_COMBINED_PROFILE, HAPPY_GOLD_COMBINED_PROFILE, WEIGHTED_PORTFOLIO_PROFILES, evaluate_decision
 
 
 HISTORY_BARS = 60
+V3_HISTORY_BARS = 61
 MULTITIMEFRAME_HISTORY_BARS = 1000
 ADAPTIVE_HISTORY_BARS = 4000
 STRATEGY_VERSION = "2026-08-04-shadow-core-v1"
-DEEP_HISTORY_PROFILES = {"multitimeframe_trend_pullback", HAPPY_GOLD_COMBINED_PROFILE, *WEIGHTED_PORTFOLIO_PROFILES}
+DEEP_HISTORY_PROFILES = {"multitimeframe_trend_pullback", "multitimeframe_trend_pullback_v2_shadow", "multitimeframe_trend_pullback_v3_adaptive_shadow", HAPPY_GOLD_COMBINED_PROFILE, ADAPTIVE_V3_COMBINED_PROFILE, *WEIGHTED_PORTFOLIO_PROFILES}
 HAPPY_GOLD_PROFILES = {"happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed"}
+TICK_RESEARCH_PROFILES = {
+    "happy_gold_tick_impulse_shadow",
+    "happy_gold_zigzag_tick_context_shadow",
+    "happy_gold_zigzag_structural_tick_shadow",
+    "happy_gold_zigzag_normalized_range_shadow",
+    "zigzag_scalper_v2_shadow",
+    "zigzag_scalper_v3_adaptive_shadow",
+    "zigzag_scalper_v4_tick_microstructure_shadow",
+    "happy_gold_multiwindow_tick_score_shadow",
+}
 
 
 def replay_settings_fingerprint(settings: Settings, bot: BotCatalogItem) -> str:
@@ -111,6 +122,34 @@ def _replay_settings(settings: Settings, bot: BotCatalogItem) -> SimpleNamespace
         happy_gold_max_holding_bars=getattr(settings, "happy_gold_max_holding_bars", 2),
         happy_gold_combined_session_start_utc=getattr(settings, "happy_gold_combined_session_start_utc", "06:00"),
         happy_gold_combined_session_end_utc=getattr(settings, "happy_gold_combined_session_end_utc", "19:00"),
+        happy_gold_impulse_30s_threshold_pips=getattr(settings, "happy_gold_impulse_30s_threshold_pips", 95.5),
+        happy_gold_zigzag_tick_context_900s_threshold_pips=getattr(settings, "happy_gold_zigzag_tick_context_900s_threshold_pips", 800),
+        happy_gold_structural_context_900s_threshold_pips=getattr(settings, "happy_gold_structural_context_900s_threshold_pips", 1000),
+        happy_gold_structural_ema20_gap_pips=getattr(settings, "happy_gold_structural_ema20_gap_pips", 900),
+        happy_gold_structural_max_pivot_extension_pips=getattr(settings, "happy_gold_structural_max_pivot_extension_pips", 50),
+        happy_gold_normalized_range_max=getattr(settings, "happy_gold_normalized_range_max", 1.876955192),
+        happy_gold_normalized_range_max_spread_points=getattr(settings, "happy_gold_normalized_range_max_spread_points", 15),
+        zigzag_scalper_v3_expansion_threshold=getattr(settings, "zigzag_scalper_v3_expansion_threshold", 6.0),
+        zigzag_scalper_v4_min_5s_move_pips=getattr(settings, "zigzag_scalper_v4_min_5s_move_pips", 20),
+        zigzag_scalper_v4_min_30s_move_pips=getattr(settings, "zigzag_scalper_v4_min_30s_move_pips", 75),
+        zigzag_scalper_v4_min_60s_move_pips=getattr(settings, "zigzag_scalper_v4_min_60s_move_pips", 120),
+        zigzag_scalper_v4_min_efficiency=getattr(settings, "zigzag_scalper_v4_min_efficiency", .18),
+        zigzag_scalper_v4_min_tick_acceleration=getattr(settings, "zigzag_scalper_v4_min_tick_acceleration", .85),
+        zigzag_scalper_v4_max_spread_pips=getattr(settings, "zigzag_scalper_v4_max_spread_pips", 100),
+        stochastic_sell_v2_threshold=getattr(settings, "stochastic_sell_v2_threshold", 85),
+        stochastic_sell_v2_target_rr=getattr(settings, "stochastic_sell_v2_target_rr", 1.25),
+        stochastic_sell_v2_partial_pct=getattr(settings, "stochastic_sell_v2_partial_pct", 50),
+        stochastic_sell_v2_cutoff_hour=getattr(settings, "stochastic_sell_v2_cutoff_hour", 15),
+        stochastic_sell_v3_cutoff_hour=getattr(settings, "stochastic_sell_v3_cutoff_hour", 13),
+        stochastic_regime_snapshot=None,
+        multitimeframe_regime_snapshot=None,
+        multitimeframe_v2_strength_min=getattr(settings, "multitimeframe_v2_strength_min", .5),
+        multitimeframe_v2_session_start_hour=getattr(settings, "multitimeframe_v2_session_start_hour", 13),
+        multitimeframe_v2_session_end_hour=getattr(settings, "multitimeframe_v2_session_end_hour", 16),
+        multitimeframe_v2_stop_atr=getattr(settings, "multitimeframe_v2_stop_atr", 1.2),
+        multitimeframe_v2_target_rr=getattr(settings, "multitimeframe_v2_target_rr", 1.25),
+        multitimeframe_v2_max_holding_bars=getattr(settings, "multitimeframe_v2_max_holding_bars", 6),
+        happy_gold_multiwindow_shadow_enabled=getattr(settings, "happy_gold_multiwindow_shadow_enabled", False),
     )
 
 
@@ -260,6 +299,7 @@ def run_historical_replay(
     settings: Settings,
     *,
     days: int = 30,
+    indicators_by_timestamp: dict[int, dict[str, float]] | None = None,
 ) -> HistoricalReplayResponse:
     if not candles:
         raise ValueError("historical replay requires candles")
@@ -269,8 +309,9 @@ def run_historical_replay(
     requested_start = period_end - timedelta(days=days)
     first_visible = next((index for index, candle in enumerate(ordered) if candle.timestamp_utc >= requested_start), len(ordered) - 1)
     history_bars = (
-        ADAPTIVE_HISTORY_BARS if bot.strategy_profile == HAPPY_GOLD_COMBINED_PROFILE or bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES
+        ADAPTIVE_HISTORY_BARS if bot.strategy_profile in {HAPPY_GOLD_COMBINED_PROFILE, ADAPTIVE_V3_COMBINED_PROFILE} or bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES
         else MULTITIMEFRAME_HISTORY_BARS if bot.strategy_profile in DEEP_HISTORY_PROFILES
+        else V3_HISTORY_BARS if bot.strategy_profile in {"zigzag_scalper_v3_adaptive_shadow", "zigzag_scalper_v4_tick_microstructure_shadow"}
         else HISTORY_BARS
     )
     evaluation_start = max(history_bars - 1, first_visible)
@@ -280,7 +321,12 @@ def run_historical_replay(
     session_end = _parse_time(settings.backtest_session_end_utc)
     if bot.strategy_profile in HAPPY_GOLD_PROFILES:
         session_start, session_end = time(3, 0), time(19, 0)
-    if bot.strategy_profile == HAPPY_GOLD_COMBINED_PROFILE:
+    if bot.strategy_profile in TICK_RESEARCH_PROFILES:
+        session_start, session_end = time(3, 0), time(19, 0)
+    if bot.strategy_profile == "happy_gold_tick_impulse_shadow":
+        session_start = _parse_time(getattr(settings, "happy_gold_impulse_session_start_utc", "00:00"))
+        session_end = _parse_time(getattr(settings, "happy_gold_impulse_session_end_utc", "17:00"))
+    if bot.strategy_profile in {HAPPY_GOLD_COMBINED_PROFILE, ADAPTIVE_V3_COMBINED_PROFILE}:
         session_start = _parse_time(replay_settings.happy_gold_combined_session_start_utc)
         session_end = _parse_time(replay_settings.happy_gold_combined_session_end_utc)
     point_size = _instrument_point_size(bot, settings)
@@ -341,13 +387,18 @@ def run_historical_replay(
             point_size=point_size,
             value_per_point_per_lot=settings.backtest_value_per_point_per_lot,
             candles=history,
+            indicators=(indicators_by_timestamp or {}).get(int(candle_end.timestamp() * 1000), {}),
             positions=[],
             account=AccountSnapshot(balance=balance, equity=balance, margin_free=balance),
         )
-        if (bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES or bot.strategy_profile == HAPPY_GOLD_COMBINED_PROFILE) and settings.backtest_regime_enabled:
+        if (bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES or bot.strategy_profile in {HAPPY_GOLD_COMBINED_PROFILE, ADAPTIVE_V3_COMBINED_PROFILE}) and settings.backtest_regime_enabled:
             replay_settings.portfolio_regime_snapshot = regime_at(regime_timeline, candle_end)
         if bot.strategy_profile in {"happy_gold_zigzag_regime_confirmed", HAPPY_GOLD_COMBINED_PROFILE} and settings.backtest_regime_enabled:
             replay_settings.happy_gold_regime_snapshot = regime_at(regime_timeline, candle_end)
+        if bot.strategy_profile == "stochastic_sell_v3_adaptive_shadow" and settings.backtest_regime_enabled:
+            replay_settings.stochastic_regime_snapshot = regime_at(regime_timeline, candle_end)
+        if bot.strategy_profile == "multitimeframe_trend_pullback_v3_adaptive_shadow" and settings.backtest_regime_enabled:
+            replay_settings.multitimeframe_regime_snapshot = regime_at(regime_timeline, candle_end)
         response = evaluate_decision(request, replay_settings, bot.strategy_profile)
         if not response.metadata.get("candidate"):
             previous_candle = candle
@@ -357,11 +408,13 @@ def run_historical_replay(
         regime: RegimeSnapshot = regime_at(regime_timeline, candle_end) if settings.backtest_regime_enabled else RegimeSnapshot("disabled", side, "regime_filter_disabled")
         regime_counts[regime.name] += 1
         portfolio_component = str(response.metadata.get("portfolio_component", ""))
-        if bot.strategy_profile == HAPPY_GOLD_COMBINED_PROFILE or bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES:
+        if bot.strategy_profile in {HAPPY_GOLD_COMBINED_PROFILE, ADAPTIVE_V3_COMBINED_PROFILE} or bot.strategy_profile in WEIGHTED_PORTFOLIO_PROFILES:
             regime_allowed, regime_reason = True, "strategy_uses_internal_adaptive_component_regime"
-        elif bot.strategy_profile in HAPPY_GOLD_PROFILES:
+        elif bot.strategy_profile in HAPPY_GOLD_PROFILES or bot.strategy_profile in TICK_RESEARCH_PROFILES:
             regime_allowed, regime_reason = True, "strategy_uses_internal_m30_breakout_regime"
-        elif bot.strategy_profile == "multitimeframe_trend_pullback" or portfolio_component == "bot-7":
+        elif bot.strategy_profile in {"stochastic_sell_v2_shadow", "stochastic_sell_v3_adaptive_shadow"}:
+            regime_allowed, regime_reason = True, "strategy_uses_internal_ema50_trend_filter"
+        elif bot.strategy_profile in {"multitimeframe_trend_pullback", "multitimeframe_trend_pullback_v2_shadow", "multitimeframe_trend_pullback_v3_adaptive_shadow"} or portfolio_component == "bot-7":
             regime_allowed, regime_reason = True, "strategy_uses_internal_h1_m15_regime"
         elif bot.strategy_profile == "portfolio_6_7" and portfolio_component == "bot-6":
             regime_allowed, regime_reason = regime_allows("stochastic_sell_session", side, regime) if settings.backtest_regime_enabled else (True, "regime_filter_disabled")
@@ -374,7 +427,11 @@ def run_historical_replay(
         day = candle_end.date()
         session_allowed = session_start <= candle_end.time() < session_end
         daily_trade_cap = min(settings.backtest_max_trades_per_day, 2) if bot.strategy_profile in DEEP_HISTORY_PROFILES else settings.backtest_max_trades_per_day
-        trade_cap_allowed = True if bot.strategy_profile == HAPPY_GOLD_COMBINED_PROFILE else trades_per_day[day] < daily_trade_cap
+        trade_cap_allowed = (
+            True
+            if bot.strategy_profile in {HAPPY_GOLD_COMBINED_PROFILE, ADAPTIVE_V3_COMBINED_PROFILE}
+            else trades_per_day[day] < daily_trade_cap
+        )
         risk_allowed = trade_cap_allowed and daily_outcome_r[day] > -settings.backtest_daily_loss_limit_r
         cooldown_allowed = index > cooldown_until_index
         if not session_allowed:
@@ -447,7 +504,7 @@ def run_historical_replay(
         "O regime usa H1 completo, ADX(14), EMA50/EMA200 e percentil de ATR, calculados sem look-ahead.",
         f"Entradas são limitadas à sessão {settings.backtest_session_start_utc}–{settings.backtest_session_end_utc} UTC e posições são encerradas diariamente.",
         "Compras usam ask na entrada e bid na saída; vendas usam bid na entrada e ask na saída.",
-        f"O replay aplica spread de {settings.backtest_spread_points:g} pontos, slippage de {settings.backtest_slippage_points:g} pontos por fill e comissão configurada.",
+        f"O replay aplica spread de {settings.backtest_spread_points:g} pontos, slippage de {settings.backtest_slippage_points:g} pontos por fill e comissão round-turn de US$ {settings.backtest_commission_per_lot:g} por lote.",
         f"O tamanho de um ponto usado para {bot.symbol} é {point_size:g}; o valor por ponto/lote permanece o da configuração do harness.",
         "Quando stop e alvo aparecem no mesmo candle, o stop tem precedência; M1/ticks continuam sendo preferíveis para resolver a sequência intrabar.",
     ]
@@ -460,6 +517,9 @@ def run_historical_replay(
     if bot.strategy_profile == HAPPY_GOLD_COMBINED_PROFILE:
         assumptions.append("O meta-portfólio mantém Bot 13 e Portfólio 7/6 100/100 independentes, usa risco-base integral para qualquer componente e nunca soma posições.")
         assumptions.append("Sinais conflitantes são bloqueados; quando há concordância, o ZigZag confirmado tem prioridade. Não há limite de quantidade de entradas; perda diária de 2R, posição única e cooldown continuam compartilhados.")
+    if bot.strategy_profile == ADAPTIVE_V3_COMBINED_PROFILE:
+        assumptions.append("A combinação avalia ZigZag V3, Tendência Multitemporal V3 e Stochastic Sell V3 de forma causal, com risco-base integral, posição única e prioridade nessa ordem.")
+        assumptions.append("Sinais simultâneos em direções opostas são bloqueados; o replay OHLC não substitui a validação por ticks exigida pelos modos estruturais do ZigZag V3.")
     if bot.strategy_profile in HAPPY_GOLD_PROFILES:
         assumptions.append("A estratégia agrega M5 em M30 completo e usa pivôs fractais confirmados como aproximação causal do ZigZag proprietário; não há repaint nem antecipação do pivô.")
     if bot.strategy_profile in {"happy_gold_zigzag_scalper", "happy_gold_zigzag_regime_confirmed"}:

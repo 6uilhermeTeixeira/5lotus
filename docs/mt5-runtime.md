@@ -60,9 +60,10 @@ O passo 1 e considerado concluido quando:
 - `system32/kernel32.dll` e `syswow64/kernel32.dll` presentes no prefixo limpo
 - logs persistidos em `.runtime/logs`
 
-## Bloqueio atual
+## Estado de instalação
 
-O bootstrap ainda nao chega ao instalador final do MT5 de forma totalmente automatica.
+O runtime Wine está definido no Dockerfile, mas a imagem e o terminal ainda precisam ser construídos
+e instalados neste host. A primeira instalação permanece assistida por noVNC.
 
 Sinais observados:
 
@@ -96,15 +97,14 @@ Observacoes:
 - o estado do terminal continua persistido em `.runtime/mt5-prefix`
 - os logs continuam em `.runtime/logs`
 
-## Limitacao atual de rede
+## Rede atual
 
-O MT5 roda dentro do container `2lotus-mt5-desktop`.
+O serviço API usa `network_mode: service:mt5`; portanto, MT5 e API compartilham o mesmo namespace de
+rede e o EA deve acessar `http://127.0.0.1:1112`.
 
-Por isso, o terminal nao consegue falar com o servico Python do host usando `127.0.0.1`.
+O checklist completo está em:
 
-No teste atual, o EA precisa usar o IP do host visto de dentro do container, conforme documentado em:
-
-- `docs/demo-test-playbook.md`
+- `docs/live-core-go-live.md`
 
 ## Referencias oficiais
 

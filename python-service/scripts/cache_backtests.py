@@ -17,8 +17,8 @@ def main() -> None:
     parser.add_argument("--bot-id", action="append", help="Optional bot filter; repeat for more than one.")
     parser.add_argument("--days", type=int, default=365)
     args = parser.parse_args()
-    if not 1 <= args.days <= 365:
-        parser.error("--days must be between 1 and 365")
+    if not 1 <= args.days <= 1095:
+        parser.error("--days must be between 1 and 1095")
 
     settings = get_settings()
     store = SupabaseStore(settings)
