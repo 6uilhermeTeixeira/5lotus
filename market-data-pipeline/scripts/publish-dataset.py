@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import fcntl
 import hashlib
 import json
 import os
@@ -41,6 +42,38 @@ def atomic_json(path: Path, payload: object) -> None:
     finally:
         if os.path.exists(temporary_name):
             os.unlink(temporary_name)
+
+
+def source_signature(paths: list[Path]) -> str:
+    """Fingerprint one trading day without decoding hundreds of millions of ticks."""
+    digest = hashlib.sha256()
+    for path in sorted(paths):
+        stat = path.stat()
+        digest.update(str(path.relative_to(RAW_ROOT)).encode())
+        digest.update(f":{stat.st_size}:{stat.st_mtime_ns}\n".encode())
+    return digest.hexdigest()
+
+
+def load_current_manifest() -> dict[str, object] | None:
+    pointer = RELEASES_ROOT / "CURRENT"
+    if not pointer.is_file():
+        return None
+    version = pointer.read_text(encoding="utf-8").strip()
+    if not version or "/" in version or ".." in version:
+        return None
+    manifest_path = RELEASES_ROOT / version / "manifest.json"
+    if not manifest_path.is_file():
+        return None
+    try:
+        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def referenced_file_exists(row: dict[str, object]) -> bool:
+    relative = row.get("path")
+    return isinstance(relative, str) and (CURATED_ROOT.parent / relative).is_file()
 
 
 def write_content_addressed(table: pa.Table, objects: Path, prefix: str) -> tuple[Path, str]:
@@ -123,6 +156,29 @@ def main() -> int:
     parser.add_argument("--requested-end", type=dt.date.fromisoformat, default=dt.datetime.now(dt.timezone.utc).date() - dt.timedelta(days=1))
     args = parser.parse_args()
     instrument = args.instrument.upper()
+    lock_path = MANIFEST_ROOT / f"publish-{instrument.lower()}.lock"
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_handle = lock_path.open("a+")
+    try:
+        fcntl.flock(lock_handle.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        print(json.dumps({"status": "skipped", "reason": "publication_already_running", "instrument": instrument}))
+        return 0
+
+    previous = load_current_manifest()
+    previous_partitions = {
+        str(row.get("day")): row
+        for row in (previous or {}).get("partitions", [])
+        if isinstance(row, dict) and row.get("day")
+    }
+    previous_aggregations = {
+        resolution: {
+            str(row.get("day")): row
+            for row in (previous or {}).get("aggregations", {}).get(resolution, [])
+            if isinstance(row, dict) and row.get("day")
+        }
+        for resolution in AGGREGATE_RESOLUTIONS
+    }
     groups: dict[dt.date, list[Path]] = {}
     for path in (RAW_ROOT / instrument).glob("**/*h_ticks.bi5"):
         if path.stat().st_size:
@@ -130,17 +186,48 @@ def main() -> int:
     total_ticks = 0
     published: list[dict[str, object]] = []
     aggregations: dict[str, list[dict[str, object]]] = {resolution: [] for resolution in AGGREGATE_RESOLUTIONS}
+    reused_days = 0
+    rebuilt_days = 0
     for day, paths in sorted(groups.items()):
+        day_key = day.isoformat()
+        signature = source_signature(paths)
+        previous_partition = previous_partitions.get(day_key)
+        previous_rows = {
+            resolution: previous_aggregations[resolution].get(day_key)
+            for resolution in AGGREGATE_RESOLUTIONS
+        }
+        if (
+            previous_partition is not None
+            and previous_partition.get("source_signature") == signature
+            and referenced_file_exists(previous_partition)
+            and all(row is not None and referenced_file_exists(row) for row in previous_rows.values())
+        ):
+            published.append(previous_partition)
+            for resolution, row in previous_rows.items():
+                aggregations[resolution].append(row)
+            total_ticks += int(previous_partition.get("rows", 0))
+            reused_days += 1
+            continue
         target, count, digest, daily_aggregates = publish_day(instrument, paths, day)
         total_ticks += count
         published.append({
             "path": str(target.relative_to(CURATED_ROOT.parent)), "bytes": target.stat().st_size,
             "rows": count, "sha256": digest, "instrument": instrument, "day": day.isoformat(),
+            "source_signature": signature,
         })
         for resolution, row in daily_aggregates.items():
             aggregations[resolution].append(row)
+        rebuilt_days += 1
     partitions = sorted(published, key=lambda row: str(row["day"]))
     identity = hashlib.sha256(json.dumps({"partitions": partitions, "aggregations": aggregations}, sort_keys=True).encode()).hexdigest()[:12]
+    previous_version = str((previous or {}).get("dataset_version", ""))
+    if previous_version.endswith(f"-{identity}"):
+        print(json.dumps({
+            "status": "unchanged", "dataset_version": previous_version,
+            "partitions": len(partitions), "ticks": total_ticks,
+            "reused_days": reused_days, "rebuilt_days": rebuilt_days,
+        }))
+        return 0
     version = f"{dt.datetime.now(dt.timezone.utc):%Y%m%dT%H%M%SZ}-{identity}"
     manifest = {
         "dataset_version": version, "created_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -158,7 +245,10 @@ def main() -> int:
     temporary = current.with_suffix(".part")
     temporary.write_text(f"{version}\n", encoding="utf-8")
     os.replace(temporary, current)
-    print(json.dumps({"dataset_version": version, "partitions": len(partitions), "ticks": total_ticks}))
+    print(json.dumps({
+        "status": "published", "dataset_version": version, "partitions": len(partitions),
+        "ticks": total_ticks, "reused_days": reused_days, "rebuilt_days": rebuilt_days,
+    }))
     return 0
 
 

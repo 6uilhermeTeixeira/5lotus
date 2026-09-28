@@ -9,6 +9,19 @@ if TYPE_CHECKING:
 
 def evaluate(profile: str, request: "DecisionRequest", settings: "Settings") -> "DecisionResponse | None":
     from .. import strategy as engine
+    from . import zigzag_v7, zigzag_v72, zigzag_v8, zigzag_v10, zigzag_v11, zigzag_v12
+    if profile == zigzag_v12.PROFILE:
+        return zigzag_v12.evaluate(request, settings)
+    if profile == zigzag_v8.PROFILE:
+        return zigzag_v8.evaluate(request, settings)
+    if profile == zigzag_v72.PROFILE:
+        return zigzag_v72.evaluate(request, settings)
+    if profile == zigzag_v7.PROFILE:
+        return zigzag_v7.evaluate(request, settings)
+    if profile == zigzag_v10.PROFILE:
+        return zigzag_v10.evaluate(request, settings)
+    if profile == zigzag_v11.PROFILE:
+        return zigzag_v11.evaluate(request, settings)
 
     if profile == engine.HAPPY_GOLD_TICK_IMPULSE_PROFILE:
         return engine._evaluate_happy_gold_tick_impulse(request, settings)
@@ -27,8 +40,14 @@ def evaluate(profile: str, request: "DecisionRequest", settings: "Settings") -> 
         )
     if profile == engine.ZIGZAG_SCALPER_V3_PROFILE:
         return engine._evaluate_zigzag_scalper_v3(request, settings)
-    if profile == engine.ZIGZAG_SCALPER_V4_PROFILE:
-        return engine._evaluate_zigzag_scalper_v4(request, settings)
+    if profile == engine.ZIGZAG_SCALPER_V5_PROFILE:
+        return engine._evaluate_zigzag_scalper_v5(request, settings)
+    if profile == engine.ZIGZAG_SCALPER_V6_PROFILE:
+        return engine._evaluate_zigzag_scalper_v6(request, settings)
+    if profile == engine.ZIGZAG_SCALPER_V52_PROFILE:
+        return engine._evaluate_zigzag_scalper_v52(request, settings)
+    if profile == engine.ZIGZAG_SCALPER_V4_TICK_MICROSTRUCTURE_PROFILE:
+        return engine._evaluate_zigzag_scalper_v4_microstructure(request, settings)
     if profile == engine.HAPPY_GOLD_MULTIWINDOW_TICK_SCORE_PROFILE:
         return engine._evaluate_happy_gold_multiwindow_tick_score(request, settings)
     return None

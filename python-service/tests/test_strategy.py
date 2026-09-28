@@ -2,6 +2,7 @@ import unittest
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from app.schemas import AccountSnapshot, CandleSnapshot, DecisionAction, DecisionRequest, FlowSnapshot, OrderBookLevel, PositionSnapshot
 from app.regime import RegimeSnapshot
@@ -435,6 +436,25 @@ class DecisionTests(unittest.TestCase):
         self.assertIn("rsi14", response.metadata)
         self.assertIn("bollinger_lower", response.metadata)
 
+    def test_mean_reversion_sell_v1_is_sell_only(self) -> None:
+        timestamp = datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc)
+        candles = [
+            CandleSnapshot(timestamp_utc=timestamp - timedelta(minutes=(22 - index) * 5), open=100 + index * .15, high=100.2 + index * .15, low=99.8 + index * .15, close=100 + index * .15, volume=100)
+            for index in range(21)
+        ]
+        candles.append(CandleSnapshot(timestamp_utc=timestamp, open=103.7, high=105.0, low=103.0, close=103.4, volume=120))
+        request = DecisionRequest(
+            bot_id="core-mean-reversion-sell-v1", request_id="mean-sell-test", timestamp_utc=timestamp + timedelta(seconds=5),
+            symbol="XAUUSD", timeframe="M5", bid=103.4, ask=103.5, spread_points=10, point_size=.01,
+            value_per_point_per_lot=1, candles=candles, positions=[],
+            account=AccountSnapshot(balance=10_000, equity=10_000, margin_free=10_000),
+        )
+        response = evaluate_decision(request, settings(), "mean_reversion_sell_v1_shadow")
+        self.assertEqual(response.reason, "mean_reversion_sell_v1_shadow_signal")
+        self.assertTrue(response.metadata["candidate"])
+        self.assertEqual(response.metadata["suggested_action"], "sell")
+        self.assertEqual(response.metadata["mean_reversion_version"], "bollinger_20_2_rsi70_mean_target")
+
     def retired_macd_trend_profile_records_independent_shadow_candidate(self) -> None:
         request = macd_trend_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
 
@@ -585,6 +605,55 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(blocked.reason, "stochastic_sell_v3_regime_block")
         self.assertFalse(blocked.metadata["candidate"])
 
+    def test_stochastic_sell_v4_requires_previous_low_retest(self) -> None:
+        request = stochastic_sell_request(datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc))
+        for candle in request.candles[-4:-1]:
+            candle.open += 1
+            candle.high += 1
+            candle.low += 1
+            candle.close += 1
+        confirmed = evaluate_decision(
+            request,
+            settings(stochastic_regime_snapshot=RegimeSnapshot("range", "both", "test")),
+            "stochastic_sell_v4_retest_shadow",
+        )
+        self.assertTrue(confirmed.metadata["candidate"])
+        self.assertEqual(confirmed.reason, "stochastic_sell_v4_retest_shadow_signal")
+        self.assertTrue(confirmed.metadata["v4_retest_confirmed"])
+
+        request.candles[-2].low = request.candles[-1].close - 0.01
+        blocked = evaluate_decision(
+            request,
+            settings(stochastic_regime_snapshot=RegimeSnapshot("range", "both", "test")),
+            "stochastic_sell_v4_retest_shadow",
+        )
+        self.assertFalse(blocked.metadata["candidate"])
+        self.assertEqual(blocked.reason, "stochastic_sell_v4_retest_block")
+
+    def test_breakout_short_v1_requires_volume_and_retest(self) -> None:
+        timestamp = datetime(2026, 7, 31, 10, 20, tzinfo=timezone.utc)
+        candles = []
+        for index in range(80):
+            close = 100.0 + (index % 5) * 0.02
+            candles.append(CandleSnapshot(
+                timestamp_utc=timestamp - timedelta(minutes=(80 - index) * 5),
+                open=close, high=close + 0.15, low=99.0, close=close, volume=100,
+            ))
+        candles[-3] = candles[-3].model_copy(update={"open": 100.0, "high": 100.2, "low": 99.8, "close": 100.0, "volume": 100})
+        candles[-2] = candles[-2].model_copy(update={"open": 99.8, "high": 100.0, "low": 97.8, "close": 98.0, "volume": 180})
+        candles[-1] = candles[-1].model_copy(update={"open": 99.2, "high": 99.2, "low": 98.2, "close": 98.5, "volume": 110})
+        request = DecisionRequest(
+            bot_id="core-breakout-short-v1", request_id="breakout-short-test", timestamp_utc=timestamp + timedelta(seconds=5),
+            symbol="XAUUSD", timeframe="M5", bid=98.5, ask=98.6, spread_points=10, point_size=0.01,
+            value_per_point_per_lot=1, candles=candles, positions=[],
+            account=AccountSnapshot(balance=10_000, equity=10_000, margin_free=10_000),
+        )
+        response = evaluate_decision(request, settings(), "breakout_short_v1_shadow")
+        self.assertEqual(response.reason, "breakout_short_v1_shadow_signal")
+        self.assertTrue(response.metadata["candidate"])
+        self.assertEqual(response.metadata["breakout_short_version"], "support_24_volume_1.2_retest")
+        self.assertEqual(response.metadata["target_rr"], 1.5)
+
     def test_multitimeframe_profile_aligns_h1_m15_and_m5_in_shadow(self) -> None:
         request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
 
@@ -616,6 +685,44 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.metadata["max_holding_bars"], 6)
         self.assertAlmostEqual(response.take_profit_points / response.stop_loss_points, 1.25, places=2)
         self.assertEqual(response.metadata["risk_multiplier"], .5)
+        self.assertTrue(response.metadata["experimental_shadow_lock"])
+
+    def test_buy_trend_pullback_breakout_v1_requires_volume_backed_m5_breakout(self) -> None:
+        request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+        request.candles[-2].high = request.candles[-1].close - .01
+        request.candles[-1].volume = 120
+
+        response = evaluate_decision(request, settings(), "buy_trend_pullback_breakout_v1_shadow")
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.reason, "buy_trend_pullback_breakout_v1_shadow_signal")
+        self.assertTrue(response.metadata["candidate"])
+        self.assertEqual(response.metadata["suggested_action"], "buy")
+        self.assertEqual(response.metadata["volume_multiplier"], 1.1)
+        self.assertEqual(response.metadata["target_rr"], 1.5)
+        self.assertEqual(response.metadata["max_holding_bars"], 8)
+        self.assertTrue(response.metadata["experimental_shadow_lock"])
+
+    def test_buy_trend_dip_stochastic_v1_requires_ema20_dip_and_oversold_cross(self) -> None:
+        request = multitimeframe_buy_request(datetime(2026, 7, 31, 15, 0, tzinfo=timezone.utc))
+        closes = [10.00 + index * .02 for index in range(14)] + [10.25, 10.20, 10.05, 9.80, 9.70, 10.12]
+        for candle, close in zip(request.candles[-20:], closes):
+            candle.open = close - .03
+            candle.high = close + .06
+            candle.low = close - .06
+            candle.close = close
+        request.candles[-1].low = 9.8
+        request.bid = request.candles[-1].close
+        request.ask = request.bid + .1
+
+        response = evaluate_decision(request, settings(), "buy_trend_dip_stochastic_v1_shadow")
+
+        self.assertEqual(response.reason, "buy_trend_dip_stochastic_v1_shadow_signal")
+        self.assertTrue(response.metadata["candidate"])
+        self.assertEqual(response.metadata["suggested_action"], "buy")
+        self.assertEqual(response.metadata["stochastic_oversold_threshold"], 25)
+        self.assertEqual(response.metadata["mean_model"], "m5_ema20")
+        self.assertEqual(response.metadata["target_rr"], 1.5)
         self.assertTrue(response.metadata["experimental_shadow_lock"])
 
     def test_multitimeframe_v3_switches_geometry_by_causal_regime(self) -> None:
@@ -1201,6 +1308,86 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(expanded_response.metadata["suggested_size"], 1.66)
         self.assertTrue(expanded_response.metadata["adaptive_regime_switch"])
 
+    def test_zigzag_scalper_v5_uses_calendar_only_in_transition_regime(self) -> None:
+        transition = happy_gold_breakout_request(datetime(2026, 7, 28, 15, 0, tzinfo=timezone.utc))
+        first = transition.candles[0]
+        transition.candles = [
+            first.model_copy(update={"timestamp_utc": first.timestamp_utc - timedelta(minutes=5 * (18 - index))})
+            for index in range(18)
+        ] + transition.candles
+        blocked = evaluate_decision(
+            transition, settings(zigzag_scalper_v5_calendar_range_floor=0, zigzag_scalper_v3_expansion_threshold=1000),
+            "zigzag_scalper_v5_adaptive_gate_shadow",
+        )
+        self.assertEqual(blocked.metadata["v5_mode"], "v1_transition_calendar_gate")
+        self.assertTrue(blocked.metadata["v5_calendar_gate_active"])
+        self.assertEqual(blocked.reason, "zigzag_scalper_v5_calendar_gate_block")
+
+        normal = happy_gold_breakout_request(datetime(2026, 7, 28, 15, 0, tzinfo=timezone.utc))
+        first = normal.candles[0]
+        normal.candles = [
+            first.model_copy(update={"timestamp_utc": first.timestamp_utc - timedelta(minutes=5 * (18 - index))})
+            for index in range(18)
+        ] + normal.candles
+        normal_response = evaluate_decision(
+            normal, settings(zigzag_scalper_v5_calendar_range_floor=999, zigzag_scalper_v3_expansion_threshold=1000),
+            "zigzag_scalper_v5_adaptive_gate_shadow",
+        )
+        self.assertEqual(normal_response.metadata["v5_mode"], "v1_normal_volatility")
+        self.assertFalse(normal_response.metadata["v5_calendar_gate_active"])
+        self.assertTrue(normal_response.metadata["candidate"])
+
+    def test_zigzag_scalper_v6_preserves_v5_buy_candidates(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 28, 15, 0, tzinfo=timezone.utc))
+        first = request.candles[0]
+        request.candles = [
+            first.model_copy(update={"timestamp_utc": first.timestamp_utc - timedelta(minutes=5 * (18 - index))})
+            for index in range(18)
+        ] + request.candles
+        response = evaluate_decision(
+            request, settings(zigzag_scalper_v5_calendar_range_floor=999, zigzag_scalper_v3_expansion_threshold=1000),
+            "zigzag_scalper_v6_stochastic_sell_gate_shadow",
+        )
+        self.assertEqual(response.metadata["suggested_action"], "buy")
+        self.assertFalse(response.metadata["v6_stochastic_sell_gate_active"])
+        self.assertTrue(response.metadata["candidate"])
+
+    def test_zigzag_scalper_v52_applies_frozen_buy_context_only_to_buys(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 28, 15, 0, tzinfo=timezone.utc))
+        first = request.candles[0]
+        request.candles = [
+            first.model_copy(update={"timestamp_utc": first.timestamp_utc - timedelta(minutes=5 * (18 - index))})
+            for index in range(18)
+        ] + request.candles
+        with patch("app.strategy.classify_regime", return_value=RegimeSnapshot("trend", "buy", "test")):
+            response = evaluate_decision(
+                request,
+                settings(zigzag_scalper_v5_calendar_range_floor=999, zigzag_scalper_v3_expansion_threshold=1000),
+                "zigzag_scalper_v9_buy_context_shadow",
+            )
+        self.assertEqual(response.metadata["suggested_action"], "buy")
+        self.assertTrue(response.metadata["v52_buy_context_active"])
+        self.assertGreaterEqual(response.metadata["v52_m5_ema50_distance_atr"], 1.0)
+        self.assertTrue(response.metadata["candidate"])
+        self.assertEqual(response.action, DecisionAction.HOLD)
+
+    def test_zigzag_scalper_v60_routes_buy_to_v52_only(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 28, 15, 0, tzinfo=timezone.utc))
+        first = request.candles[0]
+        request.candles = [
+            first.model_copy(update={"timestamp_utc": first.timestamp_utc - timedelta(minutes=5 * (18 - index))})
+            for index in range(18)
+        ] + request.candles
+        with patch("app.strategy.classify_regime", return_value=RegimeSnapshot("trend", "buy", "test")):
+            response = evaluate_decision(
+                request,
+                settings(zigzag_scalper_v5_calendar_range_floor=999, zigzag_scalper_v3_expansion_threshold=1000),
+                "zigzag_scalper_v10_context_router_shadow",
+            )
+        self.assertEqual(response.metadata["v60_selected_branch"], "v52_buy_context")
+        self.assertFalse(response.metadata["v60_alternative_branch_evaluated"])
+        self.assertEqual(response.action, DecisionAction.HOLD)
+
     def test_zigzag_scalper_v3_executes_only_for_demo_accounts(self) -> None:
         timestamp = datetime(2026, 7, 30, 10, 0, tzinfo=timezone.utc)
         live_settings = settings(
@@ -1262,6 +1449,35 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(real_response.action, DecisionAction.HOLD)
         self.assertEqual(real_response.size, 0)
         self.assertFalse(real_response.metadata["demo_execution_enabled"])
+
+    def test_zigzag_scalper_v4_applies_weekday_hour_direction_rules_to_v1(self) -> None:
+        monday = happy_gold_breakout_request(datetime(2026, 8, 3, 10, 0, tzinfo=timezone.utc))
+        accepted = evaluate_decision(monday, settings(), "zigzag_scalper_v4_day_filters_shadow")
+        self.assertTrue(accepted.metadata["candidate"])
+        self.assertEqual(accepted.reason, "zigzag_scalper_v4_day_filters_shadow_signal")
+        self.assertEqual(accepted.metadata["v4_filter_rule"], "monday_buy_04_14")
+        self.assertEqual(accepted.metadata["v4_base_strategy"], "happy_gold_zigzag_scalper_v1")
+
+        tuesday = happy_gold_breakout_request(datetime(2026, 8, 4, 10, 0, tzinfo=timezone.utc))
+        blocked_hour = evaluate_decision(tuesday, settings(), "zigzag_scalper_v4_day_filters_shadow")
+        self.assertFalse(blocked_hour.metadata["candidate"])
+        self.assertEqual(blocked_hour.reason, "zigzag_scalper_v4_day_filter_block")
+
+        wednesday = happy_gold_breakout_request(datetime(2026, 8, 5, 10, 0, tzinfo=timezone.utc))
+        accepted_wednesday = evaluate_decision(wednesday, settings(), "zigzag_scalper_v4_day_filters_shadow")
+        self.assertTrue(accepted_wednesday.metadata["candidate"])
+        self.assertEqual(accepted_wednesday.metadata["v4_filter_rule"], "wednesday_buy_03_19")
+
+        thursday = happy_gold_breakout_request(datetime(2026, 8, 6, 10, 0, tzinfo=timezone.utc))
+        accepted_thursday = evaluate_decision(thursday, settings(), "zigzag_scalper_v4_day_filters_shadow")
+        self.assertTrue(accepted_thursday.metadata["candidate"])
+        self.assertEqual(accepted_thursday.metadata["v4_filter_direction"], "both")
+
+        friday = happy_gold_breakout_request(datetime(2026, 8, 7, 10, 0, tzinfo=timezone.utc))
+        blocked_direction = evaluate_decision(friday, settings(), "zigzag_scalper_v4_day_filters_shadow")
+        self.assertFalse(blocked_direction.metadata["candidate"])
+        self.assertEqual(blocked_direction.metadata["v4_filter_direction"], "sell")
+
 
     def test_zigzag_scalper_v4_requires_clean_tick_microstructure(self) -> None:
         request = happy_gold_breakout_request(datetime(2026, 7, 30, 10, 0, tzinfo=timezone.utc))
@@ -1393,6 +1609,57 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual(response.reason, "happy_gold_multiwindow_tick_score_block")
         replay_gate = next(check for check in response.risk_checks if check.name == "exhaustive_replay_gate")
         self.assertFalse(replay_gate.passed)
+
+    def test_zigzag_v12_requires_causal_micro_retest(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 30, 10, 0, tzinfo=timezone.utc))
+        response = evaluate_decision(request, settings(), "zigzag_scalper_v12_micro_retest_shadow")
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.reason, "zigzag_scalper_v12_micro_retest_filter_block")
+        self.assertFalse(response.metadata["candidate"])
+
+    def test_zigzag_v12_preserves_v1_geometry_after_retest(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 30, 10, 0, tzinfo=timezone.utc))
+        request.indicators = {
+            "zigzag_v12_retest_ready": 1,
+            "zigzag_v12_retest_rejection": 1,
+            "zigzag_v12_retest_age_seconds": 35,
+            "zigzag_v12_retest_depth_pips": 20,
+            "zigzag_v12_rejection_move_pips": 10,
+        }
+
+        response = evaluate_decision(request, settings(), "zigzag_scalper_v12_micro_retest_shadow")
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.reason, "zigzag_scalper_v12_micro_retest_shadow_signal")
+        self.assertTrue(response.metadata["candidate"])
+        self.assertEqual(response.stop_loss_points, 240)
+        self.assertEqual(response.take_profit_points, 1000)
+        self.assertEqual(response.metadata["max_holding_bars"], 2)
+
+    def test_zigzag_v13_requires_completed_m30_close_and_first_m5_window(self) -> None:
+        request = happy_gold_breakout_request(datetime(2026, 7, 30, 10, 0, tzinfo=timezone.utc))
+        # Turn the last completed M30 (09:30-10:00) into a close through the
+        # confirmed 106.0 pivot, while keeping the 10:00 M5 as the execution bar.
+        for candle in request.candles[36:42]:
+            candle.open = 106.05
+            candle.high = 106.4
+            candle.low = 105.95
+            candle.close = 106.25
+        request.timestamp_utc = datetime(2026, 7, 30, 10, 4, tzinfo=timezone.utc)
+
+        response = evaluate_decision(request, settings(), "zigzag_scalper_v13_m30_close_shadow")
+
+        self.assertEqual(response.action, DecisionAction.HOLD)
+        self.assertEqual(response.reason, "zigzag_scalper_v13_m30_close_shadow_signal")
+        self.assertTrue(response.metadata["candidate"])
+        self.assertFalse(response.metadata["v13_uses_ticks"])
+        self.assertEqual(response.stop_loss_points, 240)
+        self.assertEqual(response.take_profit_points, 1000)
+
+        before_close = request.model_copy(update={"timestamp_utc": datetime(2026, 7, 30, 9, 59, tzinfo=timezone.utc)})
+        blocked = evaluate_decision(before_close, settings(), "zigzag_scalper_v13_m30_close_shadow")
+        self.assertFalse(blocked.metadata["candidate"])
 
 
 if __name__ == "__main__":

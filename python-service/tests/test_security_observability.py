@@ -1,5 +1,6 @@
 import hashlib
 import unittest
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from urllib.error import URLError
@@ -9,7 +10,7 @@ from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
 from app.auth import password_matches
-from app.main import app
+from app.main import app, read_account
 from app.schemas import AccountSnapshot, DecisionRequest, TickIngestRequest
 from app.security import InMemoryRateLimiter, RateLimit
 from app.supabase_store import SupabaseStore
@@ -17,6 +18,38 @@ from app.telemetry import emit_event, metrics_snapshot
 
 
 class SecurityAndObservabilityTests(unittest.TestCase):
+    def test_account_api_reports_connected_identity_and_profit(self) -> None:
+        snapshot = {
+            "account_id": 123456,
+            "broker": "Fusion Markets",
+            "server": "FusionMarkets-Demo",
+            "currency": "USD",
+            "trade_mode": "demo",
+            "leverage": 500,
+            "balance": 10100,
+            "equity": 10125,
+            "margin_free": 10000,
+            "floating_profit": 25,
+            "realized_profit_today": 100,
+            "profit_day": "2026-09-10",
+            "observed_at_utc": "2026-09-10T07:59:55+00:00",
+        }
+        with patch("app.main._require_api_session"), patch("app.main._uses_supabase_results", return_value=True), patch(
+            "app.main.SupabaseStore"
+        ) as store_type, patch("app.main.datetime") as clock, patch("app.main.settings.mt5_login", "123456"), patch(
+            "app.main.settings.mt5_server", "FusionMarkets-Demo"
+        ), patch("app.main.settings.mt5_initial_balance", 100):
+            store_type.return_value.load_latest_account_snapshot.return_value = snapshot
+            clock.fromisoformat.side_effect = datetime.fromisoformat
+            clock.now.return_value = datetime(2026, 9, 10, 8, tzinfo=timezone.utc)
+            result = read_account(MagicMock())
+
+        self.assertTrue(result.available)
+        self.assertEqual(result.status, "online")
+        self.assertTrue(result.identity_matches)
+        self.assertEqual(result.account.floating_profit, 25)
+        self.assertEqual(result.initial_balance, 100)
+
     def test_health_and_readiness_have_distinct_contracts(self) -> None:
         client = TestClient(app)
         health = client.get("/health")

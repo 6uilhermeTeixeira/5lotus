@@ -30,6 +30,13 @@ class Mt5BridgeSourceContractTests(unittest.TestCase):
         self.assertIn('input string ExecutionBotId = "";', self.source)
         self.assertIn('"positions\\":" + SerializePositions()', self.source)
 
+    def test_fusion_history_export_is_opt_in_and_resumable(self) -> None:
+        self.assertIn('input bool EnableFusionHistoryExport = false;', self.source)
+        self.assertIn('input int FusionHistoryLookbackDays = 365;', self.source)
+        self.assertIn('CopyTicksRange(StrategySymbol, ticks, COPY_TICKS_ALL, fromMsc, toMsc)', self.source)
+        self.assertIn('history-state.txt', self.source)
+        self.assertIn('RunFusionHistoryExportStep();', self.source)
+
 
 if __name__ == "__main__":
     unittest.main()

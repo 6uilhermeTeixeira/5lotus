@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 from app import main
 from app.local_dataset import DatasetError
 from app.schemas import BotCatalogItem, EquitySeries, HistoricalReplayResponse, ResultsSummary, TradeResult
+from app.supabase_store import SupabaseRequestError
 
 
 class ResultsReplayEndpointTests(unittest.TestCase):
@@ -92,6 +93,32 @@ class ResultsReplayEndpointTests(unittest.TestCase):
 
         self.assertIs(result, self.replay)
         local.assert_called_once_with(main.settings.backtest_cache_path, self.bot.id, 365)
+
+    def test_transient_supabase_failure_falls_back_to_bundled_snapshot(self) -> None:
+        store = MagicMock()
+        store.load_backtest_snapshot.side_effect = SupabaseRequestError(
+            "temporarily unavailable", code="http_error", retryable=True, status_code=503
+        )
+        with patch("app.main._uses_supabase_results", return_value=True), patch(
+            "app.main.SupabaseStore", return_value=store
+        ), patch("app.main.load_local_backtest", return_value=self.replay) as local:
+            result = main._load_cached_backtest(self.bot, 365, "normalized")
+
+        self.assertIs(result, self.replay)
+        local.assert_called_once_with(main.settings.backtest_cache_path, self.bot.id, 365)
+
+    def test_supabase_auth_failure_does_not_hide_behind_local_snapshot(self) -> None:
+        store = MagicMock()
+        store.load_backtest_snapshot.side_effect = SupabaseRequestError(
+            "unauthorized", code="auth_error", retryable=False, status_code=401
+        )
+        with patch("app.main._uses_supabase_results", return_value=True), patch(
+            "app.main.SupabaseStore", return_value=store
+        ), patch("app.main.load_local_backtest", return_value=self.replay) as local:
+            with self.assertRaises(SupabaseRequestError):
+                main._load_cached_backtest(self.bot, 365, "normalized")
+
+        local.assert_not_called()
 
     def test_supabase_mode_uses_versioned_catalog_instead_of_stale_remote_rows(self) -> None:
         catalog = [self.bot]

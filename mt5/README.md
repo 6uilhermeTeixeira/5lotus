@@ -14,6 +14,11 @@ Foi criado um EA inicial em:
 - `experts/TickCollectorEA.mq5`, coletor isolado e sem funções de negociação
 - `scripts/TickHistoryExporter.mq5`, exportador sob demanda do histórico de ticks da corretora
 
+O `SyncLeadBridgeEA` também possui um exportador histórico Fusion/MT5 opcional. Quando
+`EnableFusionHistoryExport=true`, ele retoma uma janela de até 365 dias em blocos de uma hora,
+persistindo o checkpoint em `Common/Files/2lotus-ticks/<collector>/history-state.txt`. O exportador
+somente lê `CopyTicksRange` e escreve arquivos; ele não envia, modifica ou encerra ordens.
+
 ## Papel do EA
 
 - coletar contexto basico do simbolo

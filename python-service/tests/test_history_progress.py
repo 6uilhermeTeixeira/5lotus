@@ -4,7 +4,7 @@ import unittest
 from datetime import datetime, timezone
 from pathlib import Path
 
-from app.history_progress import load_dukascopy_progress
+from app.history_progress import load_dukascopy_progress, load_fusion_progress
 
 
 class HistoryProgressTests(unittest.TestCase):
@@ -45,3 +45,24 @@ class HistoryProgressTests(unittest.TestCase):
 
         self.assertFalse(progress["available"])
         self.assertEqual(progress["years"], [])
+
+    def test_fusion_progress_counts_tick_files_and_empty_hours(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            collector = root / "2lotus-ticks" / "fusion-test"
+            collector.mkdir(parents=True)
+            start = 1_704_067_200_000  # 2024-01-01T00:00:00Z
+            end = start + 4 * 3_600_000
+            (collector / "history-state.txt").write_text(
+                f"start_msc={start}\nend_msc={end}\nnext_msc={end}\n", encoding="utf-8"
+            )
+            (collector / f"XAUUSD-history-{start}-{start + 3_600_000}.ready.csv").write_text("tick\n", encoding="utf-8")
+            (collector / f"XAUUSD-history-{start + 3_600_000}-{end}.empty.txt").write_text("empty\n", encoding="utf-8")
+
+            progress = load_fusion_progress(root, "fusion-test")
+
+        self.assertTrue(progress["available"])
+        self.assertEqual(progress["completed_hours"], 4)
+        self.assertEqual(progress["expected_hours"], 4)
+        self.assertEqual(progress["progress_pct"], 100.0)
+        self.assertTrue(progress["years"][0]["complete"])

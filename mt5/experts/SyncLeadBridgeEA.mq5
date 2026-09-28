@@ -22,6 +22,12 @@ input string StrategyTimeframe = "M5";
 input int HistoryBars = 4000;
 input int HistoryCacheBars = 100000;
 input bool RefreshDeepHistoryOnInit = false;
+// Export is read-only: it calls CopyTicksRange and writes a resumable local spool.
+input bool EnableFusionHistoryExport = false;
+input string FusionHistoryCollectorId = "2lotus-fusion-demo-history-v1";
+input int FusionHistoryLookbackDays = 365;
+input int FusionHistoryChunkMinutes = 60;
+input int FusionHistoryChunkIntervalSeconds = 20;
 input int PollIntervalSeconds = 5;
 input int RequestTimeoutMs = 3000;
 input bool EnableOrderExecution = false;
@@ -36,6 +42,15 @@ long impulseTimesMsc[IMPULSE_TICK_CAPACITY];
 double impulseMids[IMPULSE_TICK_CAPACITY];
 int impulseHead = 0;
 int impulseCount = 0;
+double dailyRealizedProfit = 0.0;
+string brokerProfitDay = "";
+bool fusionHistoryInitialized = false;
+ulong fusionHistoryStartMsc = 0;
+ulong fusionHistoryEndMsc = 0;
+ulong fusionHistoryNextMsc = 0;
+ulong fusionHistoryLastRunMsc = 0;
+int fusionHistoryDataChunks = 0;
+int fusionHistoryEmptyChunks = 0;
 
 int OnInit()
 {
@@ -60,6 +75,8 @@ int OnInit()
    MarketBookAdd(_Symbol);
    trade.SetExpertMagicNumber(StrategyMagicNumber);
    CacheConfiguredBots();
+   if(EnableFusionHistoryExport)
+      InitializeFusionHistoryExport();
    PrintFormat(
       "SyncLeadBridgeEA initialized. ingest_key_configured=%s ingest_key_length=%d order_execution=%s execution_bot_configured=%s",
       LotusIngestApiKey != "" ? "true" : "false",
@@ -105,6 +122,8 @@ void OnTimer()
       return;
    }
 
+   dailyRealizedProfit = CalculateRealizedProfitToday(brokerProfitDay);
+
    PollConfiguredBot(tick, StrategyBot1Id);
    if(StrategyBot2Id != StrategyBot1Id) PollConfiguredBot(tick, StrategyBot2Id);
    if(StrategyBot3Id != StrategyBot1Id && StrategyBot3Id != StrategyBot2Id) PollConfiguredBot(tick, StrategyBot3Id);
@@ -112,6 +131,195 @@ void OnTimer()
 
    upTicks = downTicks = neutralTicks = 0;
    upVolume = downVolume = 0.0;
+   RunFusionHistoryExportStep();
+}
+
+string FusionHistoryDirectory()
+{
+   return "2lotus-ticks\\" + FusionHistoryCollectorId;
+}
+
+string FusionHistoryStateFile()
+{
+   return FusionHistoryDirectory() + "\\history-state.txt";
+}
+
+ulong FusionHistoryChunkMsc()
+{
+   return (ulong)FusionHistoryChunkMinutes * 60000;
+}
+
+string ReadFusionHistoryStateValue(const int handle)
+{
+   string line = FileReadString(handle);
+   int separator = StringFind(line, "=");
+   return separator >= 0 ? StringSubstr(line, separator + 1) : "";
+}
+
+bool LoadFusionHistoryState()
+{
+   int handle = FileOpen(FusionHistoryStateFile(), FILE_READ|FILE_TXT|FILE_ANSI|FILE_COMMON);
+   if(handle == INVALID_HANDLE)
+      return false;
+
+   string version = ReadFusionHistoryStateValue(handle);
+   string symbol = ReadFusionHistoryStateValue(handle);
+   fusionHistoryStartMsc = (ulong)StringToInteger(ReadFusionHistoryStateValue(handle));
+   fusionHistoryEndMsc = (ulong)StringToInteger(ReadFusionHistoryStateValue(handle));
+   fusionHistoryNextMsc = (ulong)StringToInteger(ReadFusionHistoryStateValue(handle));
+   fusionHistoryDataChunks = (int)StringToInteger(ReadFusionHistoryStateValue(handle));
+   fusionHistoryEmptyChunks = (int)StringToInteger(ReadFusionHistoryStateValue(handle));
+   FileClose(handle);
+
+   return version == "1" && symbol == StrategySymbol && fusionHistoryStartMsc > 0 && fusionHistoryEndMsc > fusionHistoryStartMsc;
+}
+
+bool SaveFusionHistoryState()
+{
+   string directory = FusionHistoryDirectory();
+   FolderCreate(directory, FILE_COMMON);
+   string temporary = FusionHistoryStateFile() + ".part";
+   int handle = FileOpen(temporary, FILE_WRITE|FILE_TXT|FILE_ANSI|FILE_COMMON);
+   if(handle == INVALID_HANDLE)
+   {
+      PrintFormat("Fusion history state open failed: error=%d", GetLastError());
+      return false;
+   }
+   FileWriteString(handle, "version=1\r\n");
+   FileWriteString(handle, "symbol=" + StrategySymbol + "\r\n");
+   FileWriteString(handle, "start_msc=" + IntegerToString((long)fusionHistoryStartMsc) + "\r\n");
+   FileWriteString(handle, "end_msc=" + IntegerToString((long)fusionHistoryEndMsc) + "\r\n");
+   FileWriteString(handle, "next_msc=" + IntegerToString((long)fusionHistoryNextMsc) + "\r\n");
+   FileWriteString(handle, "data_chunks=" + IntegerToString(fusionHistoryDataChunks) + "\r\n");
+   FileWriteString(handle, "empty_chunks=" + IntegerToString(fusionHistoryEmptyChunks) + "\r\n");
+   FileFlush(handle);
+   FileClose(handle);
+   if(!FileMove(temporary, FILE_COMMON, FusionHistoryStateFile(), FILE_COMMON|FILE_REWRITE))
+   {
+      PrintFormat("Fusion history state finalize failed: error=%d", GetLastError());
+      return false;
+   }
+   return true;
+}
+
+void InitializeFusionHistoryExport()
+{
+   if(FusionHistoryLookbackDays < 1 || FusionHistoryChunkMinutes < 1 || FusionHistoryChunkMinutes > 1440 || FusionHistoryChunkIntervalSeconds < 1)
+   {
+      Print("Fusion history export disabled: invalid lookback, chunk, or interval input.");
+      return;
+   }
+   if(!SymbolSelect(StrategySymbol, true))
+   {
+      PrintFormat("Fusion history export cannot select symbol=%s error=%d", StrategySymbol, GetLastError());
+      return;
+   }
+   datetime serverNow = TimeTradeServer();
+   if(serverNow <= 0)
+   {
+      Print("Fusion history export is waiting for the trade server clock.");
+      return;
+   }
+
+   ulong nowMsc = (ulong)serverNow * 1000;
+   ulong desiredStartMsc = nowMsc - (ulong)FusionHistoryLookbackDays * 86400000;
+   ulong chunkMsc = FusionHistoryChunkMsc();
+   bool resumed = LoadFusionHistoryState();
+   if(!resumed || fusionHistoryNextMsc >= fusionHistoryEndMsc)
+   {
+      ulong overlapStartMsc = resumed && fusionHistoryEndMsc > chunkMsc ? fusionHistoryEndMsc - chunkMsc : desiredStartMsc;
+      fusionHistoryStartMsc = overlapStartMsc > desiredStartMsc ? overlapStartMsc : desiredStartMsc;
+      fusionHistoryEndMsc = nowMsc;
+      fusionHistoryNextMsc = fusionHistoryStartMsc;
+   }
+   fusionHistoryInitialized = SaveFusionHistoryState();
+   PrintFormat(
+      "Fusion history export initialized: resumed=%s symbol=%s next_msc=%I64u end_msc=%I64u chunk_minutes=%d",
+      resumed ? "true" : "false", StrategySymbol, fusionHistoryNextMsc, fusionHistoryEndMsc, FusionHistoryChunkMinutes
+   );
+}
+
+bool WriteFusionHistoryEmptyMarker(const ulong fromMsc, const ulong toMsc)
+{
+   string name = FusionHistoryDirectory() + "\\" + StrategySymbol + "-history-" + IntegerToString((long)fromMsc) + "-" + IntegerToString((long)toMsc) + ".empty.txt";
+   int handle = FileOpen(name, FILE_WRITE|FILE_TXT|FILE_ANSI|FILE_COMMON);
+   if(handle == INVALID_HANDLE)
+      return false;
+   FileWriteString(handle, "source=Fusion Markets MT5\r\nstatus=empty\r\n");
+   FileClose(handle);
+   return true;
+}
+
+bool ExportFusionHistoryChunk(const ulong fromMsc, const ulong toMsc)
+{
+   MqlTick ticks[];
+   ResetLastError();
+   int count = CopyTicksRange(StrategySymbol, ticks, COPY_TICKS_ALL, fromMsc, toMsc);
+   if(count < 0)
+   {
+      PrintFormat("Fusion history CopyTicksRange failed: from_msc=%I64u to_msc=%I64u error=%d", fromMsc, toMsc, GetLastError());
+      return false;
+   }
+   if(count == 0)
+   {
+      if(!WriteFusionHistoryEmptyMarker(fromMsc, toMsc))
+         return false;
+      fusionHistoryEmptyChunks++;
+      return true;
+   }
+
+   int digits = (int)SymbolInfoInteger(StrategySymbol, SYMBOL_DIGITS);
+   double pointSize = SymbolInfoDouble(StrategySymbol, SYMBOL_POINT);
+   string fileName = FusionHistoryDirectory() + "\\" + StrategySymbol + "-history-" + IntegerToString((long)fromMsc) + "-" + IntegerToString((long)toMsc) + ".part.csv";
+   int handle = FileOpen(fileName, FILE_WRITE|FILE_CSV|FILE_ANSI|FILE_COMMON, ',');
+   if(handle == INVALID_HANDLE)
+   {
+      PrintFormat("Fusion history spool open failed: file=%s error=%d", fileName, GetLastError());
+      return false;
+   }
+   FileWrite(handle, "time_msc", "sequence", "bid", "ask", "last", "volume", "volume_real", "flags", "point_size");
+   for(int index = 0; index < count; index++)
+      FileWrite(handle, IntegerToString(ticks[index].time_msc), IntegerToString(index), DoubleToString(ticks[index].bid, digits), DoubleToString(ticks[index].ask, digits), DoubleToString(ticks[index].last, digits), IntegerToString((long)ticks[index].volume), DoubleToString(ticks[index].volume_real, 8), IntegerToString((int)ticks[index].flags), DoubleToString(pointSize, 10));
+   FileFlush(handle);
+   FileClose(handle);
+
+   string readyName = fileName;
+   StringReplace(readyName, ".part.csv", ".ready.csv");
+   if(!FileMove(fileName, FILE_COMMON, readyName, FILE_COMMON|FILE_REWRITE))
+   {
+      PrintFormat("Fusion history spool finalize failed: file=%s error=%d", fileName, GetLastError());
+      return false;
+   }
+   fusionHistoryDataChunks++;
+   PrintFormat("Fusion history chunk exported: from_msc=%I64u to_msc=%I64u ticks=%d", fromMsc, toMsc, count);
+   return true;
+}
+
+void RunFusionHistoryExportStep()
+{
+   if(!EnableFusionHistoryExport)
+      return;
+   if(!fusionHistoryInitialized)
+   {
+      InitializeFusionHistoryExport();
+      return;
+   }
+   ulong nowMsc = GetTickCount64();
+   if(fusionHistoryLastRunMsc > 0 && nowMsc - fusionHistoryLastRunMsc < (ulong)FusionHistoryChunkIntervalSeconds * 1000)
+      return;
+   fusionHistoryLastRunMsc = nowMsc;
+   if(fusionHistoryNextMsc >= fusionHistoryEndMsc)
+   {
+      InitializeFusionHistoryExport();
+      return;
+   }
+   ulong toMsc = fusionHistoryNextMsc + FusionHistoryChunkMsc() - 1;
+   if(toMsc > fusionHistoryEndMsc)
+      toMsc = fusionHistoryEndMsc;
+   if(!ExportFusionHistoryChunk(fusionHistoryNextMsc, toMsc))
+      return;
+   fusionHistoryNextMsc = toMsc + 1;
+   SaveFusionHistoryState();
 }
 
 void PollConfiguredBot(const MqlTick &tick, const string botId)
@@ -142,11 +350,15 @@ string BuildDecisionPayload(const MqlTick &tick, const string botId)
    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
    double margin_free = AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+   double floatingProfit = AccountInfoDouble(ACCOUNT_PROFIT);
    long leverage = AccountInfoInteger(ACCOUNT_LEVERAGE);
+   long accountId = AccountInfoInteger(ACCOUNT_LOGIN);
    long accountTradeMode = AccountInfoInteger(ACCOUNT_TRADE_MODE);
    string tradeMode = accountTradeMode == ACCOUNT_TRADE_MODE_DEMO ? "demo" :
                       accountTradeMode == ACCOUNT_TRADE_MODE_CONTEST ? "contest" : "real";
    string accountServer = AccountInfoString(ACCOUNT_SERVER);
+   string accountBroker = AccountInfoString(ACCOUNT_COMPANY);
+   string accountCurrency = AccountInfoString(ACCOUNT_CURRENCY);
    double tick_value = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_VALUE);
    double tick_size = SymbolInfoDouble(_Symbol, SYMBOL_TRADE_TICK_SIZE);
    double value_per_point_per_lot = 0.0;
@@ -177,9 +389,15 @@ string BuildDecisionPayload(const MqlTick &tick, const string botId)
          "\"balance\":" + DoubleToString(balance, 2) + ","
          "\"equity\":" + DoubleToString(equity, 2) + ","
          "\"margin_free\":" + DoubleToString(margin_free, 2) + ","
+         "\"account_id\":" + IntegerToString(accountId) + ","
+         "\"broker\":\"" + JsonEscape(accountBroker) + "\","
+         "\"currency\":\"" + JsonEscape(accountCurrency) + "\","
+         "\"floating_profit\":" + DoubleToString(floatingProfit, 2) + ","
+         "\"realized_profit_today\":" + DoubleToString(dailyRealizedProfit, 2) + ","
+         "\"profit_day\":\"" + brokerProfitDay + "\","
          "\"leverage\":" + IntegerToString((int)leverage) + ","
          "\"trade_mode\":\"" + tradeMode + "\","
-         "\"server\":\"" + accountServer + "\"" +
+         "\"server\":\"" + JsonEscape(accountServer) + "\"" +
       "},"
       "\"indicators\":" + SerializeImpulseIndicators(tick) +
       ",\"flow\":{"
@@ -193,6 +411,43 @@ string BuildDecisionPayload(const MqlTick &tick, const string botId)
       "}";
 
    return json;
+}
+
+string JsonEscape(string value)
+{
+   StringReplace(value, "\\", "\\\\");
+   StringReplace(value, "\"", "\\\"");
+   StringReplace(value, "\r", "\\r");
+   StringReplace(value, "\n", "\\n");
+   return value;
+}
+
+double CalculateRealizedProfitToday(string &profitDay)
+{
+   datetime serverNow = TimeTradeServer();
+   MqlDateTime day;
+   TimeToStruct(serverNow, day);
+   profitDay = StringFormat("%04d-%02d-%02d", day.year, day.mon, day.day);
+   day.hour = 0;
+   day.min = 0;
+   day.sec = 0;
+   if(!HistorySelect(StructToTime(day), serverNow))
+      return 0.0;
+
+   double realized = 0.0;
+   for(int index = 0; index < HistoryDealsTotal(); index++)
+   {
+      ulong ticket = HistoryDealGetTicket(index);
+      if(ticket == 0) continue;
+      ENUM_DEAL_TYPE type = (ENUM_DEAL_TYPE)HistoryDealGetInteger(ticket, DEAL_TYPE);
+      if(type != DEAL_TYPE_BUY && type != DEAL_TYPE_SELL)
+         continue;
+      realized += HistoryDealGetDouble(ticket, DEAL_PROFIT)
+                + HistoryDealGetDouble(ticket, DEAL_COMMISSION)
+                + HistoryDealGetDouble(ticket, DEAL_SWAP)
+                + HistoryDealGetDouble(ticket, DEAL_FEE);
+   }
+   return realized;
 }
 
 void RecordImpulseTick(const MqlTick &tick)

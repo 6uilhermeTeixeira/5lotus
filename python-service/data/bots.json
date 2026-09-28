@@ -1,23 +1,103 @@
 [
   {
+    "id": "core-zigzag-v8",
+    "name": "ZigZag Scalper V5.1",
+    "subtitle": "Filtro Temporal · Calendário mensal",
+    "description": "Calendário seletivo de semanas e dias para priorizar a porcentagem de operações vencedoras.",
+    "strategy_profile": "zigzag_scalper_v8_accuracy_cycle_shadow",
+    "strategy_description": "- Semana 2: segunda-feira, sinais do roteador temporal V6.0.\n- Semana 3: terça-feira, somente compras.\n- Semana 4: sexta-feira, sinais do roteador temporal V6.0.\n- Semanas 1 e 5: sem operação.\n- Horário do calendário: UTC; sinal, risco e shadow lock permanecem herdados da V6.0.\n- Filtro temporal experimental; exige replay unificado e validação forward.",
+    "symbol": "XAUUSD", "timeframe": "M5",
+    "results_file": "results/core-zigzag-v8.json", "active": true
+  },
+  {
+    "id": "core-zigzag-v72",
+    "name": "ZigZag Scalper V6.0",
+    "subtitle": "Roteador Temporal · Semanal",
+    "description": "Usa o roteador de gatilho V2.0 às quartas e quintas UTC; nos demais dias usa o filtro contextual V3.1.",
+    "strategy_profile": "zigzag_scalper_v72_v3_wed_thu_shadow",
+    "strategy_description": "- Quarta e quinta UTC: V2.0 pura, com roteamento causal de gatilho por regime.\n- Segunda, terça e sexta: V3.1, incluindo filtros H1, EMA50 e estocástico tardio.\n- Os dois ramos permanecem em shadow; nenhuma ordem é enviada.\n- O gráfico combina os ramos e deve ser confirmado por replay unificado.",
+    "symbol": "XAUUSD", "timeframe": "M5",
+    "results_file": "results/core-zigzag-v72.json", "active": true
+  },
+  {
+    "id": "core-zigzag-v7",
+    "name": "ZigZag Scalper V3.1",
+    "subtitle": "Filtro Contextual · Direcional",
+    "description": "Aplica à V2.1 contexto H1, EMA50 e confirmação estocástica nas vendas tardias.",
+    "strategy_profile": "zigzag_scalper_v7_directional_shadow",
+    "strategy_description": "- Mantém o roteamento de gatilho e gate temporal da V2.1.\n- Bloqueia tendência H1 vendedora e histórico insuficiente.\n- Vendas exigem fechamento M5 abaixo da EMA50.\n- A partir de 12:00 UTC, vendas exigem máximo de K/D do candle anterior >= 65.\n- Usa somente candles encerrados.\n- Filtro contextual experimental; requer replay independente. Execução shadow.",
+    "symbol": "XAUUSD", "timeframe": "M5",
+    "results_file": "results/core-zigzag-v7.json", "active": true
+  },
+  {
+    "id": "core-zigzag-v9",
+    "name": "ZigZag Scalper V3.2",
+    "subtitle": "Filtro Contextual · Compra",
+    "description": "Filtra compras da V2.1 por alinhamento causal H1 e distância M5 acima da EMA50.",
+    "strategy_profile": "zigzag_scalper_v9_buy_context_shadow",
+    "strategy_description": "- Preserva integralmente o roteamento de gatilho e o gate temporal da V2.1.\n- Vendas são idênticas à V2.1; somente compras passam pelo filtro.\n- Compras exigem que a direção do regime H1 não seja vendedora.\n- O fechamento do último M5 completo deve estar pelo menos 1,00 ATR14 acima da EMA50 M5.\n- EMA50, ATR14 e regime usam somente candles encerrados; não há filtro de horário, calendário ou estocástico.\n- A hipótese foi congelada após seleção em 2025 e requer walk-forward independente e validação com ticks Fusion.\n- Execução permanece permanentemente bloqueada em shadow.",
+    "symbol": "XAUUSD", "timeframe": "M5",
+    "results_file": "results/core-zigzag-v9.json", "active": true
+  },
+  {
+    "id": "core-zigzag-v10",
+    "name": "ZigZag Scalper V4.0",
+    "subtitle": "Roteador de Contexto · Direcional",
+    "description": "Roteia compras para o filtro contextual V3.2 e vendas para o filtro contextual V3.1.",
+    "strategy_profile": "zigzag_scalper_v10_context_router_shadow",
+    "strategy_description": "- A V2.1 continua sendo a origem única do sinal; o roteador não cria entradas.\n- Compra: seleciona exclusivamente V3.2, que exige contexto H1 não-vendedor e fechamento M5 ao menos 1,00 ATR14 acima da EMA50.\n- Venda: seleciona exclusivamente V3.1, com contexto H1, EMA50 e confirmação estocástica tardia.\n- O ramo alternativo nunca é executado nem usado para escolher retroativamente uma operação.\n- Preserva a geometria do ramo selecionado e mantém execução permanentemente bloqueada em shadow.\n- Replay composto exige walk-forward unificado e validação com ticks Fusion antes de qualquer promoção.",
+    "symbol": "XAUUSD", "timeframe": "M5",
+    "results_file": "results/core-zigzag-v10.json", "active": true
+  },
+  {
+    "id": "core-zigzag-v11",
+    "name": "ZigZag Scalper V7.0",
+    "subtitle": "Orquestração Final · Temporal",
+    "description": "Aplica os filtros temporais à V4.0 e produz uma única decisão final em shadow.",
+    "strategy_profile": "zigzag_scalper_v11_final_orchestrator_shadow",
+    "strategy_description": "- Usa a V4.0 como única fonte de sinal.\n- Aplica os filtros temporais diário/horário e calendário mensal.\n- Preserva o candidato contextual e não reavalia gatilhos alternativos.\n- Registra a rota temporal, bloqueios e estado final.\n- Execução permanentemente bloqueada em shadow até replay causal unificado.",
+    "symbol": "XAUUSD", "timeframe": "M5",
+    "results_file": "results/core-zigzag-v11.json", "active": true
+  },
+  {
     "id": "core-zigzag",
-    "name": "ZigZag Scalper V1",
-    "subtitle": "",
+    "name": "ZigZag Scalper V1.0",
+    "subtitle": "Rompimento estrutural",
     "description": "Rompimento de pivôs fractais confirmados em M30, executado e monitorado pelo fluxo M5.",
     "strategy_profile": "happy_gold_zigzag_scalper",
-    "strategy_description": "- Agrega candles M5 completos em M30.\n- Detecta pivôs causais com duas velas de confirmação em cada lado.\n- Entra no rompimento do último pivô entre 03:00 e 19:00 UTC.\n- Usa stop de 240 pontos, alvo de 1000 pontos e saída temporal de até 2 candles M5.\n- Permanece em shadow como componente isolado.",
+    "strategy_description": "- Agrega candles M5 completos em M30.\n- Detecta pivôs causais com duas velas de confirmação em cada lado.\n- Entra no rompimento do último pivô entre 03:00 e 19:00 UTC.\n- Usa stop de 240 pontos, alvo de 1000 pontos e saída temporal de até 2 candles M5.\n- Melhor desempenho histórico entre as variantes V1.x; permanece em shadow como componente isolado.",
     "symbol": "XAUUSD",
     "timeframe": "M5",
     "results_file": "results/core-zigzag.json",
     "active": true
   },
   {
+    "id": "core-zigzag-v12",
+    "name": "ZigZag Scalper V1.1.0",
+    "subtitle": "Microreteste estrutural",
+    "description": "Preserva a geometria original da V1.0 e exige rompimento seguido de microreteste causal com rejeição na direção do movimento.",
+    "strategy_profile": "zigzag_scalper_v12_micro_retest_shadow",
+    "strategy_description": "- Mantém os pivôs fractais M30, stop de 240 pontos, alvo de 1000 pontos e holding máximo de 2 candles M5 da V1.0.\n- Após o rompimento, exige microreteste observado em ticks, rejeição na direção do rompimento, profundidade máxima de 50 pips e confirmação em até 90 segundos.\n- Os campos de microreteste ausentes bloqueiam o sinal; não são substituídos silenciosamente pelo rompimento V1.0.\n- Estratégia experimental exclusivamente shadow até replay causal com ticks Fusion e validação forward.",
+    "symbol": "XAUUSD", "timeframe": "M5",
+    "results_file": "results/core-zigzag-v12.json", "active": true
+  },
+  {
+    "id": "core-zigzag-v13",
+    "name": "ZigZag Scalper V1.2.0",
+    "subtitle": "Fechamento M30",
+    "description": "Preserva a geometria da V1.0 e troca o rompimento de cotação por fechamento confirmado de candle M30 além do pivô.",
+    "strategy_profile": "zigzag_scalper_v13_m30_close_shadow",
+    "strategy_description": "- Usa somente OHLC de candles M5 completos agregados em M30.\n- Detecta pivôs fractais causais e exige que o fechamento completo do M30 atravesse o pivô confirmado.\n- A entrada é observada apenas no primeiro M5 após o fechamento do M30; não depende de ticks.\n- Mantém stop de 240 pontos, alvo de 1000 pontos e holding máximo de 2 candles M5 da V1.0.\n- Estratégia experimental exclusivamente shadow até replay OHLC causal e validação forward.",
+    "symbol": "XAUUSD", "timeframe": "M5",
+    "results_file": "results/core-zigzag-v13.json", "active": true
+  },
+  {
     "id": "core-zigzag-v2",
-    "name": "ZigZag Scalper V2",
-    "subtitle": "Tick Estrutural",
+    "name": "ZigZag Scalper V1.3.0",
+    "subtitle": "Gatilho · Tick estrutural",
     "description": "Rompimento ZigZag M30 com estrutura M5 e impulso de ticks, sem o filtro de range que reduzia excessivamente a frequência.",
     "strategy_profile": "zigzag_scalper_v2_shadow",
-    "strategy_description": "- Mantém os pivôs causais M30 da ZigZag Scalper original.\n- Exige impulso direcional de 900 segundos >= 1.000 pips e distância direcional da EMA20 >= 900 pips.\n- Aceita extensão máxima de 50 pips além do pivô e exclui sextas-feiras.\n- Remove exclusivamente no V2 o filtro de range normalizado, recuperando sinais sem alterar o V1 ou os experimentos anteriores.\n- Usa stop de 60 pips, breakeven em 40/+1, trailing 40/20 e tempo máximo de 60 segundos.\n- Normaliza o risco monetário ao V1 com lote 0,40 no modelo de pesquisa.\n- Amostra tick estrutural combinada: 164 operações, PF 2,147 e lucro de US$ 609,92 em lote 0,10 antes da normalização.\n- Permanece exclusivamente em shadow até validação forward com ticks da corretora.",
+    "strategy_description": "- Mantém os pivôs causais M30 da V1.0.\n- Exige impulso direcional de 900 segundos >= 1.000 pips e distância direcional da EMA20 >= 900 pips.\n- Aceita extensão máxima de 50 pips além do pivô e exclui sextas-feiras.\n- É um gatilho próprio, com execução por ticks, e não um filtro das variantes V1.x.\n- Usa stop de 60 pips, breakeven em 40/+1, trailing 40/20 e tempo máximo de 60 segundos.\n- Normaliza o risco monetário à V1.0 com lote 0,40 no modelo de pesquisa.\n- Amostra tick estrutural combinada: 164 operações, PF 2,147 e lucro de US$ 609,92 em lote 0,10 antes da normalização.\n- Permanece exclusivamente em shadow até validação forward com ticks da corretora.",
     "symbol": "XAUUSD",
     "timeframe": "M5",
     "results_file": "results/core-zigzag-v2.json",
@@ -25,14 +105,50 @@
   },
   {
     "id": "core-zigzag-v3",
-    "name": "ZigZag Scalper V3",
-    "subtitle": "Regime Adaptativo",
-    "description": "Alterna causalmente entre o V1 em volatilidade normal e o V2 estrutural durante expansões do range M5.",
+    "name": "ZigZag Scalper V2.0",
+    "subtitle": "Roteador de Gatilho · Regime",
+    "description": "Alterna causalmente entre os gatilhos V1.0 e V1.3.0 conforme o range M5.",
     "strategy_profile": "zigzag_scalper_v3_adaptive_shadow",
-    "strategy_description": "- Calcula o range médio dos últimos 60 candles M5 completos, sem usar dados futuros.\n- Abaixo de 6,00 no XAUUSD, usa a lógica e a geometria do ZigZag Scalper V1.\n- Em 6,00 ou mais, usa os filtros estruturais e de ticks do V2.\n- Mantém risco monetário aproximado de US$ 24 por operação: 0,10 lote no modo V1 e 0,40 no modo V2.\n- O corte foi selecionado no trecho de 2025 e permaneceu positivo nas partições posteriores de 2026.\n- Permanece exclusivamente em shadow até validação forward com ticks da corretora.",
+    "strategy_description": "- Calcula o range médio dos últimos 60 candles M5 completos, sem usar dados futuros.\n- Abaixo de 6,00 no XAUUSD, roteia para o gatilho V1.0.\n- Em 6,00 ou mais, roteia para o gatilho V1.3.0.\n- Mantém risco monetário aproximado de US$ 24 por operação: 0,10 lote no ramo V1.0 e 0,40 no ramo V1.3.0.\n- O corte foi selecionado no trecho de 2025 e permaneceu positivo nas partições posteriores de 2026.\n- Permanece exclusivamente em shadow até validação forward com ticks da corretora.",
     "symbol": "XAUUSD",
     "timeframe": "M5",
     "results_file": "results/core-zigzag-v3.json",
+    "active": true
+  },
+  {
+    "id": "core-zigzag-v4",
+    "name": "ZigZag Scalper V5.0",
+    "subtitle": "Filtro Temporal · Calendário/direção",
+    "description": "Filtra o gatilho V1.0 por dia, horário UTC e direção selecionados no replay.",
+    "strategy_profile": "zigzag_scalper_v4_day_filters_shadow",
+    "strategy_description": "- Base: gatilho V1.0, com pivôs fractais M30 confirmados e candles M5 completos.\n- Segunda: somente compras, 04:00-13:59 UTC.\n- Terça: somente compras, 03:00-09:59 UTC.\n- Quarta: somente compras, 03:00-18:59 UTC.\n- Quinta: compras e vendas, 03:00-11:59 UTC.\n- Sexta: somente vendas, 03:00-11:59 UTC.\n- Mantém a geometria V1.0: stop de 240 pontos, alvo de 1000 pontos e duração máxima de 2 candles M5.\n- Status: shadow; filtro selecionado no replay e ainda exige validação forward independente.",
+    "symbol": "XAUUSD",
+    "timeframe": "M5",
+    "results_file": "results/core-zigzag-v4.json",
+    "active": true
+  },
+  {
+    "id": "core-zigzag-v5",
+    "name": "ZigZag Scalper V2.1",
+    "subtitle": "Roteador de Gatilho · Composto",
+    "description": "Roteia V1.0/V1.3.0 pelo regime causal e aplica V5.0 somente na transição.",
+    "strategy_profile": "zigzag_scalper_v5_adaptive_gate_shadow",
+    "strategy_description": "- Usa os últimos 60 candles M5 completos; não usa candles futuros nem resultado de operações.\n- Range médio abaixo de 4,50: gatilho V1.0 sem gate temporal.\n- Range médio entre 4,50 e 6,00: V1.0 com filtro temporal V5.0.\n- Range médio em 6,00 ou mais: gatilho V1.3.0 com confirmação de ticks.\n- O filtro V5.0 apenas bloqueia um sinal já confirmado; nunca cria entrada.\n- Entradas e saídas são exibidas no gráfico do replay.\n- Status: shadow até walk-forward independente e validação com ticks Fusion.",
+    "symbol": "XAUUSD",
+    "timeframe": "M5",
+    "results_file": "results/core-zigzag-v5.json",
+    "active": true
+  },
+  {
+    "id": "core-zigzag-v6",
+    "name": "ZigZag Scalper V3.0",
+    "subtitle": "Filtro Contextual · Venda",
+    "description": "Filtra vendas da V2.1 por sessão, regime e EMA50 causais.",
+    "strategy_profile": "zigzag_scalper_v6_stochastic_sell_gate_shadow",
+    "strategy_description": "- Preserva integralmente o roteamento de gatilho e o gate temporal da V2.1.\n- Compras são idênticas à V2.1.\n- Vendas exigem contexto: antes de 13:00 UTC, regime H1 não-vendedor e fechamento M5 abaixo da EMA50.\n- Não exige cruzamento do Estocástico; é um filtro de contexto, não uma segunda entrada.\n- Entradas e saídas do replay são exibidas no gráfico.\n- Status: shadow até walk-forward e validação com ticks Fusion.",
+    "symbol": "XAUUSD",
+    "timeframe": "M5",
+    "results_file": "results/core-zigzag-v6.json",
     "active": true
   },
   {
@@ -72,6 +188,42 @@
     "active": true
   },
   {
+    "id": "core-stochastic-v4",
+    "name": "Stochastic Sell V4",
+    "subtitle": "Reteste da mínima",
+    "description": "V3 com confirmação adicional de fechamento abaixo da mínima do candle anterior.",
+    "strategy_profile": "stochastic_sell_v4_retest_shadow",
+    "strategy_description": "- Mantém o extremo 85, a janela até 13:00 UTC e o filtro H1 adaptativo da V3.\n- Exige que o candle de sinal feche abaixo da mínima do candle anterior, confirmando o reteste/continuação vendedora.\n- Mantém stop acima das últimas 3 velas + 0,25 ATR, parcial em 1R e alvo final em 1,25R.\n- Replay preliminar: 42 operações, PF estimado 2,42, drawdown estimado 2,08R e 11 de 13 folds positivos.\n- Permanece em shadow e requer replay oficial e validação forward independente.",
+    "symbol": "XAUUSD",
+    "timeframe": "M5",
+    "results_file": "results/core-stochastic-v4.json",
+    "active": true
+  },
+  {
+    "id": "core-breakout-short-v1",
+    "name": "Breakout Short V1",
+    "subtitle": "Suporte + volume + reteste",
+    "description": "Rompimento vendedor de suporte com confirmação de volume e rejeição no reteste.",
+    "strategy_profile": "breakout_short_v1_shadow",
+    "strategy_description": "- Usa o menor suporte dos 24 candles M5 anteriores.\n- Exige fechamento abaixo do suporte e volume do rompimento de pelo menos 1,2× a média dos 20 candles anteriores.\n- Exige preço abaixo da EMA50 e reteste do suporte com fechamento vendedor.\n- Opera entre 06:00 e 18:00 UTC.\n- Stop acima das últimas 3 velas + 0,25 ATR e alvo de 1,5R.\n- Replay oficial Fusion Zero: 113 operações, PF 1,06, expectativa 0,034R e drawdown 13,36R; resultado rejeitado e mantido somente como shadow para pesquisa.",
+    "symbol": "XAUUSD",
+    "timeframe": "M5",
+    "results_file": "results/core-breakout-short-v1.json",
+    "active": true
+  },
+  {
+    "id": "core-mean-reversion-sell-v1",
+    "name": "Mean Reversion Sell V1",
+    "subtitle": "Bollinger extremo + RSI",
+    "description": "Reversão vendedora após rejeição da banda superior de Bollinger com RSI extremo.",
+    "strategy_profile": "mean_reversion_sell_v1_shadow",
+    "strategy_description": "- Usa Bollinger 20×2.\n- Exige toque da banda superior, fechamento vendedor de volta para dentro do canal e RSI(14) ≥ 70.\n- Usa a média de Bollinger como alvo e stop acima da máxima + 0,25 ATR.\n- Opera entre 06:00 e 18:00 UTC.\n- Replay oficial Fusion Zero: 235 operações, PF 0,72, expectativa -0,2085R e drawdown 51,39R; resultado rejeitado e mantido somente como shadow para pesquisa.",
+    "symbol": "XAUUSD",
+    "timeframe": "M5",
+    "results_file": "results/core-mean-reversion-sell-v1.json",
+    "active": true
+  },
+  {
     "id": "core-multitimeframe",
     "name": "Tendência Multitemporal V1",
     "subtitle": "",
@@ -108,6 +260,30 @@
     "active": true
   },
   {
+    "id": "core-buy-trend-pullback-breakout-v1",
+    "name": "Buy Trend Pullback + Breakout V1",
+    "subtitle": "Tendência + volume",
+    "description": "Compra de continuação após pullback no M5, rompimento e confirmação de volume.",
+    "strategy_profile": "buy_trend_pullback_breakout_v1_shadow",
+    "strategy_description": "- Exige tendência compradora alinhada no H1 e M15, com força H1 mínima de 0,5 ATR.\n- No M5, exige pullback até a EMA9, candle de rejeição comprador e fechamento acima da máxima do candle anterior.\n- Confirma volume do sinal de pelo menos 1,1× a média dos 20 candles anteriores.\n- Opera entre 13:00 e 16:00 UTC, usa stop de 1,2 ATR, alvo de 1,5R e limite de 8 candles.\n- Mantém 50% do risco-base e execução permanentemente bloqueada.\n- Replay oficial Fusion Zero: 65 operações, PF 1,12, expectativa 0,0565R e drawdown 8,08R; resultado rejeitado por instabilidade temporal e mantido somente em shadow.",
+    "symbol": "XAUUSD",
+    "timeframe": "M5",
+    "results_file": "results/core-buy-trend-pullback-breakout-v1.json",
+    "active": true
+  },
+  {
+    "id": "core-buy-trend-dip-stochastic-v1",
+    "name": "Buy Trend Dip + Stochastic V1",
+    "subtitle": "Correção + retomada",
+    "description": "Compra de continuação em correção até a média, confirmada pelo cruzamento comprador do Estocástico.",
+    "strategy_profile": "buy_trend_dip_stochastic_v1_shadow",
+    "strategy_description": "- Exige tendência compradora alinhada no H1 e M15, com força H1 mínima de 0,5 ATR.\n- No M5, exige correção até a EMA20 com fechamento acima dela e acima da EMA50.\n- O gatilho é o cruzamento de %K acima de %D após leitura abaixo de 25 no Estocástico.\n- Opera entre 13:00 e 16:00 UTC, usa stop abaixo das últimas 3 mínimas + 0,25 ATR, alvo de 1,5R e limite de 8 candles.\n- Mantém 50% do risco-base e execução permanentemente bloqueada.\n- Replay Fusion Zero: 5 operações, PF 1,79, expectativa 0,1776R e drawdown 1,12R; a amostra é insuficiente, portanto permanece somente em shadow até pesquisa com mais sinais e validação forward.",
+    "symbol": "XAUUSD",
+    "timeframe": "M5",
+    "results_file": "results/core-buy-trend-dip-stochastic-v1.json",
+    "active": true
+  },
+  {
     "id": "core-combined-v3",
     "name": "Portfólio Combinado V3",
     "subtitle": "Três Linhas Adaptativas",
@@ -117,6 +293,18 @@
     "symbol": "XAUUSD",
     "timeframe": "M5",
     "results_file": "results/core-combined-v3.json",
+    "active": true
+  },
+  {
+    "id": "core-combined-v4",
+    "name": "Portfólio Combinado V4",
+    "subtitle": "ZigZag V4.0 + V5.1 + Stochastic V4",
+    "description": "Portfólio paralelo que preserva deliberadamente as entradas simultâneas das duas linhas ZigZag e da Stochastic V4.",
+    "strategy_profile": "portfolio_zigzag_v4_v51_stochastic_v4_shadow",
+    "strategy_description": "- Executa V4.0, V5.1 e Stochastic Sell V4 como trilhas independentes.\n- Quando V4.0 e V5.1 sinalizam a mesma entrada, as duas alocações são preservadas intencionalmente.\n- Permite até três posições XAUUSD simultâneas.\n- Cada componente recebe o risco configurado; exposição máxima teórica: 3× esse risco.\n- Permanece em shadow até replay unificado e validação do executor de candidatos paralelos.",
+    "symbol": "XAUUSD",
+    "timeframe": "M5",
+    "results_file": "results/core-combined-v4.json",
     "active": true
   }
 ]

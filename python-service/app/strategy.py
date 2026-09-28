@@ -663,6 +663,151 @@ def _multitimeframe_setup_for_candle(
     )
 
 
+def _buy_trend_pullback_breakout_v1_setup(request: DecisionRequest) -> Setup | None:
+    """Balanced buy continuation: higher-timeframe trend, M5 pullback and volume-backed breakout."""
+    candles = request.candles
+    session_time = request.timestamp_utc.astimezone(timezone.utc).time()
+    if len(candles) < 600 or not time(13, 0) <= session_time < time(16, 0):
+        return None
+    hourly = _aggregate_complete(candles, 60)
+    fifteen_minute = _aggregate_complete(candles, 15)
+    if len(hourly) < 51 or len(fifteen_minute) < 22:
+        return None
+    hourly_closes = [row.close for row in hourly]
+    m15_closes = [row.close for row in fifteen_minute]
+    closes = [row.close for row in candles]
+    h1_ema20 = _ema(hourly_closes, 20)
+    h1_previous_ema20 = _ema(hourly_closes[:-1], 20)
+    h1_ema50 = _ema(hourly_closes, 50)
+    h1_atr14 = _atr(hourly, 14)
+    m15_ema9 = _ema(m15_closes, 9)
+    m15_previous_ema9 = _ema(m15_closes[:-1], 9)
+    m15_ema21 = _ema(m15_closes, 21)
+    ema9 = _ema(closes, 9)
+    ema21 = _ema(closes, 21)
+    atr14 = _atr(candles, 14)
+    previous, current = candles[-2], candles[-1]
+    average_volume = fmean(candle.volume for candle in candles[-21:-1])
+    strength = abs(h1_ema20 - h1_ema50) / h1_atr14 if h1_atr14 else 0.0
+    bullish = (
+        strength >= .5
+        and h1_ema20 > h1_ema50
+        and h1_ema20 > h1_previous_ema20
+        and m15_ema9 > m15_ema21
+        and m15_ema9 > m15_previous_ema9
+        and ema9 > ema21
+        and current.low <= ema9
+        and current.close > ema9
+        and current.close > current.open
+        and current.close > previous.high
+        and average_volume > 0
+        and current.volume >= average_volume * 1.1
+    )
+    if not bullish:
+        return None
+    entry = request.ask
+    stop_distance = atr14 * 1.2
+    stop = entry - stop_distance
+    target = entry + stop_distance * 1.5
+    return Setup(
+        action=DecisionAction.BUY,
+        setup_type="buy_trend_pullback_volume_breakout",
+        entry=entry,
+        stop=stop,
+        partial=target,
+        target=target,
+        stop_points=stop_distance / request.point_size,
+        flow_mode="not_applicable",
+        ema20=ema9,
+        atr14=atr14,
+        ema50=ema21,
+        breakout_level=previous.high,
+        partial_close_pct=100.0,
+        move_stop_to_breakeven=False,
+        max_holding_bars=8,
+        h1_ema20=h1_ema20,
+        h1_ema50=h1_ema50,
+        m15_ema9=m15_ema9,
+        m15_ema21=m15_ema21,
+        trend_strength=strength,
+        risk_multiplier=.5,
+    )
+
+
+def _buy_trend_dip_stochastic_v1_setup(request: DecisionRequest) -> Setup | None:
+    """Buy a controlled M5 mean pullback only when the broader trend resumes."""
+    candles = request.candles
+    session_time = request.timestamp_utc.astimezone(timezone.utc).time()
+    if len(candles) < 600 or not time(13, 0) <= session_time < time(16, 0):
+        return None
+    hourly = _aggregate_complete(candles, 60)
+    fifteen_minute = _aggregate_complete(candles, 15)
+    if len(hourly) < 51 or len(fifteen_minute) < 22:
+        return None
+    hourly_closes = [row.close for row in hourly]
+    m15_closes = [row.close for row in fifteen_minute]
+    closes = [row.close for row in candles]
+    h1_ema20 = _ema(hourly_closes, 20)
+    h1_previous_ema20 = _ema(hourly_closes[:-1], 20)
+    h1_ema50 = _ema(hourly_closes, 50)
+    h1_atr14 = _atr(hourly, 14)
+    m15_ema9 = _ema(m15_closes, 9)
+    m15_previous_ema9 = _ema(m15_closes[:-1], 9)
+    m15_ema21 = _ema(m15_closes, 21)
+    ema20 = _ema(closes, 20)
+    ema50 = _ema(closes, 50)
+    atr14 = _atr(candles, 14)
+    stochastic_k, stochastic_d = _stochastic_series(candles)
+    current = candles[-1]
+    strength = abs(h1_ema20 - h1_ema50) / h1_atr14 if h1_atr14 else 0.0
+    bullish = (
+        strength >= .5
+        and h1_ema20 > h1_ema50
+        and h1_ema20 > h1_previous_ema20
+        and m15_ema9 > m15_ema21
+        and m15_ema9 > m15_previous_ema9
+        and current.low <= ema20
+        and current.close > ema20
+        and current.close > ema50
+        and current.close > current.open
+        and stochastic_k[-2] <= stochastic_d[-2]
+        and stochastic_k[-1] > stochastic_d[-1]
+        and min(stochastic_k[-2], stochastic_d[-2]) <= 25
+    )
+    if not bullish:
+        return None
+    entry = request.ask
+    stop = min(candle.low for candle in candles[-3:]) - atr14 * .25
+    stop_distance = entry - stop
+    if stop_distance <= 0:
+        return None
+    target = entry + stop_distance * 1.5
+    return Setup(
+        action=DecisionAction.BUY,
+        setup_type="buy_trend_mean_dip_stochastic",
+        entry=entry,
+        stop=stop,
+        partial=target,
+        target=target,
+        stop_points=stop_distance / request.point_size,
+        flow_mode="not_applicable",
+        ema20=ema20,
+        atr14=atr14,
+        ema50=ema50,
+        stochastic_k=stochastic_k[-1],
+        stochastic_d=stochastic_d[-1],
+        partial_close_pct=100.0,
+        move_stop_to_breakeven=False,
+        max_holding_bars=8,
+        h1_ema20=h1_ema20,
+        h1_ema50=h1_ema50,
+        m15_ema9=m15_ema9,
+        m15_ema21=m15_ema21,
+        trend_strength=strength,
+        risk_multiplier=.5,
+    )
+
+
 def _candidate_response(
     request: DecisionRequest,
     settings: Settings,
@@ -845,6 +990,77 @@ def _evaluate_rsi_bollinger(request: DecisionRequest, settings: Settings, strate
     )
 
 
+def _mean_reversion_sell_v1_setup(request: DecisionRequest) -> Setup | None:
+    """Sell-only Bollinger extreme with RSI confirmation and mean target."""
+    candles = request.candles
+    if len(candles) < 22:
+        return None
+    closes = [candle.close for candle in candles]
+    current = candles[-1]
+    basis_values = closes[-20:]
+    basis = fmean(basis_values)
+    deviation = pstdev(basis_values)
+    upper_band = basis + deviation * 2
+    rsi14 = _rsi(closes, 14)
+    atr14 = _atr(candles, 14)
+    if not (current.high >= upper_band and current.close < upper_band and current.close < current.open and rsi14 >= 70):
+        return None
+    entry = request.bid
+    stop = current.high + atr14 * .25
+    stop_distance = stop - entry
+    if stop_distance <= 0 or basis >= entry:
+        return None
+    return Setup(
+        action=DecisionAction.SELL,
+        setup_type="mean_reversion_sell_bollinger_rsi",
+        entry=entry,
+        stop=stop,
+        partial=basis,
+        target=basis,
+        stop_points=stop_distance / request.point_size,
+        flow_mode="not_applicable",
+        ema20=basis,
+        atr14=atr14,
+        rsi14=rsi14,
+        bollinger_upper=upper_band,
+        bollinger_lower=basis - deviation * 2,
+        partial_close_pct=100.0,
+        move_stop_to_breakeven=False,
+    )
+
+
+def _evaluate_mean_reversion_sell_v1(request: DecisionRequest, settings: Settings, strategy_profile: str) -> DecisionResponse:
+    session_ok = time(6, 0) <= request.timestamp_utc.astimezone(timezone.utc).time() < time(18, 0)
+    setup = _mean_reversion_sell_v1_setup(request) if session_ok else None
+    checks = [
+        RiskCheck(name="symbol_match", passed=request.symbol.upper() == settings.default_symbol.upper(), detail=f"expected={settings.default_symbol}"),
+        RiskCheck(name="timeframe_match", passed=request.timeframe.upper() == settings.default_timeframe.upper(), detail=f"expected={settings.default_timeframe}"),
+        RiskCheck(name="spread_limit", passed=request.spread_points <= settings.max_spread_points, detail=f"max={settings.max_spread_points}"),
+        RiskCheck(name="mean_reversion_sell_setup", passed=setup is not None, detail="bollinger_20_2 + rsi70 + bearish_rejection"),
+        RiskCheck(name="mean_reversion_session", passed=session_ok, detail="entry_between=06:00-18:00_UTC"),
+    ]
+    if not all(check.passed for check in checks[:3]):
+        return DecisionResponse(action=DecisionAction.HOLD, reason="market_filter_mismatch", risk_checks=checks)
+    if setup is None:
+        return DecisionResponse(action=DecisionAction.HOLD, reason="mean_reversion_sell_v1_not_confirmed", risk_checks=checks, metadata={"strategy_profile": strategy_profile, "candidate": False, "experimental_shadow_lock": True})
+    flow = FlowAnalysis(True, False, False, "not_applicable")
+    executable = settings.enable_live_decisions and settings.fimath_mode == "live"
+    checks.append(RiskCheck(name="shadow_mode", passed=not executable, detail=f"mode={settings.fimath_mode}"))
+    response = _candidate_response(
+        request, settings, setup, checks, flow, executable=executable,
+        reason="mean_reversion_sell_v1_validated" if executable else "mean_reversion_sell_v1_shadow_signal",
+        strategy_profile=strategy_profile,
+    )
+    response.metadata.update({
+        "mean_reversion_version": "bollinger_20_2_rsi70_mean_target",
+        "rsi_threshold": 70,
+        "target_model": "bollinger_basis",
+        "experimental_shadow_lock": not executable,
+        "research_status": "provisional_shadow_requires_independent_walk_forward_validation",
+    })
+    return response
+
+
 def _evaluate_macd_trend(request: DecisionRequest, settings: Settings, strategy_profile: str) -> DecisionResponse:
     setup = _macd_trend_setup_for_candle(request)
     checks = [
@@ -1023,6 +1239,115 @@ def _evaluate_stochastic_sell_v3(request: DecisionRequest, settings: Settings, s
     return response
 
 
+def _evaluate_stochastic_sell_v4(request: DecisionRequest, settings: Settings, strategy_profile: str) -> DecisionResponse:
+    """V3 sell setup plus causal confirmation below the previous candle low."""
+    response = _evaluate_stochastic_sell_v3(request, settings, strategy_profile)
+    if not response.metadata.get("candidate"):
+        return response
+    retest_confirmed = len(request.candles) >= 2 and request.candles[-1].close < request.candles[-2].low
+    response.risk_checks.append(
+        RiskCheck(name="stochastic_v4_retest", passed=retest_confirmed, detail="latest_close_below_previous_low")
+    )
+    response.metadata.update({
+        "strategy_profile": strategy_profile,
+        "v4_mode": "v3_extreme_85_with_previous_low_retest",
+        "v4_retest_confirmed": retest_confirmed,
+        "research_status": "provisional_shadow_requires_independent_walk_forward_validation",
+    })
+    if not retest_confirmed:
+        response.action = DecisionAction.HOLD
+        response.reason = "stochastic_sell_v4_retest_block"
+        response.size = 0.0
+        response.metadata["base_candidate"] = True
+        response.metadata["candidate"] = False
+        return response
+    response.reason = "stochastic_sell_v4_retest_shadow_signal"
+    return response
+
+
+def _breakout_short_v1_setup(request: DecisionRequest) -> Setup | None:
+    """Support breakdown with volume confirmation and a causal retest rejection."""
+    candles = request.candles
+    if len(candles) < 80:
+        return None
+    breakout = candles[-2]
+    previous = candles[-3]
+    latest = candles[-1]
+    support_window = candles[-26:-2]
+    volume_window = candles[-22:-2]
+    if len(support_window) != 24 or len(volume_window) != 20:
+        return None
+    support = min(candle.low for candle in support_window)
+    average_volume = fmean(candle.volume for candle in volume_window)
+    if average_volume <= 0 or previous.close < support or breakout.close >= support:
+        return None
+    if breakout.volume < average_volume * 1.2:
+        return None
+    closes = [candle.close for candle in candles]
+    ema50 = _ema(closes[-50:])
+    if latest.close >= ema50:
+        return None
+    if latest.high < support or latest.close >= support or latest.close >= latest.open:
+        return None
+    atr14 = _atr(candles, 14)
+    stop = max(candle.high for candle in candles[-3:]) + atr14 * .25
+    entry = request.bid
+    stop_distance = stop - entry
+    if stop_distance <= 0:
+        return None
+    target = entry - stop_distance * 1.5
+    return Setup(
+        action=DecisionAction.SELL,
+        setup_type="breakout_short_support_volume_retest",
+        entry=entry,
+        stop=stop,
+        partial=target,
+        target=target,
+        stop_points=stop_distance / request.point_size,
+        flow_mode="not_applicable",
+        ema20=_ema(closes[-20:]),
+        atr14=atr14,
+        ema50=ema50,
+        breakout_level=support,
+        partial_close_pct=100.0,
+        move_stop_to_breakeven=False,
+    )
+
+
+def _evaluate_breakout_short_v1(request: DecisionRequest, settings: Settings, strategy_profile: str) -> DecisionResponse:
+    session_ok = time(6, 0) <= request.timestamp_utc.astimezone(timezone.utc).time() < time(18, 0)
+    setup = _breakout_short_v1_setup(request) if session_ok else None
+    checks = [
+        RiskCheck(name="symbol_match", passed=request.symbol.upper() == settings.default_symbol.upper(), detail=f"expected={settings.default_symbol}"),
+        RiskCheck(name="timeframe_match", passed=request.timeframe.upper() == settings.default_timeframe.upper(), detail=f"expected={settings.default_timeframe}"),
+        RiskCheck(name="spread_limit", passed=request.spread_points <= settings.max_spread_points, detail=f"max={settings.max_spread_points}"),
+        RiskCheck(name="breakout_short_support_volume", passed=setup is not None, detail="support_24 + volume_1.2x + ema50 + retest"),
+        RiskCheck(name="breakout_short_session", passed=session_ok, detail="entry_between=06:00-18:00_UTC"),
+    ]
+    if not all(check.passed for check in checks[:3]):
+        return DecisionResponse(action=DecisionAction.HOLD, reason="market_filter_mismatch", risk_checks=checks)
+    if setup is None:
+        return DecisionResponse(action=DecisionAction.HOLD, reason="breakout_short_v1_not_confirmed", risk_checks=checks, metadata={"strategy_profile": strategy_profile, "candidate": False, "experimental_shadow_lock": True})
+    flow = FlowAnalysis(True, False, False, "not_applicable")
+    executable = settings.enable_live_decisions and settings.fimath_mode == "live"
+    checks.append(RiskCheck(name="shadow_mode", passed=not executable, detail=f"mode={settings.fimath_mode}"))
+    response = _candidate_response(
+        request, settings, setup, checks, flow, executable=executable,
+        reason="breakout_short_v1_validated" if executable else "breakout_short_v1_shadow_signal",
+        strategy_profile=strategy_profile,
+    )
+    average_volume = fmean(candle.volume for candle in request.candles[-22:-2])
+    response.metadata.update({
+        "breakout_short_version": "support_24_volume_1.2_retest",
+        "breakout_support": round(float(setup.breakout_level or 0), 5),
+        "breakout_volume_ratio": round(request.candles[-2].volume / average_volume, 5) if average_volume else 0.0,
+        "target_rr": 1.5,
+        "experimental_shadow_lock": not executable,
+        "research_status": "provisional_shadow_requires_independent_walk_forward_validation",
+    })
+    return response
+
+
 def _evaluate_multitimeframe_trend_pullback(request: DecisionRequest, settings: Settings, strategy_profile: str) -> DecisionResponse:
     effective_settings = settings
     if strategy_profile == "multitimeframe_trend_pullback_v3_adaptive_shadow":
@@ -1087,6 +1412,77 @@ def _evaluate_multitimeframe_trend_pullback(request: DecisionRequest, settings: 
             "adaptive_geometry": "v2" if regime.name in {"range", "transition"} else "v1",
             "research_status": "walk_forward_candidate_requires_forward_validation",
         })
+    response.risk_checks.append(RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled"))
+    return response
+
+
+def _evaluate_buy_trend_pullback_breakout_v1(request: DecisionRequest, settings: Settings, strategy_profile: str) -> DecisionResponse:
+    setup = _buy_trend_pullback_breakout_v1_setup(request)
+    checks = [
+        RiskCheck(name="symbol_match", passed=request.symbol.upper() == settings.default_symbol.upper(), detail=f"expected={settings.default_symbol}"),
+        RiskCheck(name="timeframe_match", passed=request.timeframe.upper() == settings.default_timeframe.upper(), detail=f"expected={settings.default_timeframe}"),
+        RiskCheck(name="spread_limit", passed=request.spread_points <= settings.max_spread_points, detail=f"max={settings.max_spread_points}"),
+        RiskCheck(name="buy_trend_breakout_setup", passed=setup is not None, detail="h1_m15_bullish + m5_ema9_pullback + previous_high_breakout + volume_1.1x"),
+    ]
+    if not all(check.passed for check in checks[:3]):
+        return DecisionResponse(action=DecisionAction.HOLD, reason="market_filter_mismatch", risk_checks=checks)
+    if setup is None:
+        return DecisionResponse(
+            action=DecisionAction.HOLD,
+            reason="buy_trend_pullback_breakout_v1_not_confirmed",
+            risk_checks=checks,
+            metadata={"strategy_profile": strategy_profile, "candidate": False, "experimental_shadow_lock": True},
+        )
+    response = _candidate_response(
+        request, settings, setup, checks, FlowAnalysis(True, False, False, "not_applicable"),
+        executable=False, reason="buy_trend_pullback_breakout_v1_shadow_signal", strategy_profile=strategy_profile,
+    )
+    response.metadata.update({
+        "buy_version": "trend_pullback_breakout_v1",
+        "strength_min": .5,
+        "session_start_hour": 13,
+        "session_end_hour": 16,
+        "volume_multiplier": 1.1,
+        "target_rr": 1.5,
+        "max_holding_bars": 8,
+        "experimental_shadow_lock": True,
+        "research_status": "provisional_shadow_requires_independent_walk_forward_validation",
+    })
+    response.risk_checks.append(RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled"))
+    return response
+
+
+def _evaluate_buy_trend_dip_stochastic_v1(request: DecisionRequest, settings: Settings, strategy_profile: str) -> DecisionResponse:
+    setup = _buy_trend_dip_stochastic_v1_setup(request)
+    checks = [
+        RiskCheck(name="symbol_match", passed=request.symbol.upper() == settings.default_symbol.upper(), detail=f"expected={settings.default_symbol}"),
+        RiskCheck(name="timeframe_match", passed=request.timeframe.upper() == settings.default_timeframe.upper(), detail=f"expected={settings.default_timeframe}"),
+        RiskCheck(name="spread_limit", passed=request.spread_points <= settings.max_spread_points, detail=f"max={settings.max_spread_points}"),
+        RiskCheck(name="buy_trend_dip_stochastic_setup", passed=setup is not None, detail="h1_m15_bullish + m5_ema20_dip + stochastic_cross_below_25"),
+    ]
+    if not all(check.passed for check in checks[:3]):
+        return DecisionResponse(action=DecisionAction.HOLD, reason="market_filter_mismatch", risk_checks=checks)
+    if setup is None:
+        return DecisionResponse(
+            action=DecisionAction.HOLD,
+            reason="buy_trend_dip_stochastic_v1_not_confirmed",
+            risk_checks=checks,
+            metadata={"strategy_profile": strategy_profile, "candidate": False, "experimental_shadow_lock": True},
+        )
+    response = _candidate_response(
+        request, settings, setup, checks, FlowAnalysis(True, False, False, "not_applicable"),
+        executable=False, reason="buy_trend_dip_stochastic_v1_shadow_signal", strategy_profile=strategy_profile,
+    )
+    response.metadata.update({
+        "buy_version": "trend_dip_stochastic_v1",
+        "strength_min": .5,
+        "stochastic_oversold_threshold": 25,
+        "mean_model": "m5_ema20",
+        "target_rr": 1.5,
+        "max_holding_bars": 8,
+        "experimental_shadow_lock": True,
+        "research_status": "provisional_shadow_requires_independent_walk_forward_validation",
+    })
     response.risk_checks.append(RiskCheck(name="experimental_shadow_lock", passed=True, detail="execution_permanently_disabled"))
     return response
 
@@ -1292,7 +1688,12 @@ HAPPY_GOLD_ZIGZAG_STRUCTURAL_TICK_PROFILE = "happy_gold_zigzag_structural_tick_s
 HAPPY_GOLD_ZIGZAG_NORMALIZED_RANGE_PROFILE = "happy_gold_zigzag_normalized_range_shadow"
 ZIGZAG_SCALPER_V2_PROFILE = "zigzag_scalper_v2_shadow"
 ZIGZAG_SCALPER_V3_PROFILE = "zigzag_scalper_v3_adaptive_shadow"
-ZIGZAG_SCALPER_V4_PROFILE = "zigzag_scalper_v4_tick_microstructure_shadow"
+ZIGZAG_SCALPER_V4_PROFILE = "zigzag_scalper_v4_day_filters_shadow"
+ZIGZAG_SCALPER_V4_TICK_MICROSTRUCTURE_PROFILE = "zigzag_scalper_v4_tick_microstructure_shadow"
+ZIGZAG_SCALPER_V5_PROFILE = "zigzag_scalper_v5_adaptive_gate_shadow"
+ZIGZAG_SCALPER_V6_PROFILE = "zigzag_scalper_v6_stochastic_sell_gate_shadow"
+ZIGZAG_SCALPER_V52_PROFILE = "zigzag_scalper_v9_buy_context_shadow"
+ZIGZAG_SCALPER_V10_PROFILE = "zigzag_scalper_v10_context_router_shadow"
 HAPPY_GOLD_MULTIWINDOW_TICK_SCORE_PROFILE = "happy_gold_multiwindow_tick_score_shadow"
 HAPPY_GOLD_PIP_SIZE = 0.01
 
@@ -1695,7 +2096,207 @@ def _evaluate_zigzag_scalper_v3(request: DecisionRequest, settings: Settings) ->
     return response
 
 
-def _evaluate_zigzag_scalper_v4(request: DecisionRequest, settings: Settings) -> DecisionResponse:
+def _evaluate_zigzag_scalper_v4_day_filters(request: DecisionRequest, settings: Settings) -> DecisionResponse:
+    """Apply the frozen weekday, hour, and direction filters to the V1 setup.
+
+    Rules were selected from the V1 operational replay and are deliberately
+    static: they do not inspect a calendar date, PnL, or future candles.
+    """
+    response = _evaluate_happy_gold_zigzag_scalper(request, settings, ZIGZAG_SCALPER_V4_PROFILE)
+    timestamp = request.timestamp_utc.astimezone(timezone.utc)
+    weekday = timestamp.weekday()
+    hour = timestamp.hour
+    schedule = {
+        0: (4, 14, DecisionAction.BUY, "monday_buy_04_14"),
+        1: (3, 10, DecisionAction.BUY, "tuesday_buy_03_10"),
+        2: (3, 19, DecisionAction.BUY, "wednesday_buy_03_19"),
+        3: (3, 12, None, "thursday_03_12"),
+        4: (3, 12, DecisionAction.SELL, "friday_sell_03_12"),
+    }
+    start_hour, end_hour, allowed_action, rule = schedule.get(weekday, (0, 0, None, "weekend_block"))
+    suggested = response.metadata.get("suggested_action")
+    direction_ok = allowed_action is None or suggested == allowed_action.value
+    filter_ok = start_hour <= hour < end_hour and direction_ok
+    response.metadata.update({
+        "strategy_profile": ZIGZAG_SCALPER_V4_PROFILE,
+        "v4_filter_rule": rule,
+        "v4_filter_session_utc": f"{start_hour:02}:00-{end_hour:02}:00",
+        "v4_filter_direction": allowed_action.value if allowed_action else "both",
+        "v4_base_strategy": "happy_gold_zigzag_scalper_v1",
+        "research_status": "weekday_hour_direction_candidate_requires_independent_forward_validation",
+    })
+    response.risk_checks.append(RiskCheck(
+        name="weekday_hour_direction_filter",
+        passed=filter_ok,
+        detail=f"rule={rule}; allowed={start_hour:02}:00-{end_hour:02}:00_UTC; direction={response.metadata['v4_filter_direction']}",
+    ))
+    if response.metadata.get("candidate") and not filter_ok:
+        response.metadata["candidate"] = False
+        response.reason = "zigzag_scalper_v4_day_filter_block"
+    elif response.metadata.get("candidate"):
+        response.reason = "zigzag_scalper_v4_day_filters_shadow_signal"
+    return response
+
+
+def _zigzag_v4_calendar_allows(timestamp: datetime, suggested_action: str | None) -> tuple[bool, str]:
+    """Return the frozen V4 calendar gate without evaluating market outcomes."""
+    schedule = {
+        0: (4, 14, DecisionAction.BUY, "monday_buy_04_14"),
+        1: (3, 10, DecisionAction.BUY, "tuesday_buy_03_10"),
+        2: (3, 19, DecisionAction.BUY, "wednesday_buy_03_19"),
+        3: (3, 12, None, "thursday_03_12"),
+        4: (3, 12, DecisionAction.SELL, "friday_sell_03_12"),
+    }
+    start_hour, end_hour, allowed_action, rule = schedule.get(timestamp.weekday(), (0, 0, None, "weekend_block"))
+    direction_ok = allowed_action is None or suggested_action == allowed_action.value
+    return start_hour <= timestamp.hour < end_hour and direction_ok, rule
+
+
+def _evaluate_zigzag_scalper_v5(request: DecisionRequest, settings: Settings) -> DecisionResponse:
+    """Causal V1/V2 selector with the V4 calendar used only as a transition gate.
+
+    The gate never originates a trade and its activation depends solely on the
+    preceding 60 completed M5 candles.  It is intentionally shadow-only until
+    walk-forward and broker-tick validation are complete.
+    """
+    completed = request.candles[:-1]
+    recent = completed[-60:]
+    average_range = fmean(candle.high - candle.low for candle in recent) if len(recent) == 60 else None
+    expansion = float(getattr(settings, "zigzag_scalper_v3_expansion_threshold", 6.0))
+    calendar_floor = float(getattr(settings, "zigzag_scalper_v5_calendar_range_floor", 4.5))
+    if average_range is not None and average_range >= expansion:
+        response = _evaluate_happy_gold_zigzag_structural_tick(
+            request, settings, strategy_profile=ZIGZAG_SCALPER_V5_PROFILE, fixed_lot=.40,
+        )
+        mode, calendar_gate = "v2_structural_expansion", False
+    else:
+        response = _evaluate_happy_gold_zigzag_scalper(request, settings, ZIGZAG_SCALPER_V5_PROFILE)
+        calendar_gate = average_range is not None and calendar_floor <= average_range < expansion
+        mode = "v1_transition_calendar_gate" if calendar_gate else "v1_normal_volatility"
+
+    timestamp = request.timestamp_utc.astimezone(timezone.utc)
+    allowed, rule = _zigzag_v4_calendar_allows(timestamp, response.metadata.get("suggested_action"))
+    if calendar_gate:
+        response.risk_checks.append(RiskCheck(
+            name="v5_v4_calendar_gate", passed=allowed, detail=f"rule={rule}; range_floor={calendar_floor}; expansion={expansion}",
+        ))
+        if response.metadata.get("candidate") and not allowed:
+            response.metadata["candidate"] = False
+            response.reason = "zigzag_scalper_v5_calendar_gate_block"
+    response.metadata.update({
+        "strategy_profile": ZIGZAG_SCALPER_V5_PROFILE,
+        "v5_mode": mode,
+        "v5_average_m5_range_60": round(average_range, 6) if average_range is not None else None,
+        "v5_calendar_gate_active": calendar_gate,
+        "v5_calendar_rule": rule if calendar_gate else "not_active",
+        "research_status": "v1_v2_v4_causal_selector_requires_walk_forward_and_broker_tick_forward_validation",
+        "experimental_shadow_lock": True,
+    })
+    return response
+
+
+def _evaluate_zigzag_scalper_v6(request: DecisionRequest, settings: Settings) -> DecisionResponse:
+    """Keep V5 intact and gate only its sell candidates with V3 Stochastic context."""
+    response = _evaluate_zigzag_scalper_v5(request, settings)
+    suggested = str(response.metadata.get("suggested_action", ""))
+    applies_to_sell = suggested == DecisionAction.SELL.value
+    completed = request.candles[:-1]
+    closes = [candle.close for candle in completed]
+    ema50 = _ema(closes[-50:]) if len(closes) >= 50 else None
+    timestamp = request.timestamp_utc.astimezone(timezone.utc)
+    cutoff_hour = int(getattr(settings, "stochastic_sell_v3_cutoff_hour", 13))
+    before_cutoff = timestamp.time() < time(cutoff_hour, 0)
+    override = getattr(settings, "stochastic_regime_snapshot", None)
+    regime = override if isinstance(override, RegimeSnapshot) else classify_regime(request.candles, settings)
+    regime_allowed = regime.name != "insufficient_history" and not (
+        regime.name == "trend" and regime.direction == "sell"
+    )
+    ema_aligned = bool(ema50 is not None and closes and closes[-1] < ema50)
+    if applies_to_sell:
+        checks = [
+            RiskCheck(name="v6_stochastic_v3_session", passed=before_cutoff, detail=f"entry_before={cutoff_hour:02}:00_UTC"),
+            RiskCheck(name="v6_stochastic_v3_regime", passed=regime_allowed, detail=f"{regime.name}:{regime.direction}"),
+            RiskCheck(name="v6_stochastic_v3_ema50", passed=ema_aligned, detail="M5_close_below_ema50"),
+        ]
+        response.risk_checks.extend(checks)
+        if response.metadata.get("candidate") and not all(check.passed for check in checks):
+            response.metadata["candidate"] = False
+            response.reason = "zigzag_scalper_v6_stochastic_sell_gate_block"
+    response.metadata.update({
+        "strategy_profile": ZIGZAG_SCALPER_V6_PROFILE,
+        "v6_base_strategy": "zigzag_scalper_v5_adaptive_gate_shadow",
+        "v6_stochastic_sell_gate_active": applies_to_sell,
+        "v6_stochastic_cutoff_hour": cutoff_hour,
+        "v6_stochastic_regime": regime.name,
+        "v6_stochastic_regime_direction": regime.direction,
+        "v6_m5_ema50": round(ema50, 6) if ema50 is not None else None,
+        "research_status": "v5_with_stochastic_v3_sell_context_requires_walk_forward_and_broker_tick_forward_validation",
+        "experimental_shadow_lock": True,
+    })
+    if response.metadata.get("candidate"):
+        response.reason = "zigzag_scalper_v6_stochastic_sell_gate_shadow_signal"
+    return response
+
+
+def _evaluate_zigzag_scalper_v52(request: DecisionRequest, settings: Settings) -> DecisionResponse:
+    """Apply the frozen contextual hypothesis to V2.1 buy candidates only.
+
+    The filter observes completed M5 candles and the last complete H1 regime.
+    It never originates a signal, changes trade geometry, or enables execution.
+    """
+    response = _evaluate_zigzag_scalper_v5(request, settings)
+    suggested = str(response.metadata.get("suggested_action", ""))
+    applies_to_buy = suggested == DecisionAction.BUY.value
+    completed = request.candles[:-1]
+    closes = [candle.close for candle in completed]
+    ema50 = _ema(closes[-50:]) if len(closes) >= 50 else None
+    atr14 = _atr(completed[-15:], 14) if len(completed) >= 15 else None
+    distance_atr = ((closes[-1] - ema50) / atr14) if closes and ema50 is not None and atr14 else None
+    threshold = float(getattr(settings, "zigzag_scalper_v52_buy_ema50_distance_atr", 1.0))
+    regime = classify_regime(completed, settings)
+
+    if applies_to_buy:
+        checks = [
+            RiskCheck(
+                name="v52_h1_context_ready",
+                passed=regime.name != "insufficient_history",
+                detail=f"{regime.name}:{regime.direction}",
+            ),
+            RiskCheck(
+                name="v52_h1_not_sell_direction",
+                passed=regime.direction != "sell",
+                detail=f"direction={regime.direction}",
+            ),
+            RiskCheck(
+                name="v52_m5_ema50_distance_atr",
+                passed=distance_atr is not None and distance_atr >= threshold,
+                detail=f"min_atr={threshold}",
+            ),
+        ]
+        response.risk_checks.extend(checks)
+        if response.metadata.get("candidate") and not all(check.passed for check in checks):
+            response.metadata["candidate"] = False
+            response.reason = "zigzag_scalper_v52_buy_context_block"
+
+    response.metadata.update({
+        "strategy_profile": ZIGZAG_SCALPER_V52_PROFILE,
+        "v52_base_strategy": ZIGZAG_SCALPER_V5_PROFILE,
+        "v52_buy_context_active": applies_to_buy,
+        "v52_h1_regime": regime.name,
+        "v52_h1_direction": regime.direction,
+        "v52_m5_ema50": round(ema50, 6) if ema50 is not None else None,
+        "v52_m5_atr14": round(atr14, 6) if atr14 is not None else None,
+        "v52_m5_ema50_distance_atr": round(distance_atr, 6) if distance_atr is not None else None,
+        "v52_min_ema50_distance_atr": threshold,
+        "research_status": "buy_context_hypothesis_requires_independent_walk_forward_and_broker_tick_forward_validation",
+        "experimental_shadow_lock": True,
+    })
+    if response.metadata.get("candidate"):
+        response.reason = "zigzag_scalper_v52_buy_context_shadow_signal"
+    return response
+
+
+def _evaluate_zigzag_scalper_v4_microstructure(request: DecisionRequest, settings: Settings) -> DecisionResponse:
     setup = _happy_gold_zigzag_setup(request)
     direction = 0 if setup is None else (1 if setup.action == DecisionAction.BUY else -1)
     moves = {
@@ -1735,7 +2336,7 @@ def _evaluate_zigzag_scalper_v4(request: DecisionRequest, settings: Settings) ->
         RiskCheck(name="micro_spread_limit", passed=spread_pips <= maximum_spread, detail=f"max_pips={maximum_spread}"),
     ]
     metadata = {
-        "strategy_profile": ZIGZAG_SCALPER_V4_PROFILE,
+        "strategy_profile": ZIGZAG_SCALPER_V4_TICK_MICROSTRUCTURE_PROFILE,
         "candidate": False,
         "micro_regime": "clean_directional_impulse" if all(check.passed for check in checks[5:]) else "rejected_microstructure",
         "impulse_5s_aligned_pips": round(moves[5], 6),
@@ -1757,7 +2358,7 @@ def _evaluate_zigzag_scalper_v4(request: DecisionRequest, settings: Settings) ->
     setup.max_holding_bars = 1
     response = _candidate_response(
         request, settings, setup, checks, FlowAnalysis(True, False, False, "not_applicable"),
-        executable=False, reason="zigzag_scalper_v4_tick_microstructure_shadow_signal", strategy_profile=ZIGZAG_SCALPER_V4_PROFILE,
+        executable=False, reason="zigzag_scalper_v4_tick_microstructure_shadow_signal", strategy_profile=ZIGZAG_SCALPER_V4_TICK_MICROSTRUCTURE_PROFILE,
     )
     response.risk_amount = round(setup.stop_points * request.value_per_point_per_lot * .20, 2)
     response.metadata.update(metadata | {

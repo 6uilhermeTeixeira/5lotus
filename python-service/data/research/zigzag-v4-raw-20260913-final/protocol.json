@@ -1,0 +1,74 @@
+{
+  "dataset": "20260911T043125Z-0ef1a31ba0a5",
+  "anchor_close_utc": "2026-09-11T20:55:00+00:00",
+  "requested_start_utc": "2025-09-11T20:55:00+00:00",
+  "selection_end_utc": "2026-03-12T20:55:00+00:00",
+  "candidates": [
+    {
+      "name": "v3_ticks",
+      "confirm_quote": false,
+      "persistence_ms": 0,
+      "efficiency_min": 0.0,
+      "scaled_exit": false
+    },
+    {
+      "name": "v4_quote_confirm",
+      "confirm_quote": true,
+      "persistence_ms": 0,
+      "efficiency_min": 0.0,
+      "scaled_exit": false
+    },
+    {
+      "name": "v4_persist_500ms",
+      "confirm_quote": true,
+      "persistence_ms": 500,
+      "efficiency_min": 0.0,
+      "scaled_exit": false
+    },
+    {
+      "name": "v4_persist_2000ms",
+      "confirm_quote": true,
+      "persistence_ms": 2000,
+      "efficiency_min": 0.0,
+      "scaled_exit": false
+    },
+    {
+      "name": "v4_efficiency",
+      "confirm_quote": true,
+      "persistence_ms": 500,
+      "efficiency_min": 0.15,
+      "scaled_exit": false
+    },
+    {
+      "name": "v4_volatility_scaled",
+      "confirm_quote": true,
+      "persistence_ms": 500,
+      "efficiency_min": 0.0,
+      "scaled_exit": true
+    }
+  ],
+  "selection": "Highest training net R / max(drawdown R, 1), >=50 trades and PF>1.05; otherwise reject.",
+  "execution": "Bid/Ask ticks, $24 initial risk, 100 oz/lot, $4.50 commission/lot round turn; fractional lots; no compounding",
+  "scenarios": {
+    "base": {
+      "latency_ms": 250,
+      "slippage_usd_each_market_fill": 0.02
+    },
+    "stress": {
+      "latency_ms": 1000,
+      "slippage_usd_each_market_fill": 0.05
+    }
+  },
+  "limitations": [
+    "Historical holdouts were studied previously: out-of-selection, not untouched market evidence.",
+    "Tick V3 reconstructs entries causally; it is not identical to archived candle replay.",
+    "Strict complete M30 buckets, forming candle midpoint, one signal per M5 are explicit replay contracts.",
+    "Stop amendments take effect on next quote; no broker amendment/network latency simulation.",
+    "No swaps, margin rejection, stop-distance limits or lot-step rounding; research only."
+  ],
+  "historical_snapshot_sha256": "1f38fc4894a4cf734b16495ca3d37722c4b155173c89caead6cd033057f28937",
+  "source_hashes": {
+    "scripts/research_zigzag_v4_raw_ticks.py": "f35a566fd94a8f05dd2d9315045201060360b3005f957a387c8a6a9ebff56feb",
+    "app/strategies/zigzag_v4_research.py": "5d696dea6f849ee67abd12dac1f44fd059e6d95480f97edd7b67656918863d99"
+  }
+}

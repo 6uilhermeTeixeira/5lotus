@@ -24,8 +24,8 @@
     const value = String(profile || '').toLowerCase();
     if (value.includes('portfolio')) return 'combined';
     if (value.includes('zigzag')) return 'zigzag';
-    if (value.includes('stochastic')) return 'stochastic';
-    if (value.includes('multitimeframe')) return 'multitimeframe';
+    if (value.includes('multitimeframe') || value.includes('buy_trend_pullback') || value.includes('buy_trend_dip')) return 'multitimeframe';
+    if (value.includes('stochastic') || value.includes('breakout_short') || value.includes('mean_reversion_sell')) return 'stochastic';
     return 'combined';
   }
 

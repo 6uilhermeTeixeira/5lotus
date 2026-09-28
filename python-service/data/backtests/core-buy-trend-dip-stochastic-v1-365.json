@@ -1,0 +1,23 @@
+{
+  "bot_id": "core-buy-trend-dip-stochastic-v1",
+  "symbol": "XAUUSD",
+  "timeframe": "M5",
+  "risk_per_trade_pct": 0.25,
+  "period_start_utc": "2025-09-02T00:00:00Z",
+  "period_end_utc": "2026-09-02T00:00:00Z",
+  "candles_evaluated": 61480,
+  "candidates_detected": 5,
+  "candidates_eligible": 5,
+  "candidates_blocked": 0,
+  "regime_counts": {"range": 3, "transition": 1, "high_volatility": 1},
+  "expectancy_r": 0.1776,
+  "max_drawdown_r": 1.12,
+  "max_consecutive_losses": 1,
+  "total_costs": 0.2,
+  "validation_status": "promising_not_live",
+  "validation_reason": "passes_initial_rolling_stability_gate_but_still_requires_forward_test",
+  "summary": {"trades_count":5,"wins":4,"losses":1,"breakevens":0,"open_positions":0,"win_rate_pct":80.0,"gross_profit":25.13,"gross_loss":14.06,"net_pnl":11.07,"avg_win":6.28,"avg_loss":-14.06,"profit_factor":1.79,"avg_rr":0.18,"best_trade":8.35,"worst_trade":-14.06},
+  "daily_pnl": [],
+  "candles": [],
+  "trades": []
+}

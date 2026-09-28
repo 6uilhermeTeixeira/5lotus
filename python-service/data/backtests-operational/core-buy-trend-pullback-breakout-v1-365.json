@@ -1,0 +1,22 @@
+{
+  "bot_id": "core-buy-trend-pullback-breakout-v1",
+  "symbol": "XAUUSD",
+  "timeframe": "M5",
+  "risk_per_trade_pct": 0.25,
+  "period_start_utc": "2025-09-02T00:00:00Z",
+  "period_end_utc": "2026-09-02T00:00:00Z",
+  "candles_evaluated": 61480,
+  "candidates_detected": 95,
+  "candidates_eligible": 65,
+  "candidates_blocked": 30,
+  "expectancy_r": 0.0565,
+  "max_drawdown_r": 8.08,
+  "max_consecutive_losses": 4,
+  "total_costs": 5.12,
+  "validation_status": "rejected",
+  "validation_reason": "failed_expectancy_profit_factor_or_temporal_stability_gate",
+  "summary": {"trades_count":65,"wins":33,"losses":32,"breakevens":0,"open_positions":0,"win_rate_pct":50.77,"gross_profit":429.93,"gross_loss":384.56,"net_pnl":45.37,"avg_win":13.03,"avg_loss":-12.02,"profit_factor":1.12,"avg_rr":0.06,"best_trade":24.55,"worst_trade":-16.85},
+  "daily_pnl": [],
+  "candles": [],
+  "trades": []
+}

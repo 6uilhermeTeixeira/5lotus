@@ -7,6 +7,11 @@ class Settings:
     def __init__(self) -> None:
         service_root = Path(__file__).resolve().parent.parent
         self.lotus_data_root = Path(getenv("LOTUS_DATA_ROOT", "/home/codexops/lotus-data"))
+        self.fusion_tick_spool_root = Path(getenv(
+            "DAYTRADE_FUSION_TICK_SPOOL_ROOT",
+            "/home/codexops/.local/share/mt5-wine/drive_c/users/codexops/AppData/Roaming/MetaQuotes/Terminal/Common/Files",
+        ))
+        self.fusion_history_collector_id = getenv("DAYTRADE_FUSION_HISTORY_COLLECTOR_ID", "2lotus-fusion-demo-history-v1")
         self.lotus_dataset_version = getenv("LOTUS_DATASET_VERSION", "CURRENT")
         self.lotus_publisher_python = Path(
             getenv("LOTUS_PUBLISHER_PYTHON", "/home/codexops/projects/2Lotus/market-data-pipeline/.venv/bin/python")
@@ -84,12 +89,21 @@ class Settings:
         self.zigzag_scalper_v3_expansion_threshold = float(
             getenv("DAYTRADE_ZIGZAG_SCALPER_V3_EXPANSION_THRESHOLD", "6.0")
         )
+        self.zigzag_scalper_v5_calendar_range_floor = float(
+            getenv("DAYTRADE_ZIGZAG_SCALPER_V5_CALENDAR_RANGE_FLOOR", "4.5")
+        )
+        self.zigzag_scalper_v52_buy_ema50_distance_atr = float(
+            getenv("DAYTRADE_ZIGZAG_SCALPER_V52_BUY_EMA50_DISTANCE_ATR", "1.0")
+        )
         self.zigzag_scalper_v4_min_5s_move_pips = float(getenv("DAYTRADE_ZIGZAG_SCALPER_V4_MIN_5S_MOVE_PIPS", "20"))
         self.zigzag_scalper_v4_min_30s_move_pips = float(getenv("DAYTRADE_ZIGZAG_SCALPER_V4_MIN_30S_MOVE_PIPS", "75"))
         self.zigzag_scalper_v4_min_60s_move_pips = float(getenv("DAYTRADE_ZIGZAG_SCALPER_V4_MIN_60S_MOVE_PIPS", "120"))
         self.zigzag_scalper_v4_min_efficiency = float(getenv("DAYTRADE_ZIGZAG_SCALPER_V4_MIN_EFFICIENCY", "0.18"))
         self.zigzag_scalper_v4_min_tick_acceleration = float(getenv("DAYTRADE_ZIGZAG_SCALPER_V4_MIN_TICK_ACCELERATION", "0.85"))
         self.zigzag_scalper_v4_max_spread_pips = float(getenv("DAYTRADE_ZIGZAG_SCALPER_V4_MAX_SPREAD_PIPS", "100"))
+        self.zigzag_scalper_v12_retest_max_age_seconds = float(getenv("DAYTRADE_ZIGZAG_SCALPER_V12_RETEST_MAX_AGE_SECONDS", "90"))
+        self.zigzag_scalper_v12_retest_max_depth_pips = float(getenv("DAYTRADE_ZIGZAG_SCALPER_V12_RETEST_MAX_DEPTH_PIPS", "50"))
+        self.zigzag_scalper_v12_min_rejection_move_pips = float(getenv("DAYTRADE_ZIGZAG_SCALPER_V12_MIN_REJECTION_MOVE_PIPS", "5"))
         self.stochastic_sell_v2_threshold = float(getenv("DAYTRADE_STOCHASTIC_SELL_V2_THRESHOLD", "85"))
         self.stochastic_sell_v2_target_rr = float(getenv("DAYTRADE_STOCHASTIC_SELL_V2_TARGET_RR", "1.25"))
         self.stochastic_sell_v2_partial_pct = float(getenv("DAYTRADE_STOCHASTIC_SELL_V2_PARTIAL_PCT", "50"))
@@ -124,6 +138,9 @@ class Settings:
         self.supabase_url = getenv("DAYTRADE_SUPABASE_URL")
         self.supabase_service_role_key = getenv("DAYTRADE_SUPABASE_SERVICE_ROLE_KEY")
         self.ingest_api_key = getenv("DAYTRADE_INGEST_API_KEY")
+        self.mt5_login = getenv("DAYTRADE_MT5_LOGIN", "")
+        self.mt5_server = getenv("DAYTRADE_MT5_SERVER", "")
+        self.mt5_initial_balance = float(getenv("DAYTRADE_MT5_INITIAL_BALANCE", "100"))
         self.supabase_timeout_seconds = float(getenv("DAYTRADE_SUPABASE_TIMEOUT_SECONDS", "2.0"))
         self.supabase_retry_attempts = int(getenv("DAYTRADE_SUPABASE_RETRY_ATTEMPTS", "2"))
         self.login_rate_limit_attempts = int(getenv("DAYTRADE_LOGIN_RATE_LIMIT_ATTEMPTS", "5"))
@@ -148,6 +165,8 @@ class Settings:
             raise ValueError("Supabase timeout/retry settings are invalid")
         if self.tick_ingest_rate_limit_per_minute <= 0:
             raise ValueError("DAYTRADE_TICK_INGEST_RATE_LIMIT_PER_MINUTE must be positive")
+        if self.mt5_initial_balance <= 0:
+            raise ValueError("DAYTRADE_MT5_INITIAL_BALANCE must be positive")
         if self.lotus_publish_timeout_seconds <= 0:
             raise ValueError("LOTUS_PUBLISH_TIMEOUT_SECONDS must be positive")
         if not 1 <= self.stochastic_sell_v3_cutoff_hour <= 23:

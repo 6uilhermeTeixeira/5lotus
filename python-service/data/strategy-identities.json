@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "policy": {
+    "canonical_id_format": "{family}-v{major}[-{minor}[-{patch}]]",
+    "identity_rule": "The display name and canonical_id describe the same public strategy version. implementation_profile and legacy_ids are implementation and migration details, not strategy identities."
+  },
+  "strategies": [
+    {"canonical_id":"zigzag-scalper-v1","display_name":"ZigZag Scalper V1.0","family":"zigzag-scalper","version":"1.0","legacy_ids":["core-zigzag"],"implementation_profile":"happy_gold_zigzag_scalper","status":"research"},
+    {"canonical_id":"zigzag-scalper-v1-1","display_name":"ZigZag Scalper V1.1.0","family":"zigzag-scalper","version":"1.1.0","legacy_ids":["core-zigzag-v12"],"implementation_profile":"zigzag_scalper_v12_micro_retest_shadow","status":"research"},
+    {"canonical_id":"zigzag-scalper-v1-2","display_name":"ZigZag Scalper V1.2.0","family":"zigzag-scalper","version":"1.2.0","legacy_ids":["core-zigzag-v13"],"implementation_profile":"zigzag_scalper_v13_m30_close_shadow","status":"research"},
+    {"canonical_id":"zigzag-scalper-v1-3","display_name":"ZigZag Scalper V1.3.0","family":"zigzag-scalper","version":"1.3.0","legacy_ids":["core-zigzag-v2"],"implementation_profile":"zigzag_scalper_v2_shadow","status":"research"},
+    {"canonical_id":"zigzag-scalper-v2","display_name":"ZigZag Scalper V2.0","family":"zigzag-scalper","version":"2.0","legacy_ids":["core-zigzag-v3"],"implementation_profile":"zigzag_scalper_v3_adaptive_shadow","status":"research"},
+    {"canonical_id":"zigzag-scalper-v2-1","display_name":"ZigZag Scalper V2.1","family":"zigzag-scalper","version":"2.1","legacy_ids":["core-zigzag-v5"],"implementation_profile":"zigzag_scalper_v5_adaptive_gate_shadow","status":"research"},
+    {"canonical_id":"zigzag-scalper-v3","display_name":"ZigZag Scalper V3.0","family":"zigzag-scalper","version":"3.0","legacy_ids":["core-zigzag-v6"],"implementation_profile":"zigzag_scalper_v6_stochastic_sell_gate_shadow","status":"research"},
+    {"canonical_id":"zigzag-scalper-v3-1","display_name":"ZigZag Scalper V3.1","family":"zigzag-scalper","version":"3.1","legacy_ids":["core-zigzag-v7"],"implementation_profile":"zigzag_scalper_v7_directional_shadow","status":"research"},
+    {"canonical_id":"zigzag-scalper-v3-2","display_name":"ZigZag Scalper V3.2","family":"zigzag-scalper","version":"3.2","legacy_ids":["core-zigzag-v9"],"implementation_profile":"zigzag_scalper_v9_buy_context_shadow","status":"research"},
+    {"canonical_id":"zigzag-scalper-v4","display_name":"ZigZag Scalper V4.0","family":"zigzag-scalper","version":"4.0","legacy_ids":["core-zigzag-v10"],"implementation_profile":"zigzag_scalper_v10_context_router_shadow","status":"research"},
+    {"canonical_id":"zigzag-scalper-v5","display_name":"ZigZag Scalper V5.0","family":"zigzag-scalper","version":"5.0","legacy_ids":["core-zigzag-v4"],"implementation_profile":"zigzag_scalper_v4_day_filters_shadow","status":"retired"},
+    {"canonical_id":"zigzag-scalper-v5-1","display_name":"ZigZag Scalper V5.1","family":"zigzag-scalper","version":"5.1","legacy_ids":["core-zigzag-v8"],"implementation_profile":"zigzag_scalper_v8_accuracy_cycle_shadow","status":"research"},
+    {"canonical_id":"zigzag-scalper-v6","display_name":"ZigZag Scalper V6.0","family":"zigzag-scalper","version":"6.0","legacy_ids":["core-zigzag-v72"],"implementation_profile":"zigzag_scalper_v72_v3_wed_thu_shadow","status":"research"},
+    {"canonical_id":"zigzag-scalper-v7","display_name":"ZigZag Scalper V7.0","family":"zigzag-scalper","version":"7.0","legacy_ids":["core-zigzag-v11"],"implementation_profile":"zigzag_scalper_v11_final_orchestrator_shadow","status":"research"},
+    {"canonical_id":"stochastic-sell-v1","display_name":"Stochastic Sell V1","family":"stochastic-sell","version":"1","legacy_ids":["core-stochastic"],"implementation_profile":"stochastic_sell_session","status":"research"},
+    {"canonical_id":"stochastic-sell-v2","display_name":"Stochastic Sell V2","family":"stochastic-sell","version":"2","legacy_ids":["core-stochastic-v2"],"implementation_profile":"stochastic_sell_v2_shadow","status":"research"},
+    {"canonical_id":"stochastic-sell-v3","display_name":"Stochastic Sell V3","family":"stochastic-sell","version":"3","legacy_ids":["core-stochastic-v3"],"implementation_profile":"stochastic_sell_v3_adaptive_shadow","status":"research"},
+    {"canonical_id":"stochastic-sell-v4","display_name":"Stochastic Sell V4","family":"stochastic-sell","version":"4","legacy_ids":["core-stochastic-v4"],"implementation_profile":"stochastic_sell_v4_retest_shadow","status":"research"},
+    {"canonical_id":"breakout-short-v1","display_name":"Breakout Short V1","family":"breakout-short","version":"1","legacy_ids":["core-breakout-short-v1"],"implementation_profile":"breakout_short_v1_shadow","status":"rejected"},
+    {"canonical_id":"mean-reversion-sell-v1","display_name":"Mean Reversion Sell V1","family":"mean-reversion-sell","version":"1","legacy_ids":["core-mean-reversion-sell-v1"],"implementation_profile":"mean_reversion_sell_v1_shadow","status":"rejected"},
+    {"canonical_id":"multitimeframe-trend-v1","display_name":"Tendência Multitemporal V1","family":"multitimeframe-trend","version":"1","legacy_ids":["core-multitimeframe"],"implementation_profile":"multitimeframe_trend_pullback","status":"research"},
+    {"canonical_id":"multitimeframe-trend-v2","display_name":"Tendência Multitemporal V2","family":"multitimeframe-trend","version":"2","legacy_ids":["core-multitimeframe-v2"],"implementation_profile":"multitimeframe_trend_pullback_v2_shadow","status":"research"},
+    {"canonical_id":"multitimeframe-trend-v3","display_name":"Tendência Multitemporal V3","family":"multitimeframe-trend","version":"3","legacy_ids":["core-multitimeframe-v3"],"implementation_profile":"multitimeframe_trend_pullback_v3_adaptive_shadow","status":"research"},
+    {"canonical_id":"buy-trend-pullback-breakout-v1","display_name":"Buy Trend Pullback + Breakout V1","family":"buy-trend-pullback-breakout","version":"1","legacy_ids":["core-buy-trend-pullback-breakout-v1"],"implementation_profile":"buy_trend_pullback_breakout_v1_shadow","status":"research"},
+    {"canonical_id":"buy-trend-dip-stochastic-v1","display_name":"Buy Trend Dip + Stochastic V1","family":"buy-trend-dip-stochastic","version":"1","legacy_ids":["core-buy-trend-dip-stochastic-v1"],"implementation_profile":"buy_trend_dip_stochastic_v1_shadow","status":"research"},
+    {"canonical_id":"combined-portfolio-v3","display_name":"Portfólio Combinado V3","family":"combined-portfolio","version":"3","legacy_ids":["core-combined-v3"],"implementation_profile":"portfolio_v3_adaptive_union_shadow","status":"research"},
+    {"canonical_id":"combined-portfolio-v4","display_name":"Portfólio Combinado V4","family":"combined-portfolio","version":"4","legacy_ids":["core-combined-v4"],"implementation_profile":"portfolio_zigzag_v4_v51_stochastic_v4_shadow","status":"research"}
+  ]
+}

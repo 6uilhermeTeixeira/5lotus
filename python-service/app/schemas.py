@@ -24,6 +24,12 @@ class AccountSnapshot(BaseModel):
     balance: float
     equity: float
     margin_free: float
+    account_id: int | None = Field(default=None, gt=0)
+    broker: str = Field(default="", max_length=120)
+    currency: str = Field(default="USD", min_length=1, max_length=12)
+    floating_profit: float | None = None
+    realized_profit_today: float | None = None
+    profit_day: date | None = None
     leverage: int | None = None
     trade_mode: str = Field(default="unknown", pattern="^(demo|contest|real|unknown)$")
     server: str = Field(default="", max_length=120)
@@ -293,6 +299,8 @@ class EquitySeries(BaseModel):
     name: str
     strategy_profile: str
     summary: ResultsSummary
+    expectancy_r: float = 0.0
+    max_drawdown_r: float = 0.0
     points: list[EquityPoint] = Field(default_factory=list)
 
 
@@ -424,3 +432,15 @@ class RuntimeStatusItem(BaseModel):
 class OperationsResponse(BaseModel):
     updated_at_utc: datetime
     bots: list[RuntimeStatusItem] = Field(default_factory=list)
+
+
+class AccountDashboardResponse(BaseModel):
+    available: bool
+    status: str = Field(pattern="^(online|delayed|offline|waiting)$")
+    initial_balance: float
+    expected_account_id: str = ""
+    expected_server: str = ""
+    identity_matches: bool | None = None
+    account: AccountSnapshot | None = None
+    observed_at_utc: datetime | None = None
+    age_seconds: float | None = None

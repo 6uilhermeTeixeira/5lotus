@@ -641,6 +641,39 @@ class SupabaseStore:
             prefer="resolution=merge-duplicates,return=minimal",
         )
 
+    def upsert_account_snapshot(self, account: object, observed_at: datetime) -> None:
+        account_id = getattr(account, "account_id", None)
+        floating_profit = getattr(account, "floating_profit", None)
+        if floating_profit is None:
+            floating_profit = float(account.equity) - float(account.balance)
+        self._request(
+            "account_snapshots?on_conflict=snapshot_key",
+            method="POST",
+            payload={
+                "snapshot_key": "current",
+                "account_id": account_id,
+                "broker": account.broker,
+                "server": account.server,
+                "currency": account.currency,
+                "trade_mode": account.trade_mode,
+                "leverage": account.leverage,
+                "balance": account.balance,
+                "equity": account.equity,
+                "margin_free": account.margin_free,
+                "floating_profit": floating_profit,
+                "realized_profit_today": account.realized_profit_today,
+                "profit_day": account.profit_day.isoformat() if account.profit_day else None,
+                "observed_at_utc": observed_at.isoformat(),
+            },
+            prefer="resolution=merge-duplicates,return=minimal",
+        )
+
+    def load_latest_account_snapshot(self) -> dict[str, object] | None:
+        rows = self._request("account_snapshots?select=*&order=observed_at_utc.desc&limit=1")
+        if not isinstance(rows, list) or not rows or not isinstance(rows[0], dict):
+            return None
+        return rows[0]
+
     def record_runtime_failure(self, bot_id: str, *, error_code: str, error_message: str) -> None:
         rows = self._request(f"bot_runtime_status?bot_id=eq.{bot_id}&select=consecutive_errors&limit=1")
         previous = int(rows[0].get("consecutive_errors") or 0) if isinstance(rows, list) and rows else 0

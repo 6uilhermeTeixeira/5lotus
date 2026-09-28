@@ -1,7 +1,7 @@
 import unittest
 from datetime import datetime, timezone
 
-from app.schemas import CandleSnapshot, DecisionResponse, HistoricalReplayResponse, ResultsSummary, TickIngestRequest
+from app.schemas import AccountSnapshot, CandleSnapshot, DecisionResponse, HistoricalReplayResponse, ResultsSummary, TickIngestRequest
 from app.supabase_store import SupabaseStore
 from tests.test_strategy import bullish_request, macd_trend_request, mean_reversion_request, stochastic_pullback_request
 
@@ -66,6 +66,46 @@ class TickShadowResultsStore(RecordingStore):
 
 
 class SupabaseStoreTests(unittest.TestCase):
+    def test_account_snapshot_is_upserted_with_financial_identity(self) -> None:
+        store = RecordingStore()
+        account = AccountSnapshot(
+            account_id=123456,
+            broker="Fusion Markets",
+            server="FusionMarkets-Demo",
+            currency="USD",
+            balance=10500,
+            equity=10525,
+            margin_free=10000,
+            floating_profit=25,
+            realized_profit_today=125,
+            profit_day="2026-09-10",
+            leverage=500,
+            trade_mode="demo",
+        )
+
+        store.upsert_account_snapshot(account, datetime(2026, 9, 10, 12, tzinfo=timezone.utc))
+
+        path, method, payload, prefer = store.calls[-1]
+        self.assertEqual(path, "account_snapshots?on_conflict=snapshot_key")
+        self.assertEqual(method, "POST")
+        self.assertEqual(payload["account_id"], 123456)
+        self.assertEqual(payload["snapshot_key"], "current")
+        self.assertEqual(payload["floating_profit"], 25)
+        self.assertEqual(payload["realized_profit_today"], 125)
+        self.assertEqual(payload["profit_day"], "2026-09-10")
+        self.assertEqual(prefer, "resolution=merge-duplicates,return=minimal")
+
+    def test_legacy_account_snapshot_remains_valid(self) -> None:
+        account = AccountSnapshot(balance=10000, equity=10000, margin_free=10000)
+
+        self.assertIsNone(account.account_id)
+        self.assertEqual(account.currency, "USD")
+
+        store = RecordingStore()
+        store.upsert_account_snapshot(account, datetime(2026, 9, 10, 12, tzinfo=timezone.utc))
+        self.assertEqual(store.calls[-1][2]["snapshot_key"], "current")
+        self.assertIsNone(store.calls[-1][2]["account_id"])
+
     def test_catalog_requests_all_display_metadata(self) -> None:
         store = RecordingStore()
 
