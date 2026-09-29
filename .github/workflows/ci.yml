@@ -1,4 +1,4 @@
-name: ci
+name: Research CI
 
 on:
   pull_request:
