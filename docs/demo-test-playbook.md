@@ -21,7 +21,7 @@ Isso significa:
 ## Dependencias operacionais
 
 O MT5 e o servico Python compartilham a rede no Compose; por isso o EA usa
-`127.0.0.1:1112`. O EA ainda precisa ser instalado e compilado no MetaEditor.
+`127.0.0.1:7775`. O EA ainda precisa ser instalado e compilado no MetaEditor.
 
 ## Preparacao
 
@@ -30,7 +30,7 @@ O MT5 e o servico Python compartilham a rede no Compose; por isso o EA usa
 Para teste seguro, sem liberar execucao automatica:
 
 ```bash
-cd /home/codexops/projects/2Lotus
+cd /home/codexops/projects/5lotus
 docker compose up -d api
 ```
 
@@ -44,7 +44,7 @@ controlada em demo e recrie o servico `api`.
 ### 2. Subir o desktop remoto do MT5
 
 ```bash
-cd /home/codexops/projects/2Lotus
+cd /home/codexops/projects/5lotus
 ./scripts/run-mt5-desktop.sh
 ```
 
@@ -61,13 +61,13 @@ http://127.0.0.1:6080/vnc.html?host=127.0.0.1&port=6080
 Antes de abrir o MT5, validar com:
 
 ```bash
-docker exec 2lotus-mt5-desktop curl http://127.0.0.1:1112/health
+docker exec 2lotus-mt5-desktop curl http://127.0.0.1:7775/health
 ```
 
 Resposta esperada:
 
 ```json
-{"status":"ok","service":"2lotus-strategy-service", ...}
+{"status":"ok","service":"5lotus-research", ...}
 ```
 
 Se isso falhar, o problema ainda e de rede, nao de estrategia.
@@ -75,7 +75,7 @@ Se isso falhar, o problema ainda e de rede, nao de estrategia.
 ## Copiar o EA para o ambiente do MT5
 
 ```bash
-cd /home/codexops/projects/2Lotus
+cd /home/codexops/projects/5lotus
 ./scripts/install-mt5-expert.sh
 ```
 
@@ -88,7 +88,7 @@ Dentro do desktop remoto:
 3. compilar o EA
 4. no MT5, abrir `Tools > Options > Expert Advisors`
 5. marcar `Allow algorithmic trading`
-6. adicionar `http://127.0.0.1:1112` na allowlist de `WebRequest`
+6. adicionar `http://127.0.0.1:7775` na allowlist de `WebRequest`
 7. abrir um grafico `XAUUSD`
 8. ajustar o grafico para `M5`
 9. anexar o EA ao grafico
@@ -97,8 +97,8 @@ Dentro do desktop remoto:
 
 ### Fase 1: conectividade e decisao sem ordem
 
-- `StrategyServiceUrl = http://127.0.0.1:1112/decision`
-- `TradeResultsUrl = http://127.0.0.1:1112/api/trades`
+- `StrategyServiceUrl = http://127.0.0.1:7775/decision`
+- `TradeResultsUrl = http://127.0.0.1:7775/api/trades`
 - `ResultsBotId = core-combined-v3`
 - `LotusIngestApiKey =` valor de `DAYTRADE_INGEST_API_KEY` do `.env` do 2Lotus
 - `StrategyTimeframe = M5`
@@ -108,8 +108,8 @@ Dentro do desktop remoto:
 
 ### Fase 2: ordem automatica em demo
 
-- `StrategyServiceUrl = http://127.0.0.1:1112/decision`
-- `TradeResultsUrl = http://127.0.0.1:1112/api/trades`
+- `StrategyServiceUrl = http://127.0.0.1:7775/decision`
+- `TradeResultsUrl = http://127.0.0.1:7775/api/trades`
 - `ResultsBotId =` o mesmo bot individual definido em `ExecutionBotId`
 - `StrategyTimeframe = M5`
 - `HistoryBars = 4000`

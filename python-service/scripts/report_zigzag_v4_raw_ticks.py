@@ -158,7 +158,7 @@ def main():
               'A reconstrução V3 em ticks usa M30 completos e um candle corrente explícito. O replay/EA antigo tem convenções de janela diferentes. Assim, é uma baseline causal reconstruída, não paridade certificada com o EA. O EA também consulta a API a cada cinco segundos; os gatilhos de 500 ms/2 s exigiriam outra cadência antes de qualquer forward.',
               'A V4 anterior rejeitada permanece arquivada. Este experimento não altera catálogo, flags, execução demo/real ou curvas existentes.',
               *['- '+x for x in report['limitations']], '',
-              '```bash', 'cd /home/codexops/projects/2Lotus/python-service',
+              '```bash', 'cd /home/codexops/projects/5lotus/python-service',
               f'PYTHONPATH=. .venv/bin/python scripts/research_zigzag_v4_raw_ticks.py --anchor {report["anchor_close_utc"]} --release {report["dataset"]} --output {root}',
               f'PYTHONPATH=. .venv/bin/python scripts/report_zigzag_v4_raw_ticks.py {root}', '```', '',
               'Artefatos: `protocol.json`, `report.json`, `diagnostics.json`, `trades.json`, `historical_audit.json`, `analise-interativa.html`. Hashes de todos os arquivos de dados usados e do código estão no relatório/protocolo.']

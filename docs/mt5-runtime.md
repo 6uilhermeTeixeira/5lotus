@@ -100,7 +100,7 @@ Observacoes:
 ## Rede atual
 
 O serviço API usa `network_mode: service:mt5`; portanto, MT5 e API compartilham o mesmo namespace de
-rede e o EA deve acessar `http://127.0.0.1:1112`.
+rede e o EA deve acessar `http://127.0.0.1:7775`.
 
 O checklist completo está em:
 

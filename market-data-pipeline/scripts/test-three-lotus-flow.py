@@ -13,7 +13,7 @@ import urllib.request
 
 PROJECTS = Path("/home/codexops/projects")
 DATA_ROOT = Path("/home/codexops/lotus-data")
-TWO = PROJECTS / "2Lotus/python-service"
+TWO = PROJECTS / "5lotus/python-service"
 THREE = PROJECTS / "3lotus/python-service"
 
 
@@ -23,7 +23,7 @@ def run(command: list[str], cwd: Path, *, env: dict[str, str] | None = None) -> 
 
 
 def main() -> int:
-    with urllib.request.urlopen("http://127.0.0.1:1111/api/v1/health", timeout=5) as response:
+    with urllib.request.urlopen("http://127.0.0.1:7773/health", timeout=5) as response:
         assert json.load(response)["status"] == "ok"
     version = (DATA_ROOT / "releases/CURRENT").read_text(encoding="utf-8").strip()
     run([str(TWO / ".venv/bin/python"), "scripts/inspect_local_dataset.py", "--verify-hashes"], TWO)

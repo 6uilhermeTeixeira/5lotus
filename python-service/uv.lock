@@ -16,6 +16,7 @@ dependencies = [
 dev = [
     { name = "coverage" },
     { name = "httpx" },
+    { name = "numpy" },
     { name = "ruff" },
 ]
 research = [
@@ -36,6 +37,7 @@ requires-dist = [
 dev = [
     { name = "coverage", specifier = ">=7.10,<8.0" },
     { name = "httpx", specifier = ">=0.27,<1.0" },
+    { name = "numpy", specifier = ">=2,<3" },
     { name = "ruff", specifier = ">=0.12,<1.0" },
 ]
 research = [

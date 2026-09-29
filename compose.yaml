@@ -62,12 +62,12 @@ services:
       DAYTRADE_FIMATH_MODE: shadow
       DAYTRADE_FIMATH_FLOW_POLICY: veto
       DAYTRADE_HOST: 127.0.0.1
-      DAYTRADE_PORT: "1112"
+      DAYTRADE_PORT: "7775"
       DAYTRADE_RESULTS_STORE: SUPABASE
       DAYTRADE_LEGACY_BACKTEST_PATH: /app/data/backtests-legacy
     volumes:
       - "${LOTUS_DATA_ROOT:-/home/codexops/lotus-data}:${LOTUS_DATA_ROOT:-/home/codexops/lotus-data}"
-      - ./market-data-pipeline:/home/codexops/projects/2Lotus/market-data-pipeline:ro
+      - ./market-data-pipeline:/home/codexops/projects/5lotus/market-data-pipeline:ro
       - /home/codexops/backups/2lotus-legacy-strategies-20260904:/app/data/backtests-legacy:ro
     healthcheck:
       test:
@@ -75,7 +75,7 @@ services:
           "CMD",
           "python",
           "-c",
-          "import json,urllib.request; c=json.load(urllib.request.urlopen('http://127.0.0.1:1112/health', timeout=5)); assert c['status']=='ok'",
+          "import json,urllib.request; c=json.load(urllib.request.urlopen('http://127.0.0.1:7775/health', timeout=5)); assert c['status']=='ok'",
         ]
       interval: 30s
       timeout: 10s
@@ -99,7 +99,7 @@ services:
     env_file:
       - .env
     environment:
-      DAYTRADE_TICK_API_URL: http://127.0.0.1:1112/api/ticks
+      DAYTRADE_TICK_API_URL: http://127.0.0.1:7775/api/ticks
       DAYTRADE_TICK_SPOOL_ROOT: /data/mt5-prefix
       DAYTRADE_TICK_FORWARD_COLLECTOR_ID: 2lotus-forward-01
     volumes:

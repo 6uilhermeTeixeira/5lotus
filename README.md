@@ -1,6 +1,8 @@
-# 2Lotus
+# 5lotus Research
 
-Laboratório privado de estratégias XAUUSD/M5 com execução MetaTrader 5, motor Python, persistência Supabase e portal Vercel. A operação permanece integralmente em `shadow`; nenhuma estratégia está autorizada a enviar ordens reais.
+Ambiente privado de pesquisa, dados históricos, backtests e desenvolvimento de novas estratégias. O serviço local usa `127.0.0.1:7775`; nenhuma configuração deste repositório autoriza execução real.
+
+Laboratório privado de estratégias XAUUSD/M5 com coleta MetaTrader 5, motor Python, persistência Supabase e portal de pesquisa. A operação permanece integralmente em `shadow`; nenhuma estratégia está autorizada a enviar ordens reais. Estratégias aprovadas são portadas por revisão para o 4lotus, que produz os bundles consumidos pelo 2lotus.
 
 Na implantação atual, este serviço também hospeda provisoriamente o Live Core e mantém a conta demo
 já registrada. O estado-alvo é conservar aqui somente laboratório/forward demo e transferir o Live

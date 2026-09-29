@@ -18,7 +18,7 @@ Resposta:
 ```json
 {
   "status": "ok",
-  "service": "2lotus-strategy-service",
+  "service": "5lotus-research",
   "timestamp_utc": "2026-07-18T01:00:00Z"
 }
 ```

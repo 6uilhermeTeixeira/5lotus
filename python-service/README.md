@@ -145,10 +145,10 @@ DAYTRADE_FIMATH_MODE=live DAYTRADE_ENABLE_LIVE_DECISIONS=true ./run-local.sh
 ## Como testar
 
 ```bash
-curl http://127.0.0.1:1112/health
-curl http://127.0.0.1:1112/config
-curl http://127.0.0.1:1112/api/results
-curl -X POST http://127.0.0.1:1112/decision \
+curl http://127.0.0.1:7775/health
+curl http://127.0.0.1:7775/config
+curl http://127.0.0.1:7775/api/results
+curl -X POST http://127.0.0.1:7775/decision \
   -H 'Content-Type: application/json' \
   --data @sample-decision.json
 ```
@@ -160,7 +160,7 @@ DAYTRADE_DASHBOARD_PASSWORD=uma-senha-forte \
 DAYTRADE_SESSION_SECRET=um-segredo-aleatorio-com-pelo-menos-32-caracteres \
 ./run-local.sh
 
-open http://127.0.0.1:1112/login
+open http://127.0.0.1:7775/login
 ```
 
 ## Acompanhamento de resultado

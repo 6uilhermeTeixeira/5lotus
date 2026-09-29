@@ -13,8 +13,8 @@ class Mt5BridgeSourceContractTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
     def test_uses_compose_shared_network_port(self) -> None:
-        self.assertIn("http://127.0.0.1:1112/decision", self.source)
-        self.assertIn("http://127.0.0.1:1112/api/trades", self.source)
+        self.assertIn("http://127.0.0.1:7775/decision", self.source)
+        self.assertIn("http://127.0.0.1:7775/api/trades", self.source)
 
     def test_polls_only_current_v3_catalog(self) -> None:
         for bot_id in (

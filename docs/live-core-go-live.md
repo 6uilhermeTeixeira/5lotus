@@ -30,7 +30,7 @@ não envia ordens.
 5. Abra `http://127.0.0.1:6080/vnc.html?host=127.0.0.1&port=6080` no próprio servidor ou por túnel SSH.
 6. Instale/inicie o MT5 e conecte primeiro uma conta demo da Fusion Markets.
 7. Execute `./scripts/install-mt5-expert.sh`, compile o EA no MetaEditor e confirme zero erros.
-8. Na allowlist de WebRequest do MT5, adicione `http://127.0.0.1:1112`.
+8. Na allowlist de WebRequest do MT5, adicione `http://127.0.0.1:7775`.
 9. Anexe o EA a um gráfico XAUUSD M5 com `EnableOrderExecution=false` e `ExecutionBotId` vazio.
 10. Observe pelo menos uma sessão completa, incluindo heartbeat, candles, candidatos e ausência de duplicatas.
 

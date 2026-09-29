@@ -1,6 +1,5 @@
 import unittest
 from datetime import datetime, timezone
-from unittest.mock import patch
 
 from app.strategies import zigzag_v72
 
