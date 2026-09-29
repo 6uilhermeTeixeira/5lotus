@@ -51,9 +51,14 @@ class SecurityAndObservabilityTests(unittest.TestCase):
         self.assertEqual(result.initial_balance, 100)
 
     def test_health_and_readiness_have_distinct_contracts(self) -> None:
-        client = TestClient(app)
-        health = client.get("/health")
-        ready = client.get("/ready")
+        with (
+            patch("app.main.DatasetRelease.open", return_value=SimpleNamespace(version="test")),
+            patch("app.main._list_bots", return_value=[SimpleNamespace(id="bot-test", symbol="XAUUSD")]),
+            patch("app.main.load_local_backtest", return_value={"summary": {}}),
+        ):
+            client = TestClient(app)
+            health = client.get("/health")
+            ready = client.get("/ready")
 
         self.assertEqual(health.status_code, 200)
         self.assertEqual(health.json()["status"], "ok")
